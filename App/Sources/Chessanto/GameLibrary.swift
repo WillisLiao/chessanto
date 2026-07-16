@@ -6,7 +6,7 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var games: [GameRecord] = []
     @Published var errorMessage: String?
 
-    private let store: GameStore
+    let store: GameStore
 
     init() {
         do {

@@ -91,4 +91,47 @@ public final class GameStore: Sendable {
             return Set(urls)
         }
     }
+
+    /// Replaces all analysis rows for a single ply of a game in one
+    /// transaction (delete-first, since the unique key on
+    /// (gameId, plyIndex, multiPVRank, depth) would otherwise throw on
+    /// blind re-insert of the same depth).
+    public func saveAnalysis(_ records: [AnalysisRecord], gameId: Int64, plyIndex: Int) async throws {
+        try await dbQueue.write { db in
+            try AnalysisRecord
+                .filter(Column("gameId") == gameId && Column("plyIndex") == plyIndex)
+                .deleteAll(db)
+            for var record in records {
+                try record.insert(db)
+            }
+        }
+    }
+
+    public func analysis(gameId: Int64) async throws -> [AnalysisRecord] {
+        try await dbQueue.read { db in
+            try AnalysisRecord
+                .filter(Column("gameId") == gameId)
+                .order(Column("plyIndex"), Column("multiPVRank"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Plies that have been analyzed, i.e. have a rank-1 row.
+    public func analyzedPlyIndices(gameId: Int64) async throws -> Set<Int> {
+        try await dbQueue.read { db in
+            let plies = try AnalysisRecord
+                .filter(Column("gameId") == gameId && Column("multiPVRank") == 1)
+                .fetchAll(db)
+                .map(\.plyIndex)
+            return Set(plies)
+        }
+    }
+
+    public func deleteAnalysis(gameId: Int64) async throws {
+        _ = try await dbQueue.write { db in
+            try AnalysisRecord
+                .filter(Column("gameId") == gameId)
+                .deleteAll(db)
+        }
+    }
 }

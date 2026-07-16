@@ -16,6 +16,22 @@ public actor AnalysisEngine {
         /// 1-based MultiPV rank (1 = best line). Stockfish omits it when
         /// MultiPV is 1, so treat `nil` as rank 1.
         public let multiPVRank: Int?
+
+        public init(
+            generation: Int,
+            depth: Int?,
+            scoreCentipawns: Int?,
+            mateIn: Int?,
+            principalVariation: [String],
+            multiPVRank: Int?
+        ) {
+            self.generation = generation
+            self.depth = depth
+            self.scoreCentipawns = scoreCentipawns
+            self.mateIn = mateIn
+            self.principalVariation = principalVariation
+            self.multiPVRank = multiPVRank
+        }
     }
 
     public enum EngineUpdate: Sendable {
@@ -25,6 +41,7 @@ public actor AnalysisEngine {
 
     private let engine: Engine
     private var generation = 0
+    private var isSearching = false
     private let updatesContinuation: AsyncStream<EngineUpdate>.Continuation
     public nonisolated let updates: AsyncStream<EngineUpdate>
     private var listenTask: Task<Void, Never>?
@@ -66,6 +83,7 @@ public actor AnalysisEngine {
                         )
                     )
                 case let .bestmove(move, _):
+                    await self.markSearchEnded()
                     updatesContinuation.yield(.bestMove(generation: gen, move: move))
                 default:
                     break
@@ -74,13 +92,28 @@ public actor AnalysisEngine {
         }
     }
 
+    private func markSearchEnded() {
+        isSearching = false
+    }
+
     /// Stops any current search, sets a new position, and bumps the
     /// generation counter. Callers should tag any subsequent `go` with the
     /// returned generation and drop `EngineUpdate`s from earlier generations.
+    ///
+    /// If a search is in flight, waits for its terminating `bestmove` before
+    /// bumping the generation, so a stray in-flight info from the old search
+    /// can never arrive tagged with the new generation (see engine fact 8).
     @discardableResult
     public func setPosition(fen: String, moves: [String] = []) async -> Int {
+        if isSearching {
+            await engine.send(command: .stop)
+            var waited = 0
+            while isSearching && waited < 300 {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+                waited += 10
+            }
+        }
         generation += 1
-        await engine.send(command: .stop)
         await engine.send(command: .position(.fen(fen), moves: moves.isEmpty ? nil : moves))
         return generation
     }
@@ -92,11 +125,18 @@ public actor AnalysisEngine {
     }
 
     public func goInfinite() async {
+        isSearching = true
         await engine.send(command: .go(infinite: true))
     }
 
     public func go(depth: Int) async {
+        isSearching = true
         await engine.send(command: .go(depth: depth))
+    }
+
+    public func go(movetimeMilliseconds: Int) async {
+        isSearching = true
+        await engine.send(command: .go(movetime: movetimeMilliseconds))
     }
 
     public func stop() async {

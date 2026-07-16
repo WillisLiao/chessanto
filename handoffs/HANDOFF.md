@@ -10,29 +10,47 @@ Read this first at session start; update it at session end.
   with `[%clk]` comments and both castling sides) imports through the actual
   UI, persists across quit/relaunch, and steps forward through the game move
   by move with the board and move list updating correctly.
-- **M2 prep done (2026-07-17): live Stockfish verified in this repo.**
-  `swift run --package-path Packages/EngineKit engine-smoke` runs a real
-  in-process Stockfish 17 search and asserts real evals, the side-to-move
-  sign convention, and mate detection (startpos depth 15 gave +38cp with
-  pv e2e4...). The NNUE networks are mandatory (see below), fetched by
-  `scripts/fetch-nnue.sh` into `App/Resources/` (gitignored) and verified
-  to land in the built app bundle. `project.yml`'s resources block was
-  silently dead (XcodeGen has no `resources:` target key) and is fixed.
-  `AnalysisEngine` gained `EngineInfo.multiPVRank` and `setOption`.
+- **M2 complete (2026-07-17): engine integration and move classification.**
+  Followed `handoffs/NEXT-SESSION-M2.md` step by step; every step's
+  verification passed. What's new:
+  - `Persistence`: `AnalysisRecord` + `GameStore` analysis CRUD (async,
+    delete-first replacement per ply - this is also crash/cancel resume).
+  - `EngineKit`: `AnalysisEngine.go(movetimeMilliseconds:)`; `setPosition`
+    now waits for an in-flight search's terminating `bestmove` before
+    bumping the generation, closing the stale-tag window the prep session
+    flagged. `engine-smoke` still exits 0 with this extended.
+  - `ChessCore`: `ChessGame.uciMove(at:)` (chesskit-swift's `Move.lan` was
+    already exact UCI) and `ChessGame.sanLine(fromUCI:startingFEN:)` for
+    turning an engine PV back into SAN for the lines panel.
+  - `AnalysisKit`: `WinProbability`, `MoveClassifier`, `Accuracy` - pure,
+    engine/DB-free, exactly the Lichess-derived formulas fixed in the prep
+    plan. 17 tests including the worked example and both perspectives.
+  - `App`: `EngineService` (`@MainActor`, one shared `AnalysisEngine`,
+    live infinite analysis and batch analysis mutually exclusive), wired
+    into `GameReplayView` - eval bar, eval graph, move-list classification
+    badges, Analyze/Re-analyze toolbar with quality picker and cancellable
+    progress, and a display-only MultiPV lines panel. Live analysis follows
+    ply changes (200ms debounced) and only trusts the engine's live eval
+    when its FEN matches the currently displayed ply - cached DB values
+    otherwise, so scrubbing never shows a stale eval.
+  - Real E2E verification (Release build, driven via `osascript`/System
+    Events accessibility introspection since Screen Recording permission
+    wasn't available in this environment - see the 2026-07-17 devlog for
+    the full method): Analyze on a real 55-ply chess.com game finished in
+    a few seconds, DB rows had sane white-perspective evals, cache-instant
+    reload was confirmed (accuracy + Re-analyze button appear before any
+    engine interaction on relaunch), and stepping through plies showed the
+    eval bar updating per-position rather than carrying over a stale value.
 - Project layout: `project.yml` (XcodeGen spec, regenerate with
   `xcodegen generate` after adding/removing files - `Chessanto.xcodeproj` is
-  gitignored, not committed), `App/` (SwiftUI app target), `Packages/`
-  (ChessCore, EngineKit, AnalysisKit, CoachKit, ChessComKit, Persistence -
-  each a local SPM package per `PLAN.md`'s architecture).
+  gitignored, not committed), `App/` (SwiftUI app target, with an
+  `Analysis/` subfolder for M2's engine/eval-bar/graph/lines-panel code),
+  `Packages/` (ChessCore, EngineKit, AnalysisKit, CoachKit, ChessComKit,
+  Persistence - each a local SPM package per `PLAN.md`'s architecture).
 - Git repo initialized and pushed: https://github.com/WillisLiao/chessanto
-  (branch `main`, one commit so far). Commit and push again once M2 work
-  is ready, following the same convention (working code + updated
-  handoffs/devlog together).
-- Next step: execute M2 (engine integration - Stockfish analysis, eval bar,
-  move classification, live infinite analysis while scrubbing).
-  `handoffs/NEXT-SESSION-M2.md` is a full, self-contained execution plan
-  with verified engine facts, fixed conventions/formulas, and an ordered
-  step list - follow it rather than re-deriving decisions.
+  (branch `main`). Commit and push M2 work alongside these docs.
+- Next step: execute M3 (Exploration Mode - variation play, tree, lines
+  panel adoption). `handoffs/NEXT-SESSION-M3.md` has the bootstrap for that.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

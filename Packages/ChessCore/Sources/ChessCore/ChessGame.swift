@@ -131,3 +131,44 @@ extension ChessGame {
         return MoveIndex(raw: newIndex)
     }
 }
+
+// MARK: - Engine (UCI) bridging
+
+extension ChessGame {
+    /// The UCI/engine-LAN notation of the mainline move that produced the
+    /// position at `index` (e.g. `"e2e4"`, `"e1g1"` for castling, `"e7e8q"`
+    /// for a promotion), or `nil` if `index` has no move (the start index).
+    public func uciMove(at index: MoveIndex) -> String? {
+        game.moves[index.raw]?.lan
+    }
+
+    /// Converts a line of UCI moves (e.g. a PV from the engine) played from
+    /// `fen` into their SAN representations, stopping at the first move that
+    /// fails to parse or play.
+    ///
+    /// - note: `EngineLANParser` never sets check state, so the returned
+    /// SANs never include `+`/`#`.
+    public static func sanLine(fromUCI moves: [String], startingFEN fen: String) -> [String] {
+        guard let position = Position(fen: fen) else { return [] }
+        var board = Board(position: position)
+        var color: Piece.Color = fen.split(separator: " ", maxSplits: 2).count > 1
+            && fen.split(separator: " ", maxSplits: 2)[1] == "b"
+            ? .black : .white
+
+        var sans: [String] = []
+        for uci in moves {
+            guard let parsedMove = EngineLANParser.parse(move: uci, for: color, in: board.position) else {
+                break
+            }
+            guard var playedMove = board.move(pieceAt: parsedMove.start, to: parsedMove.end) else {
+                break
+            }
+            if let promotedPiece = parsedMove.promotedPiece {
+                playedMove = board.completePromotion(of: playedMove, to: promotedPiece.kind)
+            }
+            sans.append(playedMove.san)
+            color = color.opposite
+        }
+        return sans
+    }
+}

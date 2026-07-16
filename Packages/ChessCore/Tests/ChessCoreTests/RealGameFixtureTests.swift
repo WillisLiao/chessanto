@@ -66,3 +66,42 @@ private let realChessComPGN = """
     #expect(fensVisited.first?.contains("3P4") == true || fensVisited.first != nil)
     print(fensVisited)
 }
+
+@Test func uciMoveMatchesExpectedNotationIncludingCastling() throws {
+    let game = try ChessGame(pgn: realChessComPGN)
+    let indices = game.mainlineIndices
+
+    // Ply 1 is 1. d4.
+    #expect(game.uciMove(at: indices[0]) == "d2d4")
+
+    // Ply 19 is 10. O-O-O, ply 20 is 10... O-O.
+    #expect(game.san(at: indices[18]) == "O-O-O")
+    #expect(game.uciMove(at: indices[18]) == "e1c1")
+    #expect(game.san(at: indices[19]) == "O-O")
+    #expect(game.uciMove(at: indices[19]) == "e8g8")
+}
+
+@Test func uciMoveIncludesPromotionLetter() throws {
+    // A crafted line ending in a queen promotion (g-pawn captures the h8 rook).
+    let promotionPGN = """
+        [White "A"]
+        [Black "B"]
+
+        1. h4 a5 2. h5 a4 3. h6 a3 4. hxg7 axb2 5. gxh8=Q *
+        """
+    let game = try ChessGame(pgn: promotionPGN)
+    let indices = game.mainlineIndices
+    guard let last = indices.last else {
+        Issue.record("expected at least one move")
+        return
+    }
+    #expect(game.san(at: last) == "gxh8=Q")
+    #expect(game.uciMove(at: last) == "g7h8q")
+}
+
+@Test func sanLineRoundTripsSmokeRunPV() throws {
+    let startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    let pv = ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "g8f6"]
+    let sans = ChessGame.sanLine(fromUCI: pv, startingFEN: startFEN)
+    #expect(sans == ["e4", "e5", "Nf3", "Nc6", "Bb5", "Nf6"])
+}

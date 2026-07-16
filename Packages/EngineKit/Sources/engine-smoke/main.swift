@@ -126,6 +126,31 @@ Task.detached {
     guard i3.mateIn == 1 else { fail("expected mateIn 1, got \(i3.mateIn.map(String.init) ?? "nil")") }
     guard r3.bestMove == "d8h4" else { fail("expected bestmove d8h4 (Qh4#), got \(r3.bestMove)") }
 
+    // 4. go(movetimeMilliseconds:): a fixed-time search still produces a
+    //    scored rank-1 info and a terminating bestmove.
+    let generation4 = await engine.setPosition(fen: startpos)
+    await engine.go(movetimeMilliseconds: 300)
+    var movetimeInfo: AnalysisEngine.EngineInfo?
+    var movetimeBestMove: String?
+    searchLoop: while let update = await iterator.next() {
+        switch update {
+        case let .info(info):
+            guard info.generation == generation4,
+                info.multiPVRank ?? 1 == 1,
+                info.scoreCentipawns != nil || info.mateIn != nil
+            else { continue }
+            movetimeInfo = info
+        case let .bestMove(gen, move):
+            guard gen == generation4 else { continue }
+            movetimeBestMove = move
+            break searchLoop
+        }
+    }
+    guard movetimeInfo != nil, movetimeBestMove != nil else {
+        fail("go(movetimeMilliseconds:) did not produce a scored info + bestmove")
+    }
+    log("go(movetime: 300ms): cp \(movetimeInfo?.scoreCentipawns.map(String.init) ?? "nil"), bestmove \(movetimeBestMove!)")
+
     await engine.shutdown()
     log("OK: live Stockfish verified - real evals, side-to-move sign convention, mate scores, generation tags")
     exit(0)
