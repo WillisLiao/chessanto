@@ -15,10 +15,13 @@ Read this first at session start; update it at session end.
   gitignored, not committed), `App/` (SwiftUI app target), `Packages/`
   (ChessCore, EngineKit, AnalysisKit, CoachKit, ChessComKit, Persistence -
   each a local SPM package per `PLAN.md`'s architecture).
-- Not a git repo yet - nothing has been committed. Init git and make a first
-  commit when the user asks.
+- Git repo initialized and pushed: https://github.com/WillisLiao/chessanto
+  (branch `main`, one commit so far). Commit and push again once M2 work
+  is ready, following the same convention (working code + updated
+  handoffs/devlog together).
 - Next step: start M2 (engine integration - Stockfish analysis, eval bar,
-  move classification, live infinite analysis while scrubbing).
+  move classification, live infinite analysis while scrubbing). See
+  `handoffs/NEXT-SESSION-M2.md` for a concrete starting brief.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
