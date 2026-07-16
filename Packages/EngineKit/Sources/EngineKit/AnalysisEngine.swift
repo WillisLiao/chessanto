@@ -13,6 +13,9 @@ public actor AnalysisEngine {
         public let scoreCentipawns: Int?
         public let mateIn: Int?
         public let principalVariation: [String]
+        /// 1-based MultiPV rank (1 = best line). Stockfish omits it when
+        /// MultiPV is 1, so treat `nil` as rank 1.
+        public let multiPVRank: Int?
     }
 
     public enum EngineUpdate: Sendable {
@@ -57,7 +60,8 @@ public actor AnalysisEngine {
                                 depth: info.depth,
                                 scoreCentipawns: info.score?.cp.map(Int.init),
                                 mateIn: info.score?.mate,
-                                principalVariation: info.pv ?? []
+                                principalVariation: info.pv ?? [],
+                                multiPVRank: info.multipv
                             )
                         )
                     )
@@ -79,6 +83,12 @@ public actor AnalysisEngine {
         await engine.send(command: .stop)
         await engine.send(command: .position(.fen(fen), moves: moves.isEmpty ? nil : moves))
         return generation
+    }
+
+    /// Sends a UCI `setoption` (e.g. "Hash", "EvalFile"). Only call between
+    /// searches; engines ignore option changes while searching.
+    public func setOption(name: String, value: String) async {
+        await engine.send(command: .setoption(id: name, value: value))
     }
 
     public func goInfinite() async {

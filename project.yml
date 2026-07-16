@@ -25,8 +25,16 @@ targets:
     platform: macOS
     sources:
       - path: App/Sources/Chessanto
-    resources:
+      # `resources:` is not an XcodeGen key (it silently ignores unknown
+      # keys) - bundle resources are a sources entry with a resources
+      # buildPhase. Info.plist and entitlements are processed via the
+      # info.path/entitlements.path settings below, so keep them out of
+      # the copied bundle resources.
       - path: App/Resources
+        buildPhase: resources
+        excludes:
+          - Info.plist
+          - "*.entitlements"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.chessanto.app
