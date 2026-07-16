@@ -1,0 +1,15 @@
+{
+  "originHash" : "f098d7cf9ec8b2cd06df087d0d23f9503ed63f784074ff56bc01e2d8cf3fea70",
+  "pins" : [
+    {
+      "identity" : "chesskit-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/chesskit-app/chesskit-swift.git",
+      "state" : {
+        "revision" : "44ef7a1aa9da25bf0a9606a8960591a4dde3fad2",
+        "version" : "0.17.0"
+      }
+    }
+  ],
+  "version" : 3
+}

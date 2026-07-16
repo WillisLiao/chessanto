@@ -1,0 +1,86 @@
+name: Chessanto
+options:
+  bundleIdPrefix: com.chessanto
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  ChessCore:
+    path: Packages/ChessCore
+  EngineKit:
+    path: Packages/EngineKit
+  AnalysisKit:
+    path: Packages/AnalysisKit
+  CoachKit:
+    path: Packages/CoachKit
+  ChessComKit:
+    path: Packages/ChessComKit
+  Persistence:
+    path: Packages/Persistence
+
+targets:
+  Chessanto:
+    type: application
+    platform: macOS
+    sources:
+      - path: App/Sources/Chessanto
+    resources:
+      - path: App/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.chessanto.app
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.10"
+        ENABLE_HARDENED_RUNTIME: true
+        COMBINE_HIDPI_IMAGES: true
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Chessanto
+        LSApplicationCategoryType: public.app-category.education
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    entitlements:
+      path: App/Resources/Chessanto.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-only: true
+    dependencies:
+      - package: ChessCore
+      - package: EngineKit
+      - package: AnalysisKit
+      - package: CoachKit
+      - package: ChessComKit
+      - package: Persistence
+    scheme:
+      testTargets:
+        - ChessantoTests
+      gatherCoverageData: true
+
+  ChessantoTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: App/Tests/ChessantoTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_VERSION: "5.10"
+    dependencies:
+      - target: Chessanto
+
+schemes:
+  Chessanto:
+    build:
+      targets:
+        Chessanto: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ChessantoTests
