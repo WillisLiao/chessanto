@@ -278,7 +278,38 @@ Read this first at session start; update it at session end.
     general prose/qualitative-claim accuracy (as opposed to moves/lines/
     evals) is explicitly out of scope for M6 v1 per PLAN.md's residual-risk
     note.
-- Next step: **M7 - position chat**, per `handoffs/NEXT-SESSION-M7.md`.
+- **M7 prep complete (2026-07-17): chat mechanics verified live, execution
+  plan written.** A prep-only session (no app code changes) read every
+  source file M7 builds on in full, verified the new conversational
+  mechanics against the live Ollama 0.31.2 server, scratch-ran the
+  proposed-move precheck against real ChessCore, and rewrote
+  `handoffs/NEXT-SESSION-M7.md` from a rough bootstrap into a
+  self-contained execution plan (9 verified facts, fixed design decisions,
+  10 build steps each with a verification gate). Highlights, full detail
+  in the devlog's "M7 prep" section and the plan itself:
+  - Live-verified: multi-turn chat history round-trips; tool calls fire
+    with history present (and the model mangled its FEN argument again
+    live - the replay-validation guard is load-bearing for chat too);
+    concurrent requests are safe on Ollama's side, so the real hazard is
+    `EngineService.searchOneShot`'s singleton collector state - the plan
+    serializes `coachEvaluate` with a FIFO chain.
+  - Scratch-run against real ChessCore found three precheck traps before
+    any code: bare-square tokens ("take on d5", "knight on c6") must
+    never be treated as move proposals, and number-marker chains
+    ("24...Qd7") are game-history references that must skip the precheck.
+  - The bootstrap's four open design questions are now fixed decisions:
+    a `CoachChat` actor sharing `CoachNarrator`'s (made-internal) turn
+    engine; a chat payload with context-block-on-FEN-change injection and
+    a seed evaluation; in-code proposed-move validation before the LLM
+    with a canned illegal-move short circuit; buffer-then-render replies
+    (a documented deviation from PLAN.md's "Streaming responses" bullet,
+    resolved by its own "nothing unverified renders" rule).
+  - One schema change is planned (the first post-v1 migration): a
+    nullable `chatMessage.source` column so the Coach/fallback honesty
+    label survives relaunch.
+- Next step: **M7 - position chat**, executing
+  `handoffs/NEXT-SESSION-M7.md` step by step (the design decisions there
+  are fixed; do not re-derive them).
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
