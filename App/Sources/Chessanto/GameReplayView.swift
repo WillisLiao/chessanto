@@ -10,6 +10,12 @@ struct GameReplayView: View {
     @State private var quality: AnalysisQuality = .standard
     @State private var analysisTask: Task<Void, Never>?
     @State private var selectedSquare: BoardSquare?
+    @State private var rightPaneTab: RightPaneTab = .moves
+
+    private enum RightPaneTab: String, CaseIterable {
+        case moves = "Moves"
+        case report = "Report"
+    }
 
     init(game: GameRecord, store: GameStore) {
         self.game = game
@@ -54,7 +60,22 @@ struct GameReplayView: View {
 
             VStack(spacing: 0) {
                 accuracySummary
-                MoveListView(viewModel: viewModel)
+                Picker("", selection: $rightPaneTab) {
+                    ForEach(RightPaneTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
+
+                switch rightPaneTab {
+                case .moves:
+                    MoveListView(viewModel: viewModel)
+                case .report:
+                    GameReportView(viewModel: viewModel)
+                }
             }
             .frame(minWidth: 260, maxWidth: 340)
         }
@@ -134,6 +155,10 @@ struct GameReplayView: View {
                 Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } else if !engineService.isStarted {
+                Button("Starting engine...") {}
+                    .disabled(true)
+                    .accessibilityLabel("Starting engine")
             } else if engineService.isAnalyzing, let progress = engineService.batchProgress {
                 ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
                     .frame(width: 100)

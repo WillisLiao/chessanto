@@ -43,6 +43,7 @@ struct ContentView: View {
         } detail: {
             if let selectedGameID, let game = library.games.first(where: { $0.id == selectedGameID }) {
                 GameReplayView(game: game, store: library.store)
+                    .id(game.id)
             } else {
                 ContentUnavailableView(
                     "Select a game",

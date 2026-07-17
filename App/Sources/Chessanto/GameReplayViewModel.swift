@@ -37,6 +37,7 @@ final class GameReplayViewModel: ObservableObject {
     private var chessGame: ChessGame?
     private let gameId: Int64?
     private let store: GameStore
+    private let record: GameRecord
 
     /// FENs aligned with `moveIndices` (index 0 = starting position).
     private(set) var fens: [String] = []
@@ -45,6 +46,13 @@ final class GameReplayViewModel: ObservableObject {
 
     /// Rank-1 analysis rows, keyed by ply index.
     private var cachedEvaluationsByPly: [Int: AnalysisRecord] = [:]
+    /// Every ranked row (rank 1-3) per ply - the M5 report needs the full
+    /// engine lines, not just rank-1.
+    private var cachedAllRanksByPly: [Int: [AnalysisRecord]] = [:]
+
+    /// The M5 rule-based coaching report, built once the game is fully
+    /// analyzed; invalidated (`nil`) while unanalyzed or re-analyzing.
+    @Published private(set) var report: GameReport?
 
     /// Children of each index that were reached by exploring a variation
     /// (mainline continuations are tracked separately via `moveIndices`).
@@ -54,6 +62,7 @@ final class GameReplayViewModel: ObservableObject {
 
     init(record: GameRecord, store: GameStore) {
         self.store = store
+        self.record = record
         self.gameId = record.id
         do {
             let game = try ChessGame(pgn: record.pgn)
@@ -177,34 +186,33 @@ final class GameReplayViewModel: ObservableObject {
     }
 
     private func makeEvalDisplay(scoreCentipawns: Int?, mateIn: Int?, isLive: Bool, depth: Int?) -> EvalDisplay {
-        if let mateIn, abs(mateIn) == 99 {
+        let label = EvalLabel.format(scoreCentipawns: scoreCentipawns, mateIn: mateIn)
+        if EvalLabel.isTerminalSentinel(mateIn: mateIn) {
             return EvalDisplay(
-                whiteWinProbability: mateIn > 0 ? 100 : 0,
-                label: mateIn > 0 ? "1-0" : "0-1",
+                whiteWinProbability: mateIn! > 0 ? 100 : 0,
+                label: label,
                 isLive: isLive, depth: depth, isGameOver: true
             )
         }
         let whiteWinP = WinProbability.whiteWinProbability(scoreCentipawns: scoreCentipawns, mateIn: mateIn)
-        let label: String
-        if let mateIn {
-            label = mateIn > 0 ? "M\(mateIn)" : "-M\(abs(mateIn))"
-        } else if let cp = scoreCentipawns {
-            label = String(format: "%+.1f", Double(cp) / 100)
-        } else {
-            label = "--"
-        }
         return EvalDisplay(whiteWinProbability: whiteWinP, label: label, isLive: isLive, depth: depth, isGameOver: false)
     }
 
     private func loadCachedAnalysis(gameId: Int64) async {
         guard let records = try? await store.analysis(gameId: gameId) else { return }
         var byPly: [Int: AnalysisRecord] = [:]
-        for record in records where record.multiPVRank == 1 {
-            byPly[record.plyIndex] = record
+        var allRanksByPly: [Int: [AnalysisRecord]] = [:]
+        for analysisRecord in records {
+            allRanksByPly[analysisRecord.plyIndex, default: []].append(analysisRecord)
+            if analysisRecord.multiPVRank == 1 {
+                byPly[analysisRecord.plyIndex] = analysisRecord
+            }
         }
         cachedEvaluationsByPly = byPly
+        cachedAllRanksByPly = allRanksByPly
         isAnalyzed = !fens.isEmpty && fens.indices.allSatisfy { byPly[$0] != nil }
         deriveClassifications()
+        buildReport()
     }
 
     private func deriveClassifications() {
@@ -261,6 +269,37 @@ final class GameReplayViewModel: ObservableObject {
         blackAccuracy = blackAccuracies.isEmpty ? nil : Accuracy.average(blackAccuracies)
     }
 
+    /// Builds the M5 coaching report from the cached analysis rows. The app
+    /// maps `AnalysisRecord`s into `ReportInput` here so `AnalysisKit` stays
+    /// DB-free; `nil` while unanalyzed.
+    private func buildReport() {
+        guard isAnalyzed, moveIndices.count > 1 else {
+            report = nil
+            return
+        }
+        let plies: [PlyRecord] = fens.indices.map { ply in
+            let lines = (cachedAllRanksByPly[ply] ?? [])
+                .sorted { $0.multiPVRank < $1.multiPVRank }
+                .map { record in
+                    RankedLine(
+                        rank: record.multiPVRank,
+                        scoreCentipawns: record.scoreCentipawns,
+                        mateIn: record.mateIn,
+                        principalVariationUCI: record.principalVariation.isEmpty
+                            ? [] : record.principalVariation.split(separator: " ").map(String.init),
+                        depth: record.depth
+                    )
+                }
+            return PlyRecord(fen: fens[ply], lines: lines, playedUCI: playedUCIs[ply])
+        }
+        let username = (try? store.userProfile())?.chessComUsername
+        let input = ReportInput(
+            plies: plies, whiteName: record.white, blackName: record.black,
+            result: record.result ?? "*", chessComUsername: username
+        )
+        report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+    }
+
     /// Whether the game's last mainline move is checkmate, and if so, who
     /// delivered it - used to skip searching a terminal position.
     private var terminalMateWhiteWins: Bool? {
@@ -290,10 +329,12 @@ final class GameReplayViewModel: ObservableObject {
         guard let gameId else { return }
         try? await store.deleteAnalysis(gameId: gameId)
         cachedEvaluationsByPly = [:]
+        cachedAllRanksByPly = [:]
         isAnalyzed = false
         classifications = []
         whiteAccuracy = nil
         blackAccuracy = nil
+        report = nil
         await analyze(engineService: engineService, quality: quality)
     }
 

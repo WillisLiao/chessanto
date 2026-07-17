@@ -122,13 +122,59 @@ Read this first at session start; update it at session end.
   Persistence - each a local SPM package per `PLAN.md`'s architecture).
 - Git repo initialized and pushed: https://github.com/WillisLiao/chessanto
   (branch `main`). Commit and push M2 work alongside these docs.
-- Next step: execute M5 (rule-based coaching report) by following
-  `handoffs/NEXT-SESSION-M5.md` step by step. It was prepared 2026-07-17
-  by a planning session that verified its claims against the real source
-  and live ChessCore probe runs (typed Facts + closed templates + a
-  FactAuditor to enforce the zero-false-statement accept criterion, a
-  real lichess CC0 opening book replacing the placeholder eco.json, and
-  the M4 "engine still starting" toolbar bug fixed along the way).
+- **M5 complete (2026-07-17): rule-based coaching report.** Followed
+  `handoffs/NEXT-SESSION-M5.md` step by step; every step's verification
+  passed. What's new:
+  - `ChessCore`: `ReplayedMove`, `ChessGame.replayLine(fromUCI:startingFEN:)`
+    (generalizes `sanLine`, also returns check/mate flags, captures, and
+    resulting FEN), `moveDetail(at:)`, `material(fen:)`, `epd(fromFEN:)`.
+  - `AnalysisKit` (DB-free, ChessCore-only): a real lichess CC0 opening
+    book (`OpeningBook`, 3,803 entries via `scripts/fetch-eco.sh`, indexed
+    by replaying every line and keying on final-position EPD; ships a
+    **precomputed** `eco-index.json` since replaying the raw dataset at
+    launch measured ~7.5s, well past budget). The Facts/detector/report
+    pipeline: `ReportInput`/`PlyRecord`/`RankedLine`,
+    `EvalSwingFact`/`BetterMoveFact`/`PunishmentFact`/`MissedMateFact`/
+    `AllowedMateFact`/`OpeningFact`, `ThemeDetector` (replay-based, never
+    string-matching), `KeyMomentSelector`, `ReportBuilder`, `ReportText`
+    (closed templates only), `FactAuditor` (independently re-derives and
+    drops any fact that fails to match - the seed of M6's
+    `CoachVerifier`). `EvalLabel` extracts eval-string formatting
+    previously duplicated in `GameReplayViewModel`.
+  - `App`: fixed the M4-logged "Analyze silently no-ops before the engine
+    finishes starting" bug (a real "Starting engine..." toolbar state).
+    `GameReplayViewModel` retains full per-ply ranked rows and builds a
+    `GameReport` once analyzed; the right pane is now a "Moves"/"Report"
+    segmented tab; `GameReportView` renders it with real, board-jumping
+    `Button`s for each key moment.
+  - Two real bugs found by the E2E pass and fixed (see the 2026-07-17
+    devlog's M5 section for full detail): `ContentView`'s detail pane
+    wasn't recreated when switching between two already-selected games
+    (missing `.id(game.id)` - the `if let` branch never changes identity),
+    so the whole replay pane (including the new Report tab) silently kept
+    showing the *previous* game; and the Takeaways section falsely
+    claimed "a clean game" whenever no *aggregate* pattern fired, even on
+    games with real, individually-flagged blunders.
+  - Real E2E verification (Release build, `osascript`/System Events):
+    every claim in all 3 key moments of the real 55-ply fixture game was
+    manually cross-checked against the actual `sqlite3` analysis rows and
+    hand-computed win-probability math - zero false statements found. A
+    committed golden test (`real-fixture-game-report-input.json` +
+    `real-fixture-game-golden-report.txt`, both real chess.com/Stockfish
+    data) locks this in.
+  - Known gaps for a future session (not blocking): the Report tab's
+    key-moment `Button`s are fully clickable via AX-element reference
+    (role `AXButton`, click-to-jump confirmed working) but their text
+    isn't exposed through any AX attribute this session could find,
+    unlike `MoveListView`'s structurally similar buttons - possibly
+    related to `MoveListView` living inside a `List`/`AXOutline` and the
+    report's key moments being a bare `ScrollView`/`VStack`, but
+    unconfirmed. The new "Starting engine..." toolbar state is
+    structurally correct but wasn't caught live in automation (the
+    Release-build engine now starts faster than System Events can query
+    the window after launch).
+- Next step: execute M6 (local LLM coach) by following
+  `handoffs/NEXT-SESSION-M6.md` step by step.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

@@ -16,8 +16,18 @@ let package = Package(
         .target(
             name: "AnalysisKit",
             dependencies: ["ChessCore", "EngineKit", "Persistence"],
-            resources: [.copy("Resources/eco.json")]
+            resources: [.copy("Resources/eco.json"), .copy("Resources/eco-index.json")]
         ),
-        .testTarget(name: "AnalysisKitTests", dependencies: ["AnalysisKit"])
+        // Precomputes Resources/eco-index.json from Resources/eco.json
+        // (`swift run eco-indexer`), invoked by scripts/fetch-eco.sh.
+        // Replaying the raw ~3.8k-line dataset through ChessGame at app
+        // launch measured several seconds; the precomputed index makes
+        // OpeningBook.loadFromBundle() a plain dictionary decode instead.
+        .executableTarget(name: "eco-indexer", dependencies: ["AnalysisKit"]),
+        .testTarget(
+            name: "AnalysisKitTests",
+            dependencies: ["AnalysisKit"],
+            resources: [.copy("Resources/real-fixture-game-report-input.json"), .copy("Resources/real-fixture-game-golden-report.txt")]
+        )
     ]
 )
