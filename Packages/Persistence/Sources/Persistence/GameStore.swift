@@ -169,6 +169,39 @@ public final class GameStore: Sendable {
         }
     }
 
+    // MARK: - Chat
+
+    /// Inserts a single chat message. Called as each message is sent or
+    /// received, not batched, matching the crash-safety pattern used for
+    /// variation moves and analysis rows.
+    @discardableResult
+    public func insertChatMessage(_ record: ChatMessageRecord) async throws -> ChatMessageRecord {
+        try await dbQueue.write { db in
+            var mutableRecord = record
+            try mutableRecord.insert(db)
+            return mutableRecord
+        }
+    }
+
+    /// All chat messages for a game, in insertion order.
+    public func chatMessages(gameId: Int64) async throws -> [ChatMessageRecord] {
+        try await dbQueue.read { db in
+            try ChatMessageRecord
+                .filter(Column("gameId") == gameId)
+                .order(Column("id"))
+                .fetchAll(db)
+        }
+    }
+
+    /// The Clear-chat affordance: removes every chat message for a game.
+    public func deleteChatMessages(gameId: Int64) async throws {
+        _ = try await dbQueue.write { db in
+            try ChatMessageRecord
+                .filter(Column("gameId") == gameId)
+                .deleteAll(db)
+        }
+    }
+
     // MARK: - User profile
 
     /// The single user profile row, creating a default one on first access.

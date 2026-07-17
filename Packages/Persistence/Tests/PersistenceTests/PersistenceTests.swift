@@ -143,6 +143,64 @@ struct PersistenceTests {
         _ = grandchild // deleted via cascade, no longer fetchable
     }
 
+    @Test func chatMessagesRoundTripInInsertionOrder() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+
+        _ = try await store.insertChatMessage(
+            ChatMessageRecord(gameId: gameId, plyIndex: 4, role: "user", content: "What if I played Nf3?")
+        )
+        _ = try await store.insertChatMessage(
+            ChatMessageRecord(gameId: gameId, plyIndex: 4, role: "assistant", content: "Nf3 develops...", source: "coach")
+        )
+
+        let fetched = try await store.chatMessages(gameId: gameId)
+        #expect(fetched.count == 2)
+        #expect(fetched[0].role == "user")
+        #expect(fetched[1].role == "assistant")
+    }
+
+    @Test func chatMessageSourceIsNilOnUserRowsAndSetOnAssistantRows() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+
+        let userRow = try await store.insertChatMessage(
+            ChatMessageRecord(gameId: gameId, plyIndex: 0, role: "user", content: "hello")
+        )
+        let assistantRow = try await store.insertChatMessage(
+            ChatMessageRecord(gameId: gameId, plyIndex: 0, role: "assistant", content: "hi", source: "precheck")
+        )
+
+        #expect(userRow.source == nil)
+        #expect(assistantRow.source == "precheck")
+    }
+
+    @Test func deleteChatMessagesRemovesAllRowsForGame() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        _ = try await store.insertChatMessage(
+            ChatMessageRecord(gameId: gameId, plyIndex: 0, role: "user", content: "hello")
+        )
+
+        try await store.deleteChatMessages(gameId: gameId)
+
+        let fetched = try await store.chatMessages(gameId: gameId)
+        #expect(fetched.isEmpty)
+    }
+
+    @Test func deletingGameCascadesToChatMessages() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        _ = try await store.insertChatMessage(
+            ChatMessageRecord(gameId: gameId, plyIndex: 0, role: "user", content: "hello")
+        )
+
+        try store.deleteGame(id: gameId)
+
+        let fetched = try await store.chatMessages(gameId: gameId)
+        #expect(fetched.isEmpty)
+    }
+
     @Test func userProfileDefaultsOnFirstAccess() throws {
         let store = try GameStore()
         let profile = try store.userProfile()

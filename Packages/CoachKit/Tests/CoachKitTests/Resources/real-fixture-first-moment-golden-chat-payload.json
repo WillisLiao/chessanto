@@ -1,0 +1,110 @@
+{
+  "blackAccuracy" : 91.11969607689808,
+  "blackName" : "artin10862",
+  "currentPositionLines" : [
+    {
+      "depth" : 9,
+      "evalLabel" : "+1.8",
+      "principalVariationSAN" : [
+        "Bxc5",
+        "Nxc5",
+        "Qb5+",
+        "Ncd7",
+        "O-O-O",
+        "O-O",
+        "Nxd5",
+        "Nxd5",
+        "Qxd5",
+        "Qb6",
+        "Qd6",
+        "Qe3+",
+        "Kb1",
+        "Nf6",
+        "Bc4",
+        "Bf5",
+        "Rhe1",
+        "Qf2"
+      ],
+      "principalVariationUCI" : [
+        "e3c5",
+        "d7c5",
+        "d3b5",
+        "c5d7",
+        "e1c1",
+        "e8g8",
+        "c3d5",
+        "f6d5",
+        "b5d5",
+        "d8b6",
+        "d5d6",
+        "b6e3",
+        "c1b1",
+        "d7f6",
+        "f1c4",
+        "c8f5",
+        "h1e1",
+        "e3f2"
+      ],
+      "rank" : 1,
+      "scoreCentipawnsWhitePerspective" : 175
+    },
+    {
+      "depth" : 9,
+      "evalLabel" : "+0.8",
+      "principalVariationSAN" : [
+        "O-O-O",
+        "O-O",
+        "g3",
+        "Qa5",
+        "Bg2",
+        "Re8",
+        "Bd4",
+        "b6",
+        "Rhe1",
+        "Bb7"
+      ],
+      "principalVariationUCI" : [
+        "e1c1",
+        "e8g8",
+        "g2g3",
+        "d8a5",
+        "f1g2",
+        "f8e8",
+        "e3d4",
+        "b7b6",
+        "h1e1",
+        "c8b7"
+      ],
+      "rank" : 2,
+      "scoreCentipawnsWhitePerspective" : 78
+    },
+    {
+      "depth" : 9,
+      "evalLabel" : "+0.7",
+      "principalVariationSAN" : [
+        "Bd4",
+        "Qe7+",
+        "Be2",
+        "O-O",
+        "O-O-O"
+      ],
+      "principalVariationUCI" : [
+        "e3d4",
+        "d8e7",
+        "f1e2",
+        "e8g8",
+        "e1c1"
+      ],
+      "rank" : 3,
+      "scoreCentipawnsWhitePerspective" : 67
+    }
+  ],
+  "fen" : "r1bqk2r\/pp1n1ppp\/5n2\/2bp4\/5P2\/2NQBN2\/PPP3PP\/R3KB1R w KQkq - 0 10",
+  "isMainlinePosition" : true,
+  "keyMomentSummary" : "9... cxd5 drops artin10862's winning chances from 46% to 34%. Better was Qe7 (Qe7 Nd4 Ng4 Nf5 Nde5 fxe5), keeping the evaluation around +0.5. This also left the bishop on c5 hanging: Bxc5 winning material.",
+  "movesSoFarSAN" : "1. d4 d6 2. e4 Nf6 3. Nc3 e5 4. f4 exd4 5. Qxd4 Nbd7 6. Nf3 c6 7. Be3 d5 8. exd5 Bc5 9. Qd3 cxd5",
+  "result" : "1-0",
+  "sideToMoveIsWhite" : true,
+  "whiteAccuracy" : 94.14639592856106,
+  "whiteName" : "MagnusCarlsen"
+}

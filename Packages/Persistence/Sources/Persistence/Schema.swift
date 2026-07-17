@@ -67,6 +67,12 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v2_chatMessageSource") { db in
+            try db.alter(table: "chatMessage") { t in
+                t.add(column: "source", .text)
+            }
+        }
+
         return migrator
     }
 }

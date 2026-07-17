@@ -198,7 +198,7 @@ public enum CoachVerifier {
 
     // MARK: - Legality replay (fact 15: SAN path for legality + UCI extraction only)
 
-    private static func legalUCILine(tokens: [String], startingFEN fen: String) -> [String]? {
+    static func legalUCILine(tokens: [String], startingFEN fen: String) -> [String]? {
         var game = ChessGame(startingFEN: fen)
         var index = game.startIndex
         var uci: [String] = []
@@ -308,10 +308,19 @@ public enum CoachVerifier {
         let tokens: [MoveToken]
         let hasLeadingNumberMarker: Bool
 
-        var isExemptBareSquare: Bool {
-            guard let only = tokens.first, tokens.count == 1, !hasLeadingNumberMarker else { return false }
+        /// True for any single bare-square token chain, numbered or not.
+        /// Used by the chat precheck (TRAP 1: "what about c4?" reads like a
+        /// pawn move but is usually a square reference).
+        var isBareSquareToken: Bool {
+            guard let only = tokens.first, tokens.count == 1 else { return false }
             return only.suffix == nil && bareSquarePattern.firstMatch(in: only.text, range: NSRange(only.text.startIndex..., in: only.text)) != nil
                 && only.text.count == 2
+        }
+
+        /// True only for an *unnumbered* bare square: `verify()`'s own,
+        /// narrower exemption from post-generation checking.
+        var isExemptBareSquare: Bool {
+            isBareSquareToken && !hasLeadingNumberMarker
         }
     }
 
@@ -411,5 +420,34 @@ public enum CoachVerifier {
         let prefix = String(text[text.startIndex..<token.range.lowerBound])
         let nsrange = NSRange(prefix.startIndex..., in: prefix)
         return numberMarkerAtEndPattern.firstMatch(in: prefix, range: nsrange) != nil
+    }
+
+    // MARK: - Public tokenizer exposure (M7 chat precheck)
+
+    /// One chain of adjacent move-shaped tokens extracted from free text,
+    /// as `verify()` sees it internally, exposed for the chat precheck
+    /// (`ProposedLineCheck`) to classify before any LLM call.
+    public struct TokenChainInfo: Sendable, Equatable {
+        public let tokens: [String]
+        /// A single bare-square token ("c4", "d5"), numbered or not - reads
+        /// like a pawn move but is usually a square reference (fact 4's
+        /// TRAP 1).
+        public let isBareSquareToken: Bool
+        /// The chain is preceded by a move-number marker ("24...", "12.") -
+        /// a reference to a move already played, not a proposal against the
+        /// current position (fact 4's TRAP 2).
+        public let hasLeadingNumberMarker: Bool
+    }
+
+    /// The same chain extraction `verify()` uses internally, exposed
+    /// read-only. Behavior of `verify()` itself is unchanged.
+    public static func moveTokenChains(in text: String) -> [TokenChainInfo] {
+        citedLineChains(in: text).map { chain in
+            TokenChainInfo(
+                tokens: chain.tokens.map(\.text),
+                isBareSquareToken: chain.isBareSquareToken,
+                hasLeadingNumberMarker: chain.hasLeadingNumberMarker
+            )
+        }
     }
 }

@@ -6,6 +6,7 @@ struct GameReplayView: View {
     @StateObject private var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
     private let game: GameRecord
+    private let store: GameStore
 
     @State private var quality: AnalysisQuality = .standard
     @State private var analysisTask: Task<Void, Never>?
@@ -15,10 +16,12 @@ struct GameReplayView: View {
     private enum RightPaneTab: String, CaseIterable {
         case moves = "Moves"
         case report = "Report"
+        case chat = "Chat"
     }
 
     init(game: GameRecord, store: GameStore) {
         self.game = game
+        self.store = store
         _viewModel = StateObject(wrappedValue: GameReplayViewModel(record: game, store: store))
     }
 
@@ -75,6 +78,8 @@ struct GameReplayView: View {
                     MoveListView(viewModel: viewModel)
                 case .report:
                     GameReportView(viewModel: viewModel)
+                case .chat:
+                    ChatView(viewModel: viewModel, store: store)
                 }
             }
             .frame(minWidth: 260, maxWidth: 340)

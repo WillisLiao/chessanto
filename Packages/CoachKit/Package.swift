@@ -27,6 +27,7 @@ let package = Package(
                 .copy("Resources/real-fixture-game-report-input.json"),
                 .copy("Resources/real-fixture-game-golden-report.txt"),
                 .copy("Resources/real-fixture-first-moment-golden-payload.json"),
+                .copy("Resources/real-fixture-first-moment-golden-chat-payload.json"),
             ]
         )
     ]

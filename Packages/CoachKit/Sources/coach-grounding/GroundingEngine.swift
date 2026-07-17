@@ -16,6 +16,13 @@ actor GroundingEngine: EngineToolExecutor {
     private let engine = AnalysisEngine()
     private var iterator: AsyncStream<AnalysisEngine.EngineUpdate>.AsyncIterator?
 
+    /// Same FIFO chokepoint as the App target's `EngineService.coachEvaluate`
+    /// (M7 fact 3): the shared `iterator`/one-search-at-a-time engine is not
+    /// safe under concurrent `evaluate()` calls, actor reentrancy at await
+    /// points notwithstanding. Holds a task that completes only once the
+    /// *previous* call's actual search (not just its own wait) has finished.
+    private var evaluateTail: Task<Void, Never>?
+
     func start(bigNetPath: String, smallNetPath: String) async {
         await engine.start(multipv: 3)
         await engine.setOption(name: "EvalFile", value: bigNetPath)
@@ -39,6 +46,17 @@ actor GroundingEngine: EngineToolExecutor {
             resultingFEN = replay.last!.resultingFEN
         }
 
+        let previousTail = evaluateTail
+        let workTask = Task<EngineToolResult, Error> { [weak self] in
+            await previousTail?.value
+            guard let self else { throw EngineToolArgumentError("engine was deallocated") }
+            return try await self.runSearch(resultingFEN: resultingFEN)
+        }
+        evaluateTail = Task { _ = try? await workTask.value }
+        return try await workTask.value
+    }
+
+    private func runSearch(resultingFEN: String) async throws -> EngineToolResult {
         let infos = await search(fen: resultingFEN, movetimeMilliseconds: 500)
         guard let rank1 = infos.first(where: { ($0.multiPVRank ?? 1) == 1 }) ?? infos.first else {
             throw EngineToolArgumentError("engine returned no analysis for \(resultingFEN)")

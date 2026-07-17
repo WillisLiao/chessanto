@@ -13,21 +13,34 @@ public enum CoachPrompt {
         Write natural, encouraging coaching prose. Do not restate these rules to the user.
         """
 
-    public static func systemPrompt(register: RatingRegister) -> String {
-        let registerText: String
+    private static func registerText(_ register: RatingRegister) -> String {
         switch register {
         case .beginner:
-            registerText = "The player is a beginner. Avoid jargon; explain basic tactical/positional ideas in plain language (e.g. explain what a fork or a hanging piece is rather than assuming it's known)."
+            return "The player is a beginner. Avoid jargon; explain basic tactical/positional ideas in plain language (e.g. explain what a fork or a hanging piece is rather than assuming it's known)."
         case .intermediate:
-            registerText = "The player is an intermediate club player. You can use standard chess terminology (fork, pin, outpost, weak square) without defining it, but keep explanations concrete and move-focused."
+            return "The player is an intermediate club player. You can use standard chess terminology (fork, pin, outpost, weak square) without defining it, but keep explanations concrete and move-focused."
         case .advanced:
-            registerText = "The player is an advanced/expert player. Be concise and precise; you can discuss deeper strategic and calculation nuance without over-explaining basics."
+            return "The player is an advanced/expert player. Be concise and precise; you can discuss deeper strategic and calculation nuance without over-explaining basics."
         }
-        return """
-            You are a chess coach reviewing a game with a student. \(registerText)
+    }
 
-            \(groundingRules)
-            """
+    public static func systemPrompt(register: RatingRegister) -> String {
+        """
+        You are a chess coach reviewing a game with a student. \(registerText(register))
+
+        \(groundingRules)
+        """
+    }
+
+    public static func chatSystemPrompt(register: RatingRegister) -> String {
+        """
+        You are a chess coach discussing a specific position with a student in a live chat. \(registerText(register))
+
+        \(groundingRules)
+        Additionally:
+        3. Answer the student's actual question about the current position - don't give a generic lecture.
+        4. If the student asks an open-ended question (e.g. "how should I continue?" or "how do I attack here?"), call the `evaluate` tool to check at least one concrete line before answering.
+        """
     }
 
     public static func momentUserMessage(payload: CoachMomentPayload) throws -> String {
@@ -48,6 +61,39 @@ public enum CoachPrompt {
 
             Write a short whole-game summary (2-3 takeaways) highlighting any recurring patterns across the key moments listed above.
             """
+    }
+
+    /// The user turn for one chat question. `includeContext` is false when
+    /// the position hasn't changed since the last turn (M7's
+    /// context-block-on-FEN-change decision), in which case the JSON block
+    /// is omitted and only the question (plus any precheck data appended by
+    /// the caller) is sent.
+    public static func chatUserMessage(question: String, payload: CoachChatPayload, includeContext: Bool) throws -> String {
+        guard includeContext else { return question }
+        let json = try encode(payload)
+        return """
+            Here is the data for the current position:
+            \(json)
+
+            Student's question: \(question)
+            """
+    }
+
+    /// A closed-template data note appended to a chat user turn for each
+    /// legal move the precheck pre-evaluated, so the model always has a
+    /// verified eval/PV to cite for "what if I played X?" (M7's precheck
+    /// design decision).
+    public static func precheckEvaluationNote(rawTokens: [String], result: EngineToolResult) -> String {
+        let moveText = rawTokens.joined(separator: " ")
+        let lineText = result.principalVariationSAN.joined(separator: " ")
+        return "Verified engine data for \"\(moveText)\": \(result.evalLabel), continuing \(lineText) (depth \(result.depth))."
+    }
+
+    /// The canned reply for a proposed move that isn't legal in the current
+    /// position - never sent to the LLM (M7's accept criterion).
+    public static func illegalProposalReply(rawTokens: [String]) -> String {
+        let moveText = rawTokens.joined(separator: " ")
+        return "\"\(moveText)\" isn't a legal move in the position we're looking at. If you meant a move from another point in the game, jump to that position and ask there."
     }
 
     public static func regenerationUserMessage(violations: [CoachVerifier.Violation]) -> String {

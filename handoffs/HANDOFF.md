@@ -3,7 +3,7 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
-## Current state (2026-07-17)
+## Current state (2026-07-18)
 
 - **M1 complete.** App builds, all tests pass, and the acceptance criteria in
   `PLAN.md` are met: a real chess.com PGN (fetched live from the public API,
@@ -307,9 +307,77 @@ Read this first at session start; update it at session end.
   - One schema change is planned (the first post-v1 migration): a
     nullable `chatMessage.source` column so the Coach/fallback honesty
     label survives relaunch.
-- Next step: **M7 - position chat**, executing
-  `handoffs/NEXT-SESSION-M7.md` step by step (the design decisions there
-  are fixed; do not re-derive them).
+- **M7 complete (2026-07-18): position chat.** Followed
+  `handoffs/NEXT-SESSION-M7.md` step by step; every step's verification
+  gate passed, including two real bugs found live and fixed before
+  moving on. Full detail in the devlog's "M7" section. What's new:
+  - `Persistence`: a `v2_chatMessageSource` migration (the first
+    post-v1 migration) plus `ChatMessageRecord` and
+    `GameStore.insertChatMessage`/`chatMessages`/`deleteChatMessages`.
+  - `CoachKit`: `CoachVerifier.moveTokenChains(in:)` (public tokenizer
+    exposure, `verify()` itself unchanged) and `ProposedLineCheck`
+    (the precheck classifier: bare-square/history-reference/legal-
+    proposal/illegal-proposal, built around the prep session's TRAP 1/
+    TRAP 2 findings); `CoachChatContext`/`CoachChatPayload`/
+    `CoachPayloadBuilder.chatPayload`/`CoachPrompt.chatSystemPrompt` etc;
+    `CoachChat` (a `public actor`, the multi-turn analogue of
+    `CoachNarrator` - precheck -> seed eval -> generate -> verify ->
+    regenerate once -> fallback, history pruned to bare turns and capped
+    at 12 messages, `CoachNarrator.runConversation` shared via a
+    `private` -> `internal` refactor with all 7 of its own tests
+    unmodified). 40 new CoachKit tests.
+  - `App`: `EngineService.coachEvaluate` gets a FIFO chokepoint
+    (`coachEvaluateTail`) so a narration tool call and a chat tool call
+    can't clobber `searchOneShot`'s shared state - **the first attempt
+    at this was wrong** (a placeholder-task chain that only waited for
+    the previous placeholder, not the previous call's actual engine
+    work, serializing nothing) and wasn't caught by any offline test;
+    only the live concurrent-evaluate probe in `coach-grounding`
+    deadlocked and surfaced it. `GameReplayViewModel.chatContext()`/
+    `chatPositionLabel`; `CoachService` chat state
+    (`chatMessages`/`isSendingChatMessage`/per-game cached `CoachChat`);
+    a new `ChatView` (third `RightPaneTab` segment) - `List`-based
+    message view, position chip, source captions, per-message jump
+    buttons, starter chips, single-phase "Coach is thinking..."
+    indicator (a documented scope-down - no real progress-reporting
+    hook exists to back the plan's 3-phase design honestly), offline
+    guidance state.
+  - `coach-grounding` grew a chat section (legal/illegal/open-question
+    turns plus the concurrent-evaluate probe) - this is what caught the
+    FIFO bug above, and also caught a harness-side bug (independent
+    re-verification was re-checking `.precheck` canned-template replies
+    as if they were LLM prose, false-flagging the very token the
+    template declines as an unverified citation) - both fixed, second
+    run exits 0.
+  - Real E2E verification (Release build, `osascript`/System Events, the
+    real analyzed `MagnusCarlsen vs artin10862` fixture): found and fixed
+    a real bug before functional testing could even start (Chat tab
+    never triggered a health check, stuck on "Checking..." forever);
+    then confirmed live - illegal-move precheck (instant, zero LLM
+    calls), legal-move proposal (verified eval injected and cited,
+    `source=coach`), variation-position chat (correct branch-ply
+    `plyIndex` mapping), quit/relaunch persistence (14 messages
+    round-tripped, jump buttons work), Clear chat, and the
+    coach-disabled offline state. `coach-grounding` exits 0; all 160
+    package tests plus the 10 app tests green throughout.
+  - Known gaps for a future session (not blocking, all quality/UX/
+    robustness, not safety - nothing unverified ever rendered in any
+    live test): open-question tool-calling didn't clearly fire live with
+    either `qwen3:0.6b` or a `qwen2.5-coder:7b` spot-check (no
+    `qwen3:8b` on this machine); prose quality with non-frontier models
+    is weak/repetitive (same documented M6 residual risk, not new);
+    `List` produces a real `AXOutline`/`AXRow` structure (a genuine, if
+    partial, improvement over `MoveListView`'s bare `ScrollView`) but
+    row text/button labels still don't expose via `name` in this AX
+    bridge, so the M5 AX gap isn't fully resolved; `OllamaClient` has no
+    request timeout, so a genuinely-*unresponsive*-but-not-torn-down
+    Ollama (simulated via `SIGSTOP`, as opposed to `kill -9` which this
+    machine's Ollama.app auto-respawns too fast to observe) hangs chat
+    indefinitely rather than falling back in a reasonable time - a
+    pre-existing characteristic shared by M6's narration path, only now
+    exercised by this specific failure mode.
+- Next step: **M8 - polish and packaging**, executing
+  `handoffs/NEXT-SESSION-M8.md` step by step.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
@@ -344,7 +412,7 @@ Read this first at session start; update it at session end.
 - Exploration Mode: chess.com-style analysis board - live eval bar while scrubbing, free variation play with variation tree, continuous engine analysis of the displayed position.
 - chess.com public API fetch + offline PGN import; analysis fully local.
 - RAM-based model picker; Intel Macs default to rule-based mode with a slow-inference warning.
-- Position chat included in v1 (M6).
+- Position chat included in v1 (M7, complete 2026-07-18).
 - Board pieces are placeholder Unicode glyphs sized via GeometryReader (not
   a fixed huge-font-plus-minimumScaleFactor hack - that produced degenerate
   accessibility geometry and was fixed during M1). Real piece artwork is

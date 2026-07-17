@@ -45,7 +45,7 @@ public struct CoachNarration: Sendable, Equatable {
 /// ever renders - every path either returns `.coach` text that passed
 /// `CoachVerifier`, or `.fallback`.
 public enum CoachNarrator {
-    private static let toolCallCap = 6
+    static let toolCallCap = 6
     private static let maxConversationTurns = 12
 
     public static func narrateMoment(
@@ -220,7 +220,7 @@ public enum CoachNarrator {
         )
     }
 
-    private struct ConversationResult {
+    struct ConversationResult {
         let text: String?
         let toolCallsUsed: Int
         let newAnchors: [CoachVerifier.Anchor]
@@ -229,7 +229,9 @@ public enum CoachNarrator {
     /// Runs one turn of the chat, following the model through its own
     /// tool-call loop (cap `toolCallBudgetRemaining`) until it produces
     /// prose with no further tool calls, or `maxConversationTurns` is hit.
-    private static func runConversation(
+    /// `internal` (not `private`) so `CoachChat` (M7) can share this exact
+    /// engine across turns; behavior is unchanged (fact 9).
+    static func runConversation(
         messages: inout [OllamaChatMessage],
         client: any OllamaChatStreaming,
         model: String,
@@ -303,14 +305,14 @@ public enum CoachNarrator {
         return ConversationResult(text: nil, toolCallsUsed: toolCallsUsed, newAnchors: newAnchors)
     }
 
-    private static func errorMessage(_ error: Error) -> String {
+    static func errorMessage(_ error: Error) -> String {
         if let argumentError = error as? EngineToolArgumentError {
             return argumentError.message
         }
         return String(describing: error)
     }
 
-    private static func toolResultJSON(_ result: EngineToolResult) -> String {
+    static func toolResultJSON(_ result: EngineToolResult) -> String {
         struct ToolResultPayload: Encodable {
             let evalLabel: String
             let scoreCentipawnsWhitePerspective: Int?

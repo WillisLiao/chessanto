@@ -1,5 +1,6 @@
 import Foundation
 import ChessCore
+import CoachKit
 import Persistence
 import AnalysisKit
 
@@ -86,6 +87,8 @@ final class GameReplayViewModel: ObservableObject {
             Task { await loadVariations(gameId: gameId) }
         }
     }
+
+    var id: Int64? { gameId }
 
     var sanAtCurrent: String? {
         chessGame?.san(at: currentIndex)
@@ -497,6 +500,93 @@ final class GameReplayViewModel: ObservableObject {
             current = chessGame.parent(of: c)
         }
         return false
+    }
+
+    // MARK: - Position chat (M7)
+
+    /// The current key moment, if the displayed position's mainline
+    /// ancestor ply is one of the report's key moments.
+    var currentKeyMoment: KeyMoment? {
+        report?.keyMoments.first { $0.ply == currentGraphPly }
+    }
+
+    /// The current position's ranked lines from cached analysis, when the
+    /// displayed ply is an analyzed mainline ply - empty for a variation
+    /// position or an unanalyzed game, in which case `CoachChat` seeds one
+    /// live evaluation instead.
+    var currentPositionRankedLines: [RankedLine] {
+        guard !isExploringVariation, let ply = moveIndices.firstIndex(of: currentIndex),
+            let records = cachedAllRanksByPly[ply]
+        else { return [] }
+        return records.sorted { $0.multiPVRank < $1.multiPVRank }.map {
+            RankedLine(
+                rank: $0.multiPVRank, scoreCentipawns: $0.scoreCentipawns, mateIn: $0.mateIn,
+                principalVariationUCI: $0.principalVariation.isEmpty
+                    ? [] : $0.principalVariation.split(separator: " ").map(String.init),
+                depth: $0.depth
+            )
+        }
+    }
+
+    /// SAN of the path to `index`: the mainline prefix (up to the branch
+    /// point, or the whole path if `index` is itself on the mainline), the
+    /// branch ply, and the variation's own SAN segment beyond that branch
+    /// (fact 6: `ChessGame.history(upTo:)` returns the full path from the
+    /// start through `index`, variation branches included).
+    private func chatMovePath(upTo index: MoveIndex) -> (mainlineSAN: [String], variationBranchPly: Int, variationSAN: [String]) {
+        guard let chessGame else { return ([], 0, []) }
+        let fullPath = chessGame.history(upTo: index)
+        let branch = chessGame.mainlineAncestor(of: index)
+        let branchPosition = fullPath.firstIndex(of: branch) ?? 0
+        let mainlinePart = fullPath[0...branchPosition]
+        let variationPart = branchPosition + 1 < fullPath.count ? fullPath[(branchPosition + 1)...] : []
+        let mainlineSAN = mainlinePart.dropFirst().compactMap { san(at: $0) }
+        let variationSAN = variationPart.compactMap { san(at: $0) }
+        let branchPly = moveIndices.firstIndex(of: branch) ?? 0
+        return (Array(mainlineSAN), branchPly, Array(variationSAN))
+    }
+
+    /// Assembles M7's chat payload input from the currently displayed
+    /// position - `nil` only if the game failed to load.
+    func chatContext() -> CoachChatContext? {
+        guard let fen = currentFEN else { return nil }
+        let path = chatMovePath(upTo: currentIndex)
+        var oneLiner: String?
+        var before: Double?
+        var after: Double?
+        if let report, let moment = currentKeyMoment {
+            oneLiner = ReportText.momentSummary(moment, report: report)
+            before = moment.evalSwing.moverWinProbabilityBefore
+            after = moment.evalSwing.moverWinProbabilityAfter
+        }
+        return CoachChatContext(
+            currentFEN: fen,
+            isMainlinePosition: !isExploringVariation,
+            mainlineMovesSAN: path.mainlineSAN,
+            variationBranchPly: path.variationBranchPly,
+            variationMovesSAN: path.variationSAN,
+            currentPositionLines: currentPositionRankedLines,
+            keyMomentOneLiner: oneLiner,
+            keyMomentWinProbabilityBeforePercent: before,
+            keyMomentWinProbabilityAfterPercent: after,
+            whiteName: report?.whiteName,
+            blackName: report?.blackName,
+            result: report?.result,
+            whiteAccuracy: report?.whiteAccuracy,
+            blackAccuracy: report?.blackAccuracy
+        )
+    }
+
+    /// A short label for what the chat is attached to ("Start position",
+    /// "Move 12. Nf3", "Variation after 12...Nf3").
+    var chatPositionLabel: String {
+        guard let chessGame else { return "Current position" }
+        guard currentIndex != chessGame.startIndex else { return "Start position" }
+        guard let san = sanAtCurrent else { return "Current position" }
+        let plyDepth = chessGame.history(upTo: currentIndex).count - 1
+        let moveNumber = (plyDepth + 1) / 2
+        let numberLabel = plyDepth % 2 == 1 ? "\(moveNumber)." : "\(moveNumber)..."
+        return isExploringVariation ? "Variation after \(numberLabel) \(san)" : "Move \(numberLabel) \(san)"
     }
 
     private func removeSubtree(at index: MoveIndex) {

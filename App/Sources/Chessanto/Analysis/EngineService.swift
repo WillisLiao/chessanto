@@ -65,6 +65,16 @@ public final class EngineService: ObservableObject {
     private var batchGeneration: Int?
     private var batchContinuation: CheckedContinuation<Void, Never>?
 
+    /// FIFO chokepoint for `coachEvaluate` (M7 fact 3): `searchOneShot`'s
+    /// `batchCollector`/`batchGeneration` are single fields, so two
+    /// interleaved `coachEvaluate` calls (a narration tool call and a chat
+    /// tool call, both legal once chat exists) would clobber each other
+    /// across suspension points. Holds a task that completes only once the
+    /// *previous* call's actual engine work (not just its own wait) has
+    /// finished, so each call truly waits its turn rather than racing on a
+    /// chain of instantly-resolving placeholders.
+    private var coachEvaluateTail: Task<Void, Never>?
+
     public init() {}
 
     /// Starts the engine, if not already started. No-op (and never boots
@@ -340,6 +350,17 @@ public final class EngineService: ObservableObject {
             throw EngineToolArgumentError("a batch analysis is already running")
         }
 
+        let previousTail = coachEvaluateTail
+        let workTask = Task<EngineToolResult, Error> { [weak self] in
+            await previousTail?.value
+            guard let self else { throw EngineToolArgumentError("engine service was deallocated") }
+            return try await self.runCoachEvaluateSearch(resultingFEN: resultingFEN)
+        }
+        coachEvaluateTail = Task { _ = try? await workTask.value }
+        return try await workTask.value
+    }
+
+    private func runCoachEvaluateSearch(resultingFEN: String) async throws -> EngineToolResult {
         stopLive()
         defer { resumeLiveIfPending() }
 
