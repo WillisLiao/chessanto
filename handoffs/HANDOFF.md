@@ -75,6 +75,45 @@ Read this first at session start; update it at session end.
     happens to equal the real mainline continuation still creates a
     redundant variation branch instead of being recognized; the
     lines-panel adopt buttons' accessibility exposure is unconfirmed.
+- **M4 complete (2026-07-17): chess.com fetch.** Followed
+  `handoffs/NEXT-SESSION-M4.md`'s bootstrap. What's new:
+  - `ChessComKit` got real coverage: a fixture-based decode test (a
+    trimmed real archive response) plus `chesscom-smoke`, a live
+    executable (mirroring `EngineKit`'s `engine-smoke`) that round-trips
+    `profile`/`archiveURLs`/`recentGames` against the real chess.com API.
+  - `Persistence`: `UserProfileRecord` + `GameStore.userProfile()`/
+    `saveUserProfile()` - the settings-storage question from the M4
+    bootstrap resolved in favor of the existing `userProfile` table over
+    `UserDefaults`, since M6 will need `ratingBand`/`coachModel`/
+    `coachEnabled` there anyway.
+  - `App`: `ChessComFetchView` - a sheet with username entry, fetch,
+    a checkbox-selectable game list (already-imported games marked and
+    disabled), and multi-select import via the existing
+    `GameLibrary.importPGN(_:source:sourceURL:)` path. Wired to a new
+    "Fetch from chess.com" toolbar button next to "Import PGN". Also
+    fixed a real bug in `GameLibrary.alreadyImported(sourceURLs:)`,
+    which ignored its parameter and returned every imported URL instead
+    of intersecting with the games actually being shown.
+  - Real E2E verification (same `osascript`/System Events method as
+    M2/M3): fetched a real, very active chess.com account
+    (`hikaru`, 991 games in the default 2-month window - which is also
+    why the fetch view now defaults to *no* games pre-selected rather
+    than "select all"), imported 5 games, confirmed via `sqlite3` they
+    landed with the right `source`/`sourceURL`, quit/relaunched and
+    confirmed both the username and all 6 games (1 original + 5 new)
+    persisted, ran a full Analyze pass on one of the imported games (238
+    analysis rows, accuracy `White 94.5 / Black 91.2` rendered
+    correctly), and confirmed an invalid username surfaces the existing
+    chess.com error alert cleanly rather than crashing.
+  - Two real bugs found and logged (see the 2026-07-17 devlog's M4
+    section for full detail, not fixed this session): one of the 5
+    imported games fails to parse (`chesskit-swift`
+    `invalidMove("Rb5")` on an otherwise ordinary game - a pre-existing
+    parser edge case, not a chess.com-specific or M4 regression, and it
+    already degrades correctly via the existing load-error alert); and
+    the Analyze button has no "engine still starting" state, so clicking
+    it before `EngineService.isStarted` flips true silently does
+    nothing instead of showing a real error.
 - Project layout: `project.yml` (XcodeGen spec, regenerate with
   `xcodegen generate` after adding/removing files - `Chessanto.xcodeproj` is
   gitignored, not committed), `App/` (SwiftUI app target, with an
@@ -83,8 +122,10 @@ Read this first at session start; update it at session end.
   Persistence - each a local SPM package per `PLAN.md`'s architecture).
 - Git repo initialized and pushed: https://github.com/WillisLiao/chessanto
   (branch `main`). Commit and push M2 work alongside these docs.
-- Next step: execute M4 (chess.com fetch). `handoffs/NEXT-SESSION-M4.md`
-  has the bootstrap for that.
+- Next step: execute M5 (rule-based coaching report). No
+  `NEXT-SESSION-M5.md` bootstrap exists yet - write one before starting,
+  per PLAN.md's M5 bullet (theme detection, key-moment selection, game
+  report view, whole-game takeaways).
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

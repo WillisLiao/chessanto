@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var library: GameLibrary
     @State private var selectedGameID: Int64?
     @State private var isShowingImporter = false
+    @State private var isShowingChessComFetch = false
     @State private var isTargeted = false
 
     var body: some View {
@@ -15,6 +16,13 @@ struct ContentView: View {
             }
             .navigationTitle("Games")
             .toolbar {
+                ToolbarItem {
+                    Button {
+                        isShowingChessComFetch = true
+                    } label: {
+                        Label("Fetch from chess.com", systemImage: "globe")
+                    }
+                }
                 ToolbarItem {
                     Button {
                         isShowingImporter = true
@@ -52,6 +60,9 @@ struct ContentView: View {
             allowsMultipleSelection: false
         ) { result in
             handleFileImport(result: result)
+        }
+        .sheet(isPresented: $isShowingChessComFetch) {
+            ChessComFetchView()
         }
         .onReceive(NotificationCenter.default.publisher(for: .importPGNRequested)) { _ in
             isShowingImporter = true

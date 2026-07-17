@@ -142,4 +142,23 @@ struct PersistenceTests {
         #expect(Set(remaining.map(\.id)) == [root.id, sibling.id])
         _ = grandchild // deleted via cascade, no longer fetchable
     }
+
+    @Test func userProfileDefaultsOnFirstAccess() throws {
+        let store = try GameStore()
+        let profile = try store.userProfile()
+        #expect(profile.chessComUsername == nil)
+        #expect(profile.ratingBand == "adaptive")
+        #expect(profile.coachEnabled == false)
+    }
+
+    @Test func userProfileRoundTripsAndUpdatesInPlace() throws {
+        let store = try GameStore()
+        var profile = try store.userProfile()
+        profile.chessComUsername = "hikaru"
+        try store.saveUserProfile(profile)
+
+        let refetched = try store.userProfile()
+        #expect(refetched.chessComUsername == "hikaru")
+        #expect(refetched.id == 1)
+    }
 }

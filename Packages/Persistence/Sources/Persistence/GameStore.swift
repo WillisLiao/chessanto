@@ -168,4 +168,27 @@ public final class GameStore: Sendable {
             try VariationRecord.deleteOne(db, key: id)
         }
     }
+
+    // MARK: - User profile
+
+    /// The single user profile row, creating a default one on first access.
+    public func userProfile() throws -> UserProfileRecord {
+        try dbQueue.write { db in
+            if let existing = try UserProfileRecord.fetchOne(db, key: 1) {
+                return existing
+            }
+            var fresh = UserProfileRecord()
+            try fresh.insert(db)
+            return fresh
+        }
+    }
+
+    @discardableResult
+    public func saveUserProfile(_ profile: UserProfileRecord) throws -> UserProfileRecord {
+        try dbQueue.write { db in
+            var mutableProfile = profile
+            try mutableProfile.save(db)
+            return mutableProfile
+        }
+    }
 }

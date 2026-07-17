@@ -5,6 +5,7 @@ import Persistence
 final class GameLibrary: ObservableObject {
     @Published private(set) var games: [GameRecord] = []
     @Published var errorMessage: String?
+    @Published var chessComUsername: String
 
     let store: GameStore
 
@@ -14,7 +15,19 @@ final class GameLibrary: ObservableObject {
         } catch {
             fatalError("Couldn't open local database: \(error.localizedDescription)")
         }
+        self.chessComUsername = (try? store.userProfile().chessComUsername) ?? ""
         reload()
+    }
+
+    func saveChessComUsername(_ username: String) {
+        chessComUsername = username
+        do {
+            var profile = try store.userProfile()
+            profile.chessComUsername = username
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func reload() {
@@ -66,6 +79,7 @@ final class GameLibrary: ObservableObject {
     }
 
     func alreadyImported(sourceURLs: Set<String>) -> Set<String> {
-        (try? store.importedSourceURLs()) ?? []
+        let imported = (try? store.importedSourceURLs()) ?? []
+        return imported.intersection(sourceURLs)
     }
 }
