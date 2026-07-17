@@ -376,6 +376,27 @@ Read this first at session start; update it at session end.
     indefinitely rather than falling back in a reasonable time - a
     pre-existing characteristic shared by M6's narration path, only now
     exercised by this specific failure mode.
+- **M8 prep complete (2026-07-18): polish/packaging surface verified live,
+  execution plan written.** A prep-only session (no app code changes) read
+  every file M8 touches in full, overturned two carried-forward claims by
+  measuring (OllamaClient's 300s timeout exists and fires at 301.0s
+  against a frozen Ollama - the real fix is shorter differentiated
+  timeouts; and the M5/M7 "List AX text gap" was the AppleScript bridge,
+  not the app - full text is present in `AXDescription` via the raw AX
+  API, so `scripts/axprobe.swift` becomes the E2E read method), settled
+  the Stockfish licensing question with the user (**the app will be
+  licensed GPLv3**; LICENSE/README/release script land in M8), fixed the
+  board scope (cburnett GPLv2+ SVGs, verified live, plus three square
+  themes and three dormant M1 board features: coordinates, flip,
+  last-move highlight), measured the dashboard cheap enough to compute
+  live (3.55 ms/game release-mode ReportBuilder run - no rollup table),
+  and pinned mixed-ELO acceptance data across every rating band per the
+  user's request (the user is chess.com `WillisLiao`, blitz ~231; plus
+  verified accounts at ~750, ~1200, 1819-2241, 2533, and the existing GM
+  fixtures). One v3 `userProfile` migration
+  (`hasCompletedOnboarding`/`analysisQuality`/`boardTheme`) is the only
+  schema work. Full detail in the devlog's "M8 prep" section and the
+  rewritten `handoffs/NEXT-SESSION-M8.md`.
 - Next step: **M8 - polish and packaging**, executing
   `handoffs/NEXT-SESSION-M8.md` step by step.
 
@@ -400,10 +421,11 @@ Read this first at session start; update it at session end.
   check in this repo is the `engine-smoke` executable, which works and is
   the thing to run after touching EngineKit.
 - GRDB 7.11.1 for persistence.
-- Stockfish being GPLv3 means public distribution of Chessanto needs a
-  licensing decision (GPL compliance or isolating Stockfish as a separate
-  component) - not an issue for local personal use, revisit before any
-  release. See `PLAN.md`'s Architecture/Risks sections.
+- Stockfish being GPLv3: **resolved 2026-07-18 (M8 prep, user decision) -
+  Chessanto itself will be licensed GPLv3**, making distribution
+  compliant; the LICENSE file, README dependency/license table, and
+  release build script are M8 deliverables. See `PLAN.md`'s
+  Architecture/Risks sections for the original analysis.
 
 ## Key decisions
 
@@ -415,8 +437,15 @@ Read this first at session start; update it at session end.
 - Position chat included in v1 (M7, complete 2026-07-18).
 - Board pieces are placeholder Unicode glyphs sized via GeometryReader (not
   a fixed huge-font-plus-minimumScaleFactor hack - that produced degenerate
-  accessibility geometry and was fixed during M1). Real piece artwork is
-  M7 polish, per PLAN.md.
+  accessibility geometry and was fixed during M1). Real piece artwork
+  (cburnett, GPLv2+) ships in M8 per the prep plan.
+- The app is licensed GPLv3 (user decision, 2026-07-18): Stockfish
+  compliance resolved, binaries distributable, cburnett artwork
+  compatible.
+- E2E/acceptance data spans all rating bands, beginner through pro (user
+  request, 2026-07-18): the user's own `WillisLiao` account (~231 blitz)
+  plus pinned accounts per band in `NEXT-SESSION-M8.md` fact 12, not just
+  the GM fixtures.
 
 ## Future directions (explicitly out of v1)
 
