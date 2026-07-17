@@ -100,4 +100,46 @@ struct PersistenceTests {
         let fetched = try await store.analysis(gameId: gameId)
         #expect(fetched.isEmpty)
     }
+
+    @Test func variationMovesRoundTripInInsertionOrder() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+
+        let root = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Nf3", orderIndex: 0)
+        )
+        let child = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Nc6", orderIndex: 0, parentVariationId: root.id)
+        )
+        _ = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Bb5", orderIndex: 0, parentVariationId: child.id)
+        )
+
+        let fetched = try await store.variations(gameId: gameId)
+        #expect(fetched.map(\.moveSAN) == ["Nf3", "Nc6", "Bb5"])
+    }
+
+    @Test func deletingVariationCascadesToSubtreeButNotSiblings() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+
+        let root = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Nf3", orderIndex: 0)
+        )
+        let child = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Nc6", orderIndex: 0, parentVariationId: root.id)
+        )
+        let grandchild = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Bb5", orderIndex: 0, parentVariationId: child.id)
+        )
+        let sibling = try await store.insertVariationMove(
+            VariationRecord(gameId: gameId, parentPlyIndex: 2, moveSAN: "Bc4", orderIndex: 1)
+        )
+
+        try await store.deleteVariation(id: child.id!)
+
+        let remaining = try await store.variations(gameId: gameId)
+        #expect(Set(remaining.map(\.id)) == [root.id, sibling.id])
+        _ = grandchild // deleted via cascade, no longer fetchable
+    }
 }

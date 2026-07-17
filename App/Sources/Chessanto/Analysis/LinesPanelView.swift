@@ -2,11 +2,13 @@ import SwiftUI
 import EngineKit
 import ChessCore
 
-/// Display-only MultiPV lines panel: eval + first few SAN moves of each
-/// engine line for the currently displayed position.
+/// MultiPV lines panel: eval + first few SAN moves of each engine line for
+/// the currently displayed position. Clicking a line adopts it as a new
+/// variation branch (`onAdopt` receives the line's raw UCI moves).
 struct LinesPanelView: View {
     let lines: [AnalysisEngine.EngineInfo]
     let fen: String
+    var onAdopt: ([String]) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -16,15 +18,21 @@ struct LinesPanelView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(Array(lines.prefix(3).enumerated()), id: \.offset) { _, line in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text(evalLabel(line))
-                            .font(.caption.monospacedDigit().bold())
-                            .frame(width: 44, alignment: .leading)
-                        Text(sanLine(line))
-                            .font(.caption)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                    Button {
+                        onAdopt(Array(line.principalVariation.prefix(6)))
+                    } label: {
+                        HStack(alignment: .top, spacing: 6) {
+                            Text(evalLabel(line))
+                                .font(.caption.monospacedDigit().bold())
+                                .frame(width: 44, alignment: .leading)
+                            Text(sanLine(line))
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .accessibilityElement(children: .combine)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

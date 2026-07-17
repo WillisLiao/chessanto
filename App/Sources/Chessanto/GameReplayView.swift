@@ -9,6 +9,7 @@ struct GameReplayView: View {
 
     @State private var quality: AnalysisQuality = .standard
     @State private var analysisTask: Task<Void, Never>?
+    @State private var selectedSquare: BoardSquare?
 
     init(game: GameRecord, store: GameStore) {
         self.game = game
@@ -20,22 +21,33 @@ struct GameReplayView: View {
             VStack {
                 HStack(alignment: .top, spacing: 8) {
                     EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
-                    BoardView(position: viewModel.position)
+                    BoardView(
+                        position: viewModel.position,
+                        selectedSquare: selectedSquare,
+                        legalDestinations: legalDestinations,
+                        onSquareTapped: handleSquareTapped
+                    )
                 }
                 .padding()
+                if viewModel.isExploringVariation {
+                    Button("Back to game") { viewModel.backToGame() }
+                        .font(.caption)
+                }
                 controls
                 EvalGraphView(
                     series: viewModel.evalGraphSeries,
-                    currentPly: viewModel.moveIndices.firstIndex(of: viewModel.currentIndex) ?? 0
+                    currentPly: viewModel.currentGraphPly
                 ) { ply in
                     guard ply >= 0, ply < viewModel.moveIndices.count else { return }
                     viewModel.jump(to: viewModel.moveIndices[ply])
                 }
                 .padding(.horizontal)
                 if let fen = viewModel.currentFEN {
-                    LinesPanelView(lines: engineService.liveEvaluation?.lines ?? [], fen: fen)
-                        .padding(.horizontal)
-                        .padding(.top, 4)
+                    LinesPanelView(lines: engineService.liveEvaluation?.lines ?? [], fen: fen) { uciMoves in
+                        Task { await viewModel.adoptLine(sanMoves: ChessGame.sanLine(fromUCI: uciMoves, startingFEN: fen)) }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
                 }
             }
             .frame(minWidth: 420)
@@ -67,7 +79,10 @@ struct GameReplayView: View {
             }
         }
         .onAppear { showLivePosition() }
-        .onChange(of: viewModel.currentIndex) { _ in showLivePosition() }
+        .onChange(of: viewModel.currentIndex) { _ in
+            selectedSquare = nil
+            showLivePosition()
+        }
         .onDisappear {
             analysisTask?.cancel()
             engineService.stopLive()
@@ -77,6 +92,39 @@ struct GameReplayView: View {
     private func showLivePosition() {
         guard let fen = viewModel.currentFEN else { return }
         engineService.showPosition(fen: fen)
+    }
+
+    private var legalDestinations: Set<BoardSquare> {
+        guard let selectedSquare else { return [] }
+        return Set(
+            viewModel.legalDestinations(from: SquareCoordinate(notation: selectedSquare.algebraic))
+                .compactMap { BoardSquare(algebraic: $0.notation) }
+        )
+    }
+
+    private func handleSquareTapped(_ square: BoardSquare) {
+        guard let selectedSquare else {
+            if viewModel.position.pieces[square] != nil {
+                self.selectedSquare = square
+            }
+            return
+        }
+
+        if square == selectedSquare {
+            self.selectedSquare = nil
+            return
+        }
+
+        if legalDestinations.contains(square) {
+            let from = SquareCoordinate(notation: selectedSquare.algebraic)
+            let to = SquareCoordinate(notation: square.algebraic)
+            self.selectedSquare = nil
+            Task { await viewModel.playMove(from: from, to: to) }
+        } else if viewModel.position.pieces[square] != nil {
+            self.selectedSquare = square
+        } else {
+            self.selectedSquare = nil
+        }
     }
 
     @ToolbarContentBuilder
@@ -200,9 +248,43 @@ private struct MoveListView: View {
                             position % 2 == 1 ? "Move \(position / 2 + 1), \(san)" : san
                         )
                     }
+
+                    // Variations exploring off `index` - rendered even at the
+                    // start position, which has no SAN of its own.
+                    ForEach(viewModel.exploredChildren(of: index), id: \.self) { branchRoot in
+                        ForEach(viewModel.variationRows(startingAt: branchRoot, depth: 1), id: \.index) { row in
+                            variationRow(index: row.index, depth: row.depth)
+                        }
+                    }
                 }
             }
             .padding()
         }
+    }
+
+    private func variationRow(index: MoveIndex, depth: Int) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                viewModel.jump(to: index)
+            } label: {
+                Text(viewModel.san(at: index) ?? "")
+                    .font(.callout.italic())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .background(index == viewModel.currentIndex ? Color.accentColor.opacity(0.2) : .clear)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Task { await viewModel.deleteVariation(at: index) }
+            } label: {
+                Image(systemName: "trash")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("delete-variation-\(viewModel.san(at: index) ?? "")")
+        }
+        .padding(.leading, CGFloat(depth) * 16)
     }
 }

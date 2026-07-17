@@ -61,3 +61,32 @@ private let samplePGN = """
     let result = game.playMove(from: SquareCoordinate(notation: "e2"), to: SquareCoordinate(notation: "e5"), at: game.startIndex)
     #expect(result == nil)
 }
+
+@Test func variationBranchesOffMainlineAndNestsFurther() throws {
+    var game = try ChessGame(pgn: samplePGN)
+    let mainline = game.mainlineIndices
+    // Branch a variation after 2. Nf3 (mainline[2]): 2...d5 instead of 2...Nc6.
+    let branchPoint = mainline[2]
+    let variationMove = game.playMove(san: "d5", at: branchPoint)
+    #expect(variationMove != nil)
+    #expect(!game.isMainline(variationMove!))
+    #expect(game.parent(of: variationMove!) == branchPoint)
+    #expect(game.mainlineAncestor(of: variationMove!) == branchPoint)
+
+    // Nest a sub-variation inside it.
+    let subVariationMove = game.playMove(san: "Nc3", at: variationMove!)
+    #expect(subVariationMove != nil)
+    #expect(game.parent(of: subVariationMove!) == variationMove!)
+    #expect(game.mainlineAncestor(of: subVariationMove!) == branchPoint)
+
+    // The original mainline is untouched.
+    #expect(game.mainlineIndices.count == mainline.count)
+}
+
+@Test func pawnMoveToBackRankAutoPromotesToQueen() {
+    var game = ChessGame(startingFEN: "4k3/P7/8/8/8/8/8/4K3 w - - 0 1")
+    let start = game.startIndex
+    let result = game.playMove(from: SquareCoordinate(notation: "a7"), to: SquareCoordinate(notation: "a8"), at: start)
+    #expect(result != nil)
+    #expect(game.san(at: result!) == "a8=Q+")
+}

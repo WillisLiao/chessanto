@@ -74,6 +74,35 @@ extension ChessGame {
     public func history(upTo index: MoveIndex) -> [MoveIndex] {
         game.moves.history(for: index.raw).map(MoveIndex.init)
     }
+
+    /// Every index in the tree (mainline and all variations), in no
+    /// particular order.
+    public var allIndices: [MoveIndex] {
+        game.moves.indices.map(MoveIndex.init)
+    }
+
+    /// Whether `index` belongs to the mainline (variation 0).
+    public func isMainline(_ index: MoveIndex) -> Bool {
+        index.raw.variation == MoveTree.Index.mainVariation
+    }
+
+    /// The index immediately before `index` in whichever branch it belongs
+    /// to, or `nil` if `index` is the start of the game.
+    public func parent(of index: MoveIndex) -> MoveIndex? {
+        let hist = history(upTo: index)
+        guard hist.count >= 2 else { return nil }
+        return hist[hist.count - 2]
+    }
+
+    /// Walks up from `index` to the nearest ancestor (including itself)
+    /// that belongs to the mainline - "back to game" for a variation.
+    public func mainlineAncestor(of index: MoveIndex) -> MoveIndex {
+        var current = index
+        while !isMainline(current), let parent = parent(of: current) {
+            current = parent
+        }
+        return current
+    }
 }
 
 // MARK: - Legal moves and playing moves
@@ -83,6 +112,19 @@ public struct SquareCoordinate: Hashable, Sendable {
 
     public init(notation: String) {
         self.notation = notation
+    }
+}
+
+public enum PromotionKind: String, CaseIterable, Sendable {
+    case queen, rook, bishop, knight
+
+    var kind: Piece.Kind {
+        switch self {
+        case .queen: return .queen
+        case .rook: return .rook
+        case .bishop: return .bishop
+        case .knight: return .knight
+        }
     }
 }
 
@@ -96,22 +138,38 @@ extension ChessGame {
             .map { SquareCoordinate(notation: $0.notation) }
     }
 
+    /// Whether the piece at `square` can legally reach the back rank and
+    /// promote if moved to `end` - used by the board UI to decide whether
+    /// to prompt for a promotion piece before calling `playMove`.
+    public func isPromotion(from square: SquareCoordinate, to end: SquareCoordinate, at index: MoveIndex) -> Bool {
+        guard let position = game.positions[index.raw] else { return false }
+        let startSquare = Square(square.notation)
+        guard let piece = position.piece(at: startSquare), piece.kind == .pawn else { return false }
+        let endSquare = Square(end.notation)
+        return endSquare.rank.value == 1 || endSquare.rank.value == 8
+    }
+
     /// Attempts to play a legal move from `start` to `end` at the position for `index`.
+    /// Pawn moves reaching the back rank auto-promote to `promotion` (default queen).
     /// Returns the new move index on success, or `nil` if the move is illegal.
     @discardableResult
     public mutating func playMove(
         from start: SquareCoordinate,
         to end: SquareCoordinate,
-        at index: MoveIndex
+        at index: MoveIndex,
+        promotion: PromotionKind = .queen
     ) -> MoveIndex? {
         guard let position = game.positions[index.raw] else { return nil }
         var board = Board(position: position)
         let startSquare = Square(start.notation)
         let endSquare = Square(end.notation)
         guard board.canMove(pieceAt: startSquare, to: endSquare),
-            let move = board.move(pieceAt: startSquare, to: endSquare)
+            var move = board.move(pieceAt: startSquare, to: endSquare)
         else {
             return nil
+        }
+        if move.promotedPiece == nil, move.piece.kind == .pawn, endSquare.rank.value == 1 || endSquare.rank.value == 8 {
+            move = board.completePromotion(of: move, to: promotion.kind)
         }
         let newIndex = game.make(move: move, from: index.raw)
         return MoveIndex(raw: newIndex)

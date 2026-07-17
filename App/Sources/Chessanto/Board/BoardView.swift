@@ -4,10 +4,15 @@ struct BoardView: View {
     let position: BoardPosition
     var lastMove: (from: BoardSquare, to: BoardSquare)?
     var flipped: Bool = false
+    var selectedSquare: BoardSquare?
+    var legalDestinations: Set<BoardSquare> = []
+    var onSquareTapped: ((BoardSquare) -> Void)?
 
     private let lightColor = Color(red: 0.93, green: 0.87, blue: 0.77)
     private let darkColor = Color(red: 0.55, green: 0.39, blue: 0.29)
     private let highlightColor = Color.yellow.opacity(0.35)
+    private let selectedColor = Color.blue.opacity(0.35)
+    private let destinationColor = Color.green.opacity(0.35)
 
     var body: some View {
         GeometryReader { proxy in
@@ -18,17 +23,30 @@ struct BoardView: View {
                 ForEach(0..<8, id: \.self) { row in
                     ForEach(0..<8, id: \.self) { col in
                         let square = square(atRow: row, col: col)
-                        ZStack {
-                            baseColor(for: square)
-                            if isLastMoveSquare(square) {
-                                highlightColor
+                        Button {
+                            onSquareTapped?(square)
+                        } label: {
+                            ZStack {
+                                baseColor(for: square)
+                                if isLastMoveSquare(square) {
+                                    highlightColor
+                                }
+                                if square == selectedSquare {
+                                    selectedColor
+                                } else if legalDestinations.contains(square) {
+                                    destinationColor
+                                }
                             }
+                            .frame(width: squareSize, height: squareSize)
+                            .contentShape(Rectangle())
                         }
-                        .frame(width: squareSize, height: squareSize)
+                        .buttonStyle(.plain)
                         .position(
                             x: CGFloat(col) * squareSize + squareSize / 2,
                             y: CGFloat(row) * squareSize + squareSize / 2
                         )
+                        .accessibilityIdentifier("square-\(square.algebraic)")
+                        .accessibilityLabel(square.algebraic)
                     }
                 }
 
@@ -43,6 +61,7 @@ struct BoardView: View {
                                     y: CGFloat(row) * squareSize + squareSize / 2
                                 )
                                 .accessibilityIdentifier("piece-\(square.algebraic)")
+                                .allowsHitTesting(false)
                         }
                     }
                 }

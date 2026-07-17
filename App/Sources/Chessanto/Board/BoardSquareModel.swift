@@ -26,6 +26,24 @@ struct BoardSquare: Hashable, Sendable {
         let fileLetter = Character(UnicodeScalar(UInt8(97 + file)))
         return "\(fileLetter)\(rank + 1)"
     }
+
+    init(file: Int, rank: Int) {
+        self.file = file
+        self.rank = rank
+    }
+
+    /// Parses e.g. `"e4"` into file/rank. `nil` if not a valid square.
+    init?(algebraic: String) {
+        let chars = Array(algebraic)
+        guard chars.count == 2,
+            let fileScalar = chars[0].asciiValue, fileScalar >= 97, fileScalar <= 104,
+            let rankValue = chars[1].wholeNumberValue, rankValue >= 1, rankValue <= 8
+        else {
+            return nil
+        }
+        self.file = Int(fileScalar) - 97
+        self.rank = rankValue - 1
+    }
 }
 
 /// A snapshot of a position, ready for rendering. Built from ChessCore's

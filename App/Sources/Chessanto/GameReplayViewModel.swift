@@ -11,6 +11,15 @@ struct EvalDisplay: Equatable {
     let isGameOver: Bool
 }
 
+/// A single played move inside a user-explored variation branch, kept in
+/// memory alongside its persisted row id (`nil` until the insert completes).
+struct VariationNode: Equatable {
+    let index: MoveIndex
+    var dbId: Int64?
+    let parentIndex: MoveIndex
+    let san: String
+}
+
 @MainActor
 final class GameReplayViewModel: ObservableObject {
     @Published private(set) var position: BoardPosition = .empty
@@ -37,6 +46,12 @@ final class GameReplayViewModel: ObservableObject {
     /// Rank-1 analysis rows, keyed by ply index.
     private var cachedEvaluationsByPly: [Int: AnalysisRecord] = [:]
 
+    /// Children of each index that were reached by exploring a variation
+    /// (mainline continuations are tracked separately via `moveIndices`).
+    @Published private(set) var variationChildren: [MoveIndex: [MoveIndex]] = [:]
+    private var variationNodes: [MoveIndex: VariationNode] = [:]
+    private var resolvedVariationIndex: [Int64: MoveIndex] = [:]
+
     init(record: GameRecord, store: GameStore) {
         self.store = store
         self.gameId = record.id
@@ -55,6 +70,7 @@ final class GameReplayViewModel: ObservableObject {
 
         if let gameId {
             Task { await loadCachedAnalysis(gameId: gameId) }
+            Task { await loadVariations(gameId: gameId) }
         }
     }
 
@@ -101,9 +117,22 @@ final class GameReplayViewModel: ObservableObject {
         currentIndex != chessGame?.startIndex
     }
 
+    /// The FEN of whatever position is displayed - mainline or a variation.
     var currentFEN: String? {
-        guard let ply = moveIndices.firstIndex(of: currentIndex), ply < fens.count else { return nil }
-        return fens[ply]
+        chessGame?.fen(at: currentIndex)
+    }
+
+    /// Whether the displayed position is inside a user-explored variation.
+    var isExploringVariation: Bool {
+        guard let chessGame else { return false }
+        return !chessGame.isMainline(currentIndex)
+    }
+
+    /// The mainline ply to highlight on the eval graph while exploring a
+    /// variation - the ply the variation branched off from.
+    var currentGraphPly: Int {
+        guard let chessGame else { return 0 }
+        return moveIndices.firstIndex(of: chessGame.mainlineAncestor(of: currentIndex)) ?? 0
     }
 
     private func refreshPosition() {
@@ -128,8 +157,14 @@ final class GameReplayViewModel: ObservableObject {
     }
 
     func currentEvalDisplay(live: EngineService.LiveEvaluation?) -> EvalDisplay? {
-        guard let ply = moveIndices.firstIndex(of: currentIndex) else { return nil }
-        return evalDisplay(forPly: ply, live: live)
+        guard let fen = currentFEN else { return nil }
+        if let live, live.fen == fen {
+            return makeEvalDisplay(scoreCentipawns: live.scoreCentipawns, mateIn: live.mateIn, isLive: true, depth: live.depth)
+        }
+        guard let ply = moveIndices.firstIndex(of: currentIndex), let cached = cachedEvaluationsByPly[ply] else { return nil }
+        return makeEvalDisplay(
+            scoreCentipawns: cached.scoreCentipawns, mateIn: cached.mateIn, isLive: false, depth: cached.depth
+        )
     }
 
     /// White win-probability at each ply, for the eval graph; `nil` for
@@ -260,5 +295,159 @@ final class GameReplayViewModel: ObservableObject {
         whiteAccuracy = nil
         blackAccuracy = nil
         await analyze(engineService: engineService, quality: quality)
+    }
+
+    // MARK: - Exploration (variation play)
+
+    /// Rebuilds the in-memory variation tree from persisted rows, replaying
+    /// each move onto `chessGame` in insertion order (parents always precede
+    /// their children, since a child can only be played after its parent).
+    private func loadVariations(gameId: Int64) async {
+        guard let records = try? await store.variations(gameId: gameId), !records.isEmpty else { return }
+        guard var game = chessGame else { return }
+
+        for record in records {
+            guard let rowId = record.id else { continue }
+            let parentIndex: MoveIndex?
+            if let parentVariationId = record.parentVariationId {
+                parentIndex = resolvedVariationIndex[parentVariationId]
+            } else {
+                parentIndex = record.parentPlyIndex < moveIndices.count ? moveIndices[record.parentPlyIndex] : nil
+            }
+            guard let parentIndex, let newIndex = game.playMove(san: record.moveSAN, at: parentIndex) else { continue }
+
+            resolvedVariationIndex[rowId] = newIndex
+            variationNodes[newIndex] = VariationNode(index: newIndex, dbId: rowId, parentIndex: parentIndex, san: record.moveSAN)
+            variationChildren[parentIndex, default: []].append(newIndex)
+        }
+
+        chessGame = game
+    }
+
+    /// All children explored from `index`, whether it's a mainline ply or a
+    /// variation node - for rendering the move-list tree.
+    func exploredChildren(of index: MoveIndex) -> [MoveIndex] {
+        variationChildren[index] ?? []
+    }
+
+    /// Flattens the variation tree rooted at `index` into rows for display:
+    /// the principal (first-played) continuation stays at the same depth as
+    /// its parent, while any additional child at a branch point starts a new,
+    /// more deeply indented nested branch.
+    func variationRows(startingAt index: MoveIndex, depth: Int) -> [(index: MoveIndex, depth: Int)] {
+        var rows: [(index: MoveIndex, depth: Int)] = [(index, depth)]
+        let children = exploredChildren(of: index)
+        guard let first = children.first else { return rows }
+        rows += variationRows(startingAt: first, depth: depth)
+        for sibling in children.dropFirst() {
+            rows += variationRows(startingAt: sibling, depth: depth + 1)
+        }
+        return rows
+    }
+
+    func isVariationNode(_ index: MoveIndex) -> Bool {
+        variationNodes[index] != nil
+    }
+
+    /// Legal destinations for the piece at `square` in the currently displayed position.
+    func legalDestinations(from square: SquareCoordinate) -> [SquareCoordinate] {
+        guard let chessGame else { return [] }
+        return chessGame.legalMoves(from: square, at: currentIndex)
+    }
+
+    /// Attempts to play a legal move at the currently displayed position.
+    /// If it matches an existing mainline/variation continuation, just
+    /// jumps there instead of creating a duplicate branch.
+    @discardableResult
+    func playMove(from start: SquareCoordinate, to end: SquareCoordinate, promotion: PromotionKind = .queen) async -> Bool {
+        guard var game = chessGame else { return false }
+        let parentIndex = currentIndex
+        guard let newIndex = game.playMove(from: start, to: end, at: parentIndex, promotion: promotion) else { return false }
+        chessGame = game
+        await recordVariationMove(newIndex: newIndex, parentIndex: parentIndex)
+        jump(to: newIndex)
+        return true
+    }
+
+    /// Plays a sequence of already-legal SAN moves (e.g. an adopted engine
+    /// line) as nested variation branches from the currently displayed
+    /// position, one move deeper each time.
+    func adoptLine(sanMoves: [String]) async {
+        var parentIndex = currentIndex
+        for san in sanMoves {
+            guard var game = chessGame, let newIndex = game.playMove(san: san, at: parentIndex) else { break }
+            chessGame = game
+            await recordVariationMove(newIndex: newIndex, parentIndex: parentIndex)
+            parentIndex = newIndex
+        }
+        jump(to: parentIndex)
+    }
+
+    /// Persists a newly played move as a variation row, unless it turned
+    /// out to just replay an existing mainline/variation continuation.
+    private func recordVariationMove(newIndex: MoveIndex, parentIndex: MoveIndex) async {
+        guard let chessGame else { return }
+        guard !moveIndices.contains(newIndex), variationNodes[newIndex] == nil else { return }
+        guard let gameId, let san = chessGame.san(at: newIndex) else { return }
+
+        let parentVariationId = variationNodes[parentIndex]?.dbId
+        let parentPlyIndex = parentVariationId == nil ? (moveIndices.firstIndex(of: parentIndex) ?? 0) : 0
+        let orderIndex = variationChildren[parentIndex]?.count ?? 0
+
+        variationChildren[parentIndex, default: []].append(newIndex)
+        variationNodes[newIndex] = VariationNode(index: newIndex, dbId: nil, parentIndex: parentIndex, san: san)
+
+        guard let saved = try? await store.insertVariationMove(
+            VariationRecord(
+                gameId: gameId, parentPlyIndex: parentPlyIndex, moveSAN: san,
+                orderIndex: orderIndex, parentVariationId: parentVariationId
+            )
+        ), let savedId = saved.id else { return }
+
+        variationNodes[newIndex]?.dbId = savedId
+        resolvedVariationIndex[savedId] = newIndex
+    }
+
+    /// Deletes a variation move and everything explored from it.
+    func deleteVariation(at index: MoveIndex) async {
+        guard let node = variationNodes[index], let dbId = node.dbId, let chessGame else { return }
+        let mustJumpAway = isDescendant(currentIndex, of: index, in: chessGame)
+
+        try? await store.deleteVariation(id: dbId)
+        removeSubtree(at: index)
+
+        if mustJumpAway {
+            jump(to: chessGame.mainlineAncestor(of: index))
+        }
+    }
+
+    /// Jumps back to the mainline position a variation branched off from.
+    func backToGame() {
+        guard let chessGame else { return }
+        jump(to: chessGame.mainlineAncestor(of: currentIndex))
+    }
+
+    private func isDescendant(_ candidate: MoveIndex, of ancestor: MoveIndex, in chessGame: ChessGame) -> Bool {
+        var current: MoveIndex? = candidate
+        while let c = current {
+            if c == ancestor { return true }
+            current = chessGame.parent(of: c)
+        }
+        return false
+    }
+
+    private func removeSubtree(at index: MoveIndex) {
+        for child in variationChildren[index] ?? [] {
+            removeSubtree(at: child)
+        }
+        let node = variationNodes[index]
+        if let dbId = node?.dbId {
+            resolvedVariationIndex[dbId] = nil
+        }
+        variationNodes[index] = nil
+        variationChildren[index] = nil
+        if let parent = node?.parentIndex {
+            variationChildren[parent]?.removeAll { $0 == index }
+        }
     }
 }

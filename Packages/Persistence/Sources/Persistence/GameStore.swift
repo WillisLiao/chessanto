@@ -134,4 +134,38 @@ public final class GameStore: Sendable {
                 .deleteAll(db)
         }
     }
+
+    // MARK: - Variations
+
+    /// Inserts a single played variation move. Called as each move is
+    /// played, not batched, so a crash/quit never loses more than the move
+    /// in flight.
+    @discardableResult
+    public func insertVariationMove(_ record: VariationRecord) async throws -> VariationRecord {
+        try await dbQueue.write { db in
+            var mutableRecord = record
+            try mutableRecord.insert(db)
+            return mutableRecord
+        }
+    }
+
+    /// All variation rows for a game, in insertion order (parents are
+    /// always inserted before their children, so this order is also a
+    /// valid replay/reconstruction order).
+    public func variations(gameId: Int64) async throws -> [VariationRecord] {
+        try await dbQueue.read { db in
+            try VariationRecord
+                .filter(Column("gameId") == gameId)
+                .order(Column("id"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Deletes a variation move and every move that descends from it
+    /// (`ON DELETE CASCADE` on `parentVariationId` handles the subtree).
+    public func deleteVariation(id: Int64) async throws {
+        _ = try await dbQueue.write { db in
+            try VariationRecord.deleteOne(db, key: id)
+        }
+    }
 }

@@ -41,6 +41,40 @@ Read this first at session start; update it at session end.
     reload was confirmed (accuracy + Re-analyze button appear before any
     engine interaction on relaunch), and stepping through plies showed the
     eval bar updating per-position rather than carrying over a stale value.
+- **M3 complete (2026-07-17): Exploration Mode.** Followed
+  `handoffs/NEXT-SESSION-M3.md`'s bootstrap; every accept-criterion step
+  verified E2E through the built app. What's new:
+  - `ChessCore`: `allIndices`, `isMainline(_:)`, `parent(of:)`,
+    `mainlineAncestor(of:)` - tree navigation built on chesskit-swift's
+    public API only, since `MoveTree` exposes no children/delete API.
+    `playMove(from:to:at:)` auto-promotes (default queen); `PromotionKind`
+    and `isPromotion(from:to:at:)` added for a future picker.
+  - `Persistence`: `VariationRecord` (parent-pointer forest: root rows
+    reference a mainline `parentPlyIndex`, other rows reference the
+    preceding row via `parentVariationId`) + `GameStore.insertVariationMove
+    /variations/deleteVariation` - delete cascades to the whole subtree
+    via the schema's existing FK, tested with a 3-deep chain.
+  - `App`: `GameReplayViewModel` rebuilds the variation tree in memory on
+    load (replaying persisted rows onto `chessGame`) and persists each new
+    move immediately as it's played (same crash-safety pattern as M2's
+    analysis). `BoardView` squares are real tappable `Button`s (click to
+    select, click a highlighted legal destination to play) - this also
+    fixed a real accessibility gap, see devlog. `MoveListView` renders the
+    variation tree (nested branches, delete-subtree, "back to game").
+    `LinesPanelView` lines are clickable and adopt as a new variation.
+  - Real E2E (same `osascript`/System Events method as M2, with one
+    correction: raw pixel clicks are blocked in this sandbox, only
+    AX-element-reference clicks work): played a 5-move variation plus a
+    nested sub-variation via real board clicks, confirmed the DB rows and
+    parent-pointer shape at each step, watched the live eval update for
+    the explored position, deleted the sub-variation via its UI trash
+    button, quit/relaunched, and confirmed the remaining 5-move variation
+    reloaded correctly into both the DB and the live move list.
+  - Known gaps (see devlog for detail): promote/collapse controls not
+    built (only delete); no promotion picker UI; replaying a move that
+    happens to equal the real mainline continuation still creates a
+    redundant variation branch instead of being recognized; the
+    lines-panel adopt buttons' accessibility exposure is unconfirmed.
 - Project layout: `project.yml` (XcodeGen spec, regenerate with
   `xcodegen generate` after adding/removing files - `Chessanto.xcodeproj` is
   gitignored, not committed), `App/` (SwiftUI app target, with an
@@ -49,8 +83,8 @@ Read this first at session start; update it at session end.
   Persistence - each a local SPM package per `PLAN.md`'s architecture).
 - Git repo initialized and pushed: https://github.com/WillisLiao/chessanto
   (branch `main`). Commit and push M2 work alongside these docs.
-- Next step: execute M3 (Exploration Mode - variation play, tree, lines
-  panel adoption). `handoffs/NEXT-SESSION-M3.md` has the bootstrap for that.
+- Next step: execute M4 (chess.com fetch). `handoffs/NEXT-SESSION-M4.md`
+  has the bootstrap for that.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
