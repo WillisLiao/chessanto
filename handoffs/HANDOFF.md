@@ -173,8 +173,25 @@ Read this first at session start; update it at session end.
     structurally correct but wasn't caught live in automation (the
     Release-build engine now starts faster than System Events can query
     the window after launch).
-- Next step: execute M6 (local LLM coach) by following
-  `handoffs/NEXT-SESSION-M6.md` step by step.
+- Next step: **a planning/prep session for M6** (local LLM coach) -
+  same role M2's and M5's prep sessions played (see the 2026-07-17 devlog's
+  "M2 prep" section and the "Write M5 execution plan" commit). Its job is
+  to turn `handoffs/NEXT-SESSION-M6.md` (currently a bootstrap with real
+  but unverified pointers) into a fully self-contained, pre-verified
+  execution plan, the way `NEXT-SESSION-M5.md` was before the M5
+  execution session started - by actually running a live `ollama serve`
+  instance and curling its real endpoints (model list, pull-with-progress,
+  chat/generate streaming) rather than guessing at request/response
+  shapes, confirming the PLAN.md RAM/model table's tags still resolve,
+  checking `Schema.swift` for whether `userProfile` already has
+  `ratingBand`/`coachModel`/`coachEnabled` columns, and designing
+  `CoachVerifier`'s SAN/UCI-extraction-and-reverification approach against
+  the real `ChessGame.replayLine`/`FactAuditor` primitives M5 left behind.
+  It should rewrite `NEXT-SESSION-M6.md` in place with its findings (mirror
+  `NEXT-SESSION-M5.md`'s structure: verified facts, fixed design decisions,
+  step-by-step build order with a verification gate per step) for a
+  **later execution session** to follow step by step - do not implement
+  M6 itself in the prep session.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

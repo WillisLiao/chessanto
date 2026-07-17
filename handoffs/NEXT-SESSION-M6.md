@@ -1,16 +1,28 @@
-# Next session: M6 - local LLM coach
+# Next session: M6 planning/prep - local LLM coach
 
-M1-M5 are done and pushed to `main` at https://github.com/WillisLiao/chessanto.
-This file is a bootstrap, not a fully pre-verified execution plan like
-`NEXT-SESSION-M5.md` was - M6 is the most architecturally involved
-milestone yet (an LLM in the loop, a tool-calling loop, output
-verification), and M2's own history shows the value of a dedicated prep
-session first: **strongly consider spending the first part of this
-session verifying Ollama's real local API against a live `ollama serve`
-instance (model list, pull-with-progress, chat/generate streaming, tool
-calling if you want the engine-tool loop to use it) before writing
-CoachKit code against assumed signatures.** Don't guess at request/response
-JSON shapes - curl the real endpoints.
+**This is a planning/prep session, not an execution session.** M1-M5 are
+done and pushed to `main` at https://github.com/WillisLiao/chessanto. Your
+job is the same role M2's and M5's prep sessions played (see the
+2026-07-17 devlog's "M2 prep" section and the "Write M5 execution plan"
+commit): turn this file from a bootstrap into a fully self-contained,
+pre-verified execution plan - the way `NEXT-SESSION-M5.md` read before the
+M5 execution session started - for a **later session to execute**. Do not
+write CoachKit implementation code in this session; do the verification
+work and write the plan.
+
+M6 is the most architecturally involved milestone yet (an LLM in the
+loop, a tool-calling loop, output verification), which is exactly why it
+needs this dedicated prep pass: **spend this session verifying Ollama's
+real local API against a live `ollama serve` instance** (model list,
+pull-with-progress, chat/generate streaming, tool calling if you want the
+engine-tool loop to use it) rather than guessing at request/response JSON
+shapes - curl the real endpoints and paste real responses into the plan
+you write. Do the same for every other "verify" item below. When you're
+done, this file should read like `NEXT-SESSION-M5.md` does now: a
+"Verified facts" section with things actually checked against real
+source/APIs this session, "Fixed design decisions" the execution session
+must not re-litigate, and a step-by-step build order with a verification
+gate per step.
 
 Read in this order before writing any code:
 1. `handoffs/HANDOFF.md` - current state section only (M5's summary is at
