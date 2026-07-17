@@ -19,6 +19,12 @@ let package = Package(
                 "ChessCore"
             ]
         ),
-        .testTarget(name: "PersistenceTests", dependencies: ["Persistence"])
+        .testTarget(
+            name: "PersistenceTests",
+            dependencies: [
+                "Persistence",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ]
+        )
     ]
 )

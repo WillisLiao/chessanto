@@ -138,6 +138,17 @@ final class GameReplayViewModel: ObservableObject {
         chessGame?.fen(at: currentIndex)
     }
 
+    /// The from/to squares of the move that produced the displayed position,
+    /// for the board's last-move highlight; `nil` at the start position.
+    var lastMove: (from: BoardSquare, to: BoardSquare)? {
+        guard let uci = chessGame?.moveDetail(at: currentIndex)?.uci, uci.count >= 4 else { return nil }
+        let chars = Array(uci)
+        guard let from = BoardSquare(algebraic: String(chars[0...1])),
+            let to = BoardSquare(algebraic: String(chars[2...3]))
+        else { return nil }
+        return (from, to)
+    }
+
     /// Whether the displayed position is inside a user-explored variation.
     var isExploringVariation: Bool {
         guard let chessGame else { return false }
@@ -285,28 +296,10 @@ final class GameReplayViewModel: ObservableObject {
             reportInput = nil
             return
         }
-        let plies: [PlyRecord] = fens.indices.map { ply in
-            let lines = (cachedAllRanksByPly[ply] ?? [])
-                .sorted { $0.multiPVRank < $1.multiPVRank }
-                .map { record in
-                    RankedLine(
-                        rank: record.multiPVRank,
-                        scoreCentipawns: record.scoreCentipawns,
-                        mateIn: record.mateIn,
-                        principalVariationUCI: record.principalVariation.isEmpty
-                            ? [] : record.principalVariation.split(separator: " ").map(String.init),
-                        depth: record.depth
-                    )
-                }
-            return PlyRecord(fen: fens[ply], lines: lines, playedUCI: playedUCIs[ply])
-        }
+        let analysisRows = cachedAllRanksByPly.values.flatMap { $0 }
         let username = (try? store.userProfile())?.chessComUsername
-        let input = ReportInput(
-            plies: plies, whiteName: record.white, blackName: record.black,
-            result: record.result ?? "*", chessComUsername: username
-        )
-        reportInput = input
-        report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        reportInput = ReportBuilding.buildInput(record: record, analysisRows: analysisRows, chessComUsername: username)
+        report = reportInput.flatMap { ReportBuilder.build(input: $0, openingBook: OpeningBook.shared) }
     }
 
     /// The current user profile - read fresh each call since settings can

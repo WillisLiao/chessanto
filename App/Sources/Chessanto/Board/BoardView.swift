@@ -4,15 +4,11 @@ struct BoardView: View {
     let position: BoardPosition
     var lastMove: (from: BoardSquare, to: BoardSquare)?
     var flipped: Bool = false
+    var theme: BoardTheme = .classic
+    var showCoordinates: Bool = true
     var selectedSquare: BoardSquare?
     var legalDestinations: Set<BoardSquare> = []
     var onSquareTapped: ((BoardSquare) -> Void)?
-
-    private let lightColor = Color(red: 0.93, green: 0.87, blue: 0.77)
-    private let darkColor = Color(red: 0.55, green: 0.39, blue: 0.29)
-    private let highlightColor = Color.yellow.opacity(0.35)
-    private let selectedColor = Color.blue.opacity(0.35)
-    private let destinationColor = Color.green.opacity(0.35)
 
     var body: some View {
         GeometryReader { proxy in
@@ -26,15 +22,18 @@ struct BoardView: View {
                         Button {
                             onSquareTapped?(square)
                         } label: {
-                            ZStack {
+                            ZStack(alignment: .topLeading) {
                                 baseColor(for: square)
                                 if isLastMoveSquare(square) {
-                                    highlightColor
+                                    theme.highlight
                                 }
                                 if square == selectedSquare {
-                                    selectedColor
+                                    theme.selected
                                 } else if legalDestinations.contains(square) {
-                                    destinationColor
+                                    theme.destination
+                                }
+                                if showCoordinates {
+                                    coordinateOverlay(for: square, row: row, col: col, squareSize: squareSize)
                                 }
                             }
                             .frame(width: squareSize, height: squareSize)
@@ -79,12 +78,45 @@ struct BoardView: View {
 
     private func baseColor(for square: BoardSquare) -> Color {
         let isLight = (square.file + square.rank) % 2 == 0
-        return isLight ? lightColor : darkColor
+        return isLight ? theme.lightSquare : theme.darkSquare
     }
 
     private func isLastMoveSquare(_ square: BoardSquare) -> Bool {
         guard let lastMove else { return false }
         return square == lastMove.from || square == lastMove.to
+    }
+
+    /// File letter along the bottom edge, rank number along the left edge -
+    /// the standard lichess/chess.com in-square placement, adjusted for
+    /// board orientation.
+    @ViewBuilder
+    private func coordinateOverlay(for square: BoardSquare, row: Int, col: Int, squareSize: CGFloat) -> some View {
+        let font = Font.system(size: max(squareSize * 0.16, 8), weight: .semibold)
+        let color = baseColor(for: square) == theme.lightSquare ? theme.darkSquare : theme.lightSquare
+        VStack {
+            HStack {
+                Spacer()
+                if col == (flipped ? 0 : 7) {
+                    Text("\(square.rank + 1)")
+                        .font(font)
+                        .foregroundStyle(color)
+                        .padding(.trailing, 2)
+                        .padding(.top, 1)
+                }
+            }
+            Spacer()
+            HStack {
+                if row == (flipped ? 0 : 7) {
+                    Text(String(UnicodeScalar(UInt8(97 + square.file))))
+                        .font(font)
+                        .foregroundStyle(color)
+                        .padding(.leading, 2)
+                        .padding(.bottom, 1)
+                }
+                Spacer()
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -93,28 +125,33 @@ private struct PieceView: View {
     let squareSize: CGFloat
 
     var body: some View {
-        Text(piece.glyph)
-            .font(.system(size: squareSize * 0.75))
-            .lineLimit(1)
-            .foregroundStyle(piece.color == .white ? .white : .black)
-            .shadow(color: .black.opacity(piece.color == .white ? 0.4 : 0), radius: 0.5)
+        Image(piece.assetName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: squareSize * 0.82, height: squareSize * 0.82)
             .accessibilityLabel("\(piece.color.rawValue) \(piece.kind.rawValue)")
     }
 }
 
-private extension DisplayPiece {
-    /// Unicode chess glyphs, always the "white" glyph variants so fill color
-    /// (not glyph choice) distinguishes side to move. Placeholder art for M1;
-    /// replaced with proper piece artwork in the M7 polish pass.
-    var glyph: String {
+extension DisplayPiece {
+    /// Asset catalog names for the cburnett piece set fetched by
+    /// `scripts/fetch-pieces.sh` into `App/Resources/Pieces.xcassets`.
+    /// Internal (not private) so `PieceAssetsTests` can assert every asset
+    /// resolves to a real image.
+    var assetNameForTesting: String { assetName }
+
+    fileprivate var assetName: String {
+        let colorLetter = color == .white ? "w" : "b"
+        let kindLetter: String
         switch kind {
-        case .pawn: return "♙"
-        case .knight: return "♘"
-        case .bishop: return "♗"
-        case .rook: return "♖"
-        case .queen: return "♕"
-        case .king: return "♔"
+        case .pawn: kindLetter = "P"
+        case .knight: kindLetter = "N"
+        case .bishop: kindLetter = "B"
+        case .rook: kindLetter = "R"
+        case .queen: kindLetter = "Q"
+        case .king: kindLetter = "K"
         }
+        return "cburnett-\(colorLetter)\(kindLetter)"
     }
 }
 

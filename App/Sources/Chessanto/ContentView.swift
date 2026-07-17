@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var selectedGameID: Int64?
     @State private var isShowingImporter = false
     @State private var isShowingChessComFetch = false
+    @State private var isShowingDashboard = false
     @State private var isTargeted = false
 
     var body: some View {
@@ -16,6 +17,13 @@ struct ContentView: View {
             }
             .navigationTitle("Games")
             .toolbar {
+                ToolbarItem {
+                    Button {
+                        isShowingDashboard = true
+                    } label: {
+                        Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+                    }
+                }
                 ToolbarItem {
                     Button {
                         isShowingChessComFetch = true
@@ -65,6 +73,12 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingChessComFetch) {
             ChessComFetchView()
         }
+        .sheet(isPresented: $isShowingDashboard) {
+            DashboardView()
+        }
+        .sheet(isPresented: onboardingBinding) {
+            OnboardingView()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .importPGNRequested)) { _ in
             isShowingImporter = true
         }
@@ -79,6 +93,13 @@ struct ContentView: View {
         Binding(
             get: { library.errorMessage != nil },
             set: { if !$0 { library.errorMessage = nil } }
+        )
+    }
+
+    private var onboardingBinding: Binding<Bool> {
+        Binding(
+            get: { !library.hasCompletedOnboarding },
+            set: { isPresented in if !isPresented { library.completeOnboarding() } }
         )
     }
 

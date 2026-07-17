@@ -5,6 +5,7 @@ import Persistence
 struct GameReplayView: View {
     @StateObject private var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
+    @EnvironmentObject private var library: GameLibrary
     private let game: GameRecord
     private let store: GameStore
 
@@ -12,6 +13,7 @@ struct GameReplayView: View {
     @State private var analysisTask: Task<Void, Never>?
     @State private var selectedSquare: BoardSquare?
     @State private var rightPaneTab: RightPaneTab = .moves
+    @State private var flipped = false
 
     private enum RightPaneTab: String, CaseIterable {
         case moves = "Moves"
@@ -32,6 +34,9 @@ struct GameReplayView: View {
                     EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
                     BoardView(
                         position: viewModel.position,
+                        lastMove: viewModel.lastMove,
+                        flipped: flipped,
+                        theme: library.boardTheme,
                         selectedSquare: selectedSquare,
                         legalDestinations: legalDestinations,
                         onSquareTapped: handleSquareTapped
@@ -104,10 +109,16 @@ struct GameReplayView: View {
             default: break
             }
         }
-        .onAppear { showLivePosition() }
+        .onAppear {
+            quality = library.analysisQuality
+            showLivePosition()
+        }
         .onChange(of: viewModel.currentIndex) { _ in
             selectedSquare = nil
             showLivePosition()
+        }
+        .onChange(of: quality) { _, newValue in
+            library.saveAnalysisQuality(newValue)
         }
         .onDisappear {
             analysisTask?.cancel()
@@ -227,6 +238,13 @@ struct GameReplayView: View {
             }
             .disabled(!viewModel.canStepForward)
             .accessibilityLabel("Next move")
+
+            Button {
+                flipped.toggle()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .accessibilityLabel("Flip board")
         }
         .buttonStyle(.bordered)
         .padding(.bottom)

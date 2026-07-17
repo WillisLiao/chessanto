@@ -6,6 +6,9 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var games: [GameRecord] = []
     @Published var errorMessage: String?
     @Published var chessComUsername: String
+    @Published var analysisQuality: AnalysisQuality
+    @Published var boardTheme: BoardTheme
+    @Published private(set) var hasCompletedOnboarding: Bool
 
     let store: GameStore
 
@@ -15,7 +18,11 @@ final class GameLibrary: ObservableObject {
         } catch {
             fatalError("Couldn't open local database: \(error.localizedDescription)")
         }
-        self.chessComUsername = (try? store.userProfile().chessComUsername) ?? ""
+        let profile = (try? store.userProfile())
+        self.chessComUsername = profile?.chessComUsername ?? ""
+        self.analysisQuality = profile.flatMap { AnalysisQuality(rawValue: $0.analysisQuality) } ?? .standard
+        self.boardTheme = profile.flatMap { BoardTheme(rawValue: $0.boardTheme) } ?? .classic
+        self.hasCompletedOnboarding = profile?.hasCompletedOnboarding ?? false
         reload()
     }
 
@@ -24,6 +31,39 @@ final class GameLibrary: ObservableObject {
         do {
             var profile = try store.userProfile()
             profile.chessComUsername = username
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveAnalysisQuality(_ quality: AnalysisQuality) {
+        analysisQuality = quality
+        do {
+            var profile = try store.userProfile()
+            profile.analysisQuality = quality.rawValue
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveBoardTheme(_ theme: BoardTheme) {
+        boardTheme = theme
+        do {
+            var profile = try store.userProfile()
+            profile.boardTheme = theme.rawValue
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func completeOnboarding() {
+        hasCompletedOnboarding = true
+        do {
+            var profile = try store.userProfile()
+            profile.hasCompletedOnboarding = true
             try store.saveUserProfile(profile)
         } catch {
             errorMessage = error.localizedDescription

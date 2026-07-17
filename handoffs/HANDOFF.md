@@ -397,8 +397,70 @@ Read this first at session start; update it at session end.
   (`hasCompletedOnboarding`/`analysisQuality`/`boardTheme`) is the only
   schema work. Full detail in the devlog's "M8 prep" section and the
   rewritten `handoffs/NEXT-SESSION-M8.md`.
-- Next step: **M8 - polish and packaging**, executing
-  `handoffs/NEXT-SESSION-M8.md` step by step.
+- **M8 complete (2026-07-18): polish and packaging - v1 complete per
+  PLAN.md.** Followed `handoffs/NEXT-SESSION-M8.md` step by step; every
+  step's verification gate passed, full detail in the devlog's "M8
+  execution" section. What's new:
+  - `Persistence`: a `v3_m8Settings` migration
+    (`hasCompletedOnboarding`/`analysisQuality`/`boardTheme` on
+    `userProfile`), `UserProfileRecord` extended, a real partial-then-full
+    migration test plus a live check against a copy of the real dev DB.
+  - `CoachKit`: `OllamaClient` no longer clobbers an injected session
+    config's timeout; per-request timeouts (5s probes/120s chat/300s
+    pull) replace one 300s-for-everything default; `.timedOut` mapping.
+    Live-verified against a real frozen (`kill -STOP`) Ollama: `version()`
+    failed at 5.0s, a chat turn at 121.0s, clean recovery on
+    `kill -CONT`, `coach-grounding` still green after.
+  - `App`: real cburnett piece artwork (`App/Resources/Pieces.xcassets`,
+    fetched by `scripts/fetch-pieces.sh`, GPLv2+) replaces the Unicode
+    glyph placeholders; `BoardTheme` (classic/green/blue); the three M1
+    board debts closed (file/rank coordinates, a flip-board toolbar
+    button, `lastMove` highlighting). Settings became a tabbed scene
+    (General + Coach); a new `CoachSetupView` is shared between
+    `CoachSettingsView` and a new 4-page `OnboardingView` (welcome ->
+    chess.com username -> rating band -> coach), gated on
+    `hasCompletedOnboarding`. A new `DashboardView` ("Progress" toolbar
+    button) shows an accuracy trend chart and mistake-theme aggregation
+    across analyzed, user-matched games, computed live off the main actor
+    via a new shared `ReportBuilding` helper (also now used by
+    `GameReplayViewModel`, replacing duplicated inline mapping code). The
+    `-0.0` eval-label bug is fixed (`EvalLabel.format`); `ChessantoApp`
+    no longer replaces the default "New Window" menu item, restoring an
+    in-app recovery path from the zero-window state.
+  - Packaging: `LICENSE` (GPLv3), `README.md` (what the app is, build
+    steps, dependency/license table, signing/notarization steps
+    documented but never auto-run), `scripts/release-build.sh`
+    (produces an unsigned Release build; verified from a fully wiped
+    `DerivedData`).
+  - New E2E tooling, committed: `scripts/axprobe.swift` (reads via raw
+    `AXUIElementCopyAttributeValue`, the fix for the M5/M7 "AX gap" which
+    turned out to be the AppleScript bridge's limitation, not the app's),
+    `scripts/axclick.swift` (presses via `AXUIElementPerformAction`),
+    `scripts/axclickat.swift` (real `CGEvent` clicks at screen
+    coordinates - the only thing that reliably hands a SwiftUI text field
+    real keyboard focus), `scripts/axfocus.swift`/`scripts/axsettext.swift`
+    (built this session but found NOT to reliably drive real SwiftUI
+    `@State` bindings when writing text directly via the AX API - kept,
+    but documented as unreliable for that specific purpose in the
+    devlog). Reads and button/menu presses work without the app being
+    frontmost; sheets don't even render while backgrounded, and real
+    text entry needs the app frontmost plus a real `CGEvent` click.
+  - Real E2E verification (Release build): the full fresh-user flow
+    against the live chess.com API and a live Ollama - onboarded as the
+    user's real account `WillisLiao`, fetched and imported a real recent
+    game, analyzed it, read the real coached report, drove Chat for real
+    (a real coach-narrated answer and a real illegal-move precheck
+    reject) on this real beginner-band game (not just the GM fixture),
+    and cross-checked the dashboard's numbers directly against
+    `sqlite3`. All package tests (177), `xcodebuild test` (11 app
+    tests), and `coach-grounding` (10/10 zero-leak runs) green.
+  - Known gap: M3's promote/collapse variation controls and the
+    promotion-picker UI are still absent (out of M8's PLAN.md scope, not
+    a regression). Prose quality with small local models remains the
+    documented M6/M7 residual risk, not something M8 could or should fix.
+- **v1 is feature-complete per PLAN.md.** Next steps are whatever the
+  user wants to prioritize post-v1 (see "Future directions" below) - not
+  yet decided.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
@@ -422,9 +484,9 @@ Read this first at session start; update it at session end.
   the thing to run after touching EngineKit.
 - GRDB 7.11.1 for persistence.
 - Stockfish being GPLv3: **resolved 2026-07-18 (M8 prep, user decision) -
-  Chessanto itself will be licensed GPLv3**, making distribution
-  compliant; the LICENSE file, README dependency/license table, and
-  release build script are M8 deliverables. See `PLAN.md`'s
+  Chessanto itself is licensed GPLv3** (`LICENSE`, shipped M8), making
+  distribution compliant; the README's dependency/license table and
+  `scripts/release-build.sh` also shipped in M8. See `PLAN.md`'s
   Architecture/Risks sections for the original analysis.
 
 ## Key decisions
@@ -435,18 +497,23 @@ Read this first at session start; update it at session end.
 - chess.com public API fetch + offline PGN import; analysis fully local.
 - RAM-based model picker; Intel Macs default to rule-based mode with a slow-inference warning.
 - Position chat included in v1 (M7, complete 2026-07-18).
-- Board pieces are placeholder Unicode glyphs sized via GeometryReader (not
-  a fixed huge-font-plus-minimumScaleFactor hack - that produced degenerate
-  accessibility geometry and was fixed during M1). Real piece artwork
-  (cburnett, GPLv2+) ships in M8 per the prep plan.
+- Board pieces render real cburnett artwork (GPLv2+, shipped M8) sized to
+  the square, replacing M1's placeholder Unicode glyphs; three square
+  themes (classic/green/blue) and file/rank coordinates, flip, and
+  last-move highlighting all shipped alongside them.
 - The app is licensed GPLv3 (user decision, 2026-07-18): Stockfish
   compliance resolved, binaries distributable, cburnett artwork
-  compatible.
+  compatible. `LICENSE`/`README.md`/`scripts/release-build.sh` shipped M8.
 - E2E/acceptance data spans all rating bands, beginner through pro (user
   request, 2026-07-18): the user's own `WillisLiao` account (~231 blitz)
   plus pinned accounts per band in `NEXT-SESSION-M8.md` fact 12, not just
-  the GM fixtures.
+  the GM fixtures - M8's acceptance pass used a real live `WillisLiao`
+  game end to end (fetch, analyze, report, chat), not a GM fixture.
+- A one-time onboarding flow (M8) and a live-computed player-progress
+  dashboard (accuracy trend + mistake themes, M8) round out PLAN.md's v1
+  scope. **v1 is now feature-complete.**
 
 ## Future directions (explicitly out of v1)
 
 Mistake-derived puzzles, spaced repetition, repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960.
+Post-v1 priorities not yet decided with the user - ask before starting new work here.

@@ -18,7 +18,11 @@ struct ChessantoApp: App {
                 }
         }
         .commands {
-            CommandGroup(replacing: .newItem) {
+            // Keep the default "New Window" item (`.newItem`'s own content) -
+            // replacing it removed the app's only in-app path back to a
+            // window after quitting with the last window closed (M8 fact
+            // 11). Import PGN gets its own item alongside it instead.
+            CommandGroup(after: .newItem) {
                 Button("Import PGN…") {
                     NotificationCenter.default.post(name: .importPGNRequested, object: nil)
                 }
@@ -27,9 +31,16 @@ struct ChessantoApp: App {
         }
 
         Settings {
-            CoachSettingsView()
-                .environmentObject(library)
-                .environmentObject(coachService)
+            TabView {
+                GeneralSettingsView()
+                    .environmentObject(library)
+                    .tabItem { Label("General", systemImage: "gearshape") }
+
+                CoachSettingsView()
+                    .environmentObject(library)
+                    .environmentObject(coachService)
+                    .tabItem { Label("Coach", systemImage: "person.fill.questionmark") }
+            }
         }
     }
 }

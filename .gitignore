@@ -12,3 +12,4 @@ Chessanto.xcodeproj/
 # Stockfish NNUE networks (75MB) - fetched by scripts/fetch-nnue.sh, which
 # verifies them against the sha256 prefix embedded in their filenames.
 *.nnue
+handoffs/db-backups/

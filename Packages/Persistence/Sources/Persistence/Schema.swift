@@ -73,6 +73,14 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v3_m8Settings") { db in
+            try db.alter(table: "userProfile") { t in
+                t.add(column: "hasCompletedOnboarding", .boolean).notNull().defaults(to: false)
+                t.add(column: "analysisQuality", .text).notNull().defaults(to: "standard")
+                t.add(column: "boardTheme", .text).notNull().defaults(to: "classic")
+            }
+        }
+
         return migrator
     }
 }

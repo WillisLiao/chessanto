@@ -21,7 +21,14 @@ public enum EvalLabel {
             return mateIn > 0 ? "M\(mateIn)" : "-M\(abs(mateIn))"
         }
         if let cp = scoreCentipawns {
-            return String(format: "%+.1f", Double(cp) / 100)
+            let pawns = Double(cp) / 100
+            let rounded = (pawns * 10).rounded() / 10
+            // cp -4...-1 round to -0.0 under "%+.1f" - a real eval near zero
+            // should never render with a spurious minus sign.
+            if rounded == 0 {
+                return "0.0"
+            }
+            return String(format: "%+.1f", pawns)
         }
         return "--"
     }

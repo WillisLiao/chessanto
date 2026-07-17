@@ -1,3 +1,4 @@
+import GRDB
 import Testing
 @testable import Persistence
 
@@ -218,5 +219,49 @@ struct PersistenceTests {
         let refetched = try store.userProfile()
         #expect(refetched.chessComUsername == "hikaru")
         #expect(refetched.id == 1)
+    }
+
+    @Test func userProfileDefaultsForM8ColumnsOnFirstAccess() throws {
+        let store = try GameStore()
+        let profile = try store.userProfile()
+        #expect(profile.hasCompletedOnboarding == false)
+        #expect(profile.analysisQuality == "standard")
+        #expect(profile.boardTheme == "classic")
+    }
+
+    @Test func m8ColumnsRoundTrip() throws {
+        let store = try GameStore()
+        var profile = try store.userProfile()
+        profile.hasCompletedOnboarding = true
+        profile.analysisQuality = "deep"
+        profile.boardTheme = "green"
+        try store.saveUserProfile(profile)
+
+        let refetched = try store.userProfile()
+        #expect(refetched.hasCompletedOnboarding == true)
+        #expect(refetched.analysisQuality == "deep")
+        #expect(refetched.boardTheme == "green")
+    }
+
+    @Test func v3MigrationAppliesOnAV2ShapedStoreWithDefaultsAndDataIntact() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v2_chatMessageSource")
+
+        try queue.write { db in
+            try db.execute(
+                sql: "INSERT INTO userProfile (id, chessComUsername, ratingBand, coachModel, coachEnabled) VALUES (1, 'hikaru', 'adaptive', 'qwen3:0.6b', 1)"
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let profile = try queue.read { db in
+            try UserProfileRecord.fetchOne(db, key: 1)
+        }
+        #expect(profile?.chessComUsername == "hikaru")
+        #expect(profile?.coachEnabled == true)
+        #expect(profile?.hasCompletedOnboarding == false)
+        #expect(profile?.analysisQuality == "standard")
+        #expect(profile?.boardTheme == "classic")
     }
 }

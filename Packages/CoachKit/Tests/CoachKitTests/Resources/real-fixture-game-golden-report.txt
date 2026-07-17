@@ -8,7 +8,7 @@ Opening: Pirc Defense (B00). MagnusCarlsen left book on move 3. with Nc3.
 Key moments:
 - 9... cxd5 drops artin10862's winning chances from 46% to 34%. Better was Qe7 (Qe7 Nd4 Ng4 Nf5 Nde5 fxe5), keeping the evaluation around +0.5. This also left the bishop on c5 hanging: Bxc5 winning material.
 - 27. Rc8 drops MagnusCarlsen's winning chances from 66% to 50%. Better was Rd6 (Rd6 f6 g4+ Ke4 Nd3 Qd1+), keeping the evaluation around +1.8.
-- 27... f6 drops artin10862's winning chances from 50% to 12%. Better was Qe4+ (Qe4+ Ka2), keeping the evaluation around -0.0.
+- 27... f6 drops artin10862's winning chances from 50% to 12%. Better was Qe4+ (Qe4+ Ka2), keeping the evaluation around 0.0.
 
 Takeaways:
 - No single recurring pattern stood out - see the key moments above for specifics.

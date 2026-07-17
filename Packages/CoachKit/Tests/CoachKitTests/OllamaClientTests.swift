@@ -11,11 +11,18 @@ final class StubURLProtocol: URLProtocol {
     }
 
     nonisolated(unsafe) static var responses: [String: Response] = [:]
+    /// When set, every request fails with this error instead of a response,
+    /// regardless of `responses` (used to simulate a frozen/timed-out server).
+    nonisolated(unsafe) static var errorToThrow: URLError?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        if let error = Self.errorToThrow {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
         guard let url = request.url, let path = url.path.split(separator: "/").last.map(String.init),
             let stub = Self.responses[path]
         else {
@@ -162,6 +169,45 @@ struct OllamaClientTests {
         await #expect(throws: OllamaClientError.self) {
             for try await _ in client.chat(model: "nonexistent-model:1b", messages: [.init(role: "user", content: "hi")]) {}
         }
+    }
+
+    @Test func timedOutURLErrorMapsToOllamaClientErrorTimedOut() async throws {
+        StubURLProtocol.responses = [:]
+        StubURLProtocol.errorToThrow = URLError(.timedOut)
+        defer { StubURLProtocol.errorToThrow = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let client = OllamaClient(sessionConfiguration: config)
+        await #expect(throws: OllamaClientError.timedOut) {
+            _ = try await client.version()
+        }
+    }
+
+    @Test func timedOutURLErrorDuringChatConnectMapsToTimedOut() async throws {
+        StubURLProtocol.responses = [:]
+        StubURLProtocol.errorToThrow = URLError(.timedOut)
+        defer { StubURLProtocol.errorToThrow = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let client = OllamaClient(sessionConfiguration: config)
+        await #expect(throws: OllamaClientError.timedOut) {
+            for try await _ in client.chat(model: "qwen3:0.6b", messages: [.init(role: "user", content: "hi")]) {}
+        }
+    }
+
+    @Test func injectedSessionConfigurationIsUsedNotClobbered() {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 42
+        config.protocolClasses = [StubURLProtocol.self]
+        let client = OllamaClient(sessionConfiguration: config)
+        #expect(client.session.configuration.timeoutIntervalForRequest == 42)
+    }
+
+    @Test func defaultConfigurationIsUsedWhenNoneInjected() {
+        let client = OllamaClient()
+        // Session-level default is untouched; per-request timeouts (5s/120s/300s)
+        // are set on each URLRequest instead.
+        #expect(client.session.configuration.timeoutIntervalForRequest == 60)
     }
 
     @Test func liveRoundTripWithRealQwen3IfRequested() async throws {
