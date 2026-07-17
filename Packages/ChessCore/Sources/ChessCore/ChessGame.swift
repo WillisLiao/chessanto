@@ -229,11 +229,11 @@ public struct ReplayedMove: Hashable, Sendable {
     public let resultingFEN: String
 }
 
-public enum PieceKind: String, CaseIterable, Sendable {
+public enum PieceKind: String, CaseIterable, Sendable, Codable {
     case pawn, knight, bishop, rook, queen, king
 }
 
-public enum PieceColor: String, CaseIterable, Sendable {
+public enum PieceColor: String, CaseIterable, Sendable, Codable {
     case white, black
 
     public var opposite: PieceColor {
@@ -340,6 +340,14 @@ extension ChessGame {
             }
         }
         return (white, black)
+    }
+
+    /// Whether `fen` parses as a valid position - `ChessGame.init(startingFEN:)`
+    /// silently falls back to the starting position on an invalid FEN, so
+    /// callers that must distinguish "invalid" from "valid" (the coach's
+    /// engine-tool argument validation) need this check first.
+    public static func isValidFEN(_ fen: String) -> Bool {
+        Position(fen: fen) != nil
     }
 
     /// The first 4 space-separated fields of `fen` (board, side-to-move,

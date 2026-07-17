@@ -53,6 +53,10 @@ final class GameReplayViewModel: ObservableObject {
     /// The M5 rule-based coaching report, built once the game is fully
     /// analyzed; invalidated (`nil`) while unanalyzed or re-analyzing.
     @Published private(set) var report: GameReport?
+    /// The same `ReportInput` used to build `report` - kept so M6's coach
+    /// can build its payloads from the exact same source values (one
+    /// source of truth, no re-derivation).
+    private(set) var reportInput: ReportInput?
 
     /// Children of each index that were reached by exploring a variation
     /// (mainline continuations are tracked separately via `moveIndices`).
@@ -275,6 +279,7 @@ final class GameReplayViewModel: ObservableObject {
     private func buildReport() {
         guard isAnalyzed, moveIndices.count > 1 else {
             report = nil
+            reportInput = nil
             return
         }
         let plies: [PlyRecord] = fens.indices.map { ply in
@@ -297,7 +302,23 @@ final class GameReplayViewModel: ObservableObject {
             plies: plies, whiteName: record.white, blackName: record.black,
             result: record.result ?? "*", chessComUsername: username
         )
+        reportInput = input
         report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+    }
+
+    /// The current user profile - read fresh each call since settings can
+    /// change while a game is open.
+    func userProfile() -> UserProfileRecord? {
+        try? store.userProfile()
+    }
+
+    /// The user's numeric rating in *this* game (PLAN.md's adaptive rating
+    /// register), matched by `chessComUsername` against white/black.
+    var userRatingInThisGame: Int? {
+        guard let username = userProfile()?.chessComUsername, !username.isEmpty else { return nil }
+        if record.white.caseInsensitiveCompare(username) == .orderedSame { return record.whiteRating }
+        if record.black.caseInsensitiveCompare(username) == .orderedSame { return record.blackRating }
+        return nil
     }
 
     /// Whether the game's last mainline move is checkmate, and if so, who
@@ -335,6 +356,7 @@ final class GameReplayViewModel: ObservableObject {
         whiteAccuracy = nil
         blackAccuracy = nil
         report = nil
+        reportInput = nil
         await analyze(engineService: engineService, quality: quality)
     }
 

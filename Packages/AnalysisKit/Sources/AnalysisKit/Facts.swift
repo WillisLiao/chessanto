@@ -9,7 +9,7 @@ import Foundation
 
 /// The mover's win-probability swing across a played move - attached to
 /// every key moment.
-public struct EvalSwingFact: Sendable, Equatable {
+public struct EvalSwingFact: Sendable, Equatable, Codable {
     public let ply: Int
     public let moverIsWhite: Bool
     public let playedSAN: String
@@ -20,7 +20,7 @@ public struct EvalSwingFact: Sendable, Equatable {
 
 /// The engine's preferred alternative to the move actually played, cited
 /// from the pre-move position's rank-1 line.
-public struct BetterMoveFact: Sendable, Equatable {
+public struct BetterMoveFact: Sendable, Equatable, Codable {
     public let ply: Int
     public let bestMoveSAN: String
     /// Up to 6 plies of the engine's PV starting with `bestMoveSAN`.
@@ -33,7 +33,7 @@ public struct BetterMoveFact: Sendable, Equatable {
 
 /// Fires when the rank-1 PV of the post-move position starts with a
 /// capture - the mover "left a piece where it could be taken".
-public struct PunishmentFact: Sendable, Equatable {
+public struct PunishmentFact: Sendable, Equatable, Codable {
     public let ply: Int
     public let refutingSAN: String
     public let capturedPieceKind: PieceKind
@@ -52,7 +52,7 @@ public struct PunishmentFact: Sendable, Equatable {
 
 /// The pre-move position had a forced mate for the mover that the played
 /// move let slip.
-public struct MissedMateFact: Sendable, Equatable {
+public struct MissedMateFact: Sendable, Equatable, Codable {
     public let ply: Int
     public let mateInN: Int
     /// Only populated when the auditor can verify the replayed PV actually
@@ -63,14 +63,14 @@ public struct MissedMateFact: Sendable, Equatable {
 
 /// The converse of `MissedMateFact`: the played move let the opponent reach
 /// a forced mate that wasn't there before.
-public struct AllowedMateFact: Sendable, Equatable {
+public struct AllowedMateFact: Sendable, Equatable, Codable {
     public let ply: Int
     public let mateInN: Int
     public let matingLineSANs: [String]?
 }
 
 /// The game's opening name/deviation point, from the bundled opening book.
-public struct OpeningFact: Sendable, Equatable {
+public struct OpeningFact: Sendable, Equatable, Codable {
     public let eco: String
     public let name: String
     public let deepestBookPly: Int
@@ -81,7 +81,7 @@ public struct OpeningFact: Sendable, Equatable {
 }
 
 /// All facts attached to one selected key moment.
-public struct KeyMoment: Sendable, Equatable {
+public struct KeyMoment: Sendable, Equatable, Codable {
     public let ply: Int
     public let evalSwing: EvalSwingFact
     public let betterMove: BetterMoveFact?

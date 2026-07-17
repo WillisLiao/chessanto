@@ -1,4 +1,4 @@
-public enum MoveClassification: String, CaseIterable, Sendable {
+public enum MoveClassification: String, CaseIterable, Sendable, Codable {
     case best
     /// Reserved for M5's sacrifice/theme detection; never assigned in M2.
     case brilliant

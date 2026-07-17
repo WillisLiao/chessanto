@@ -1,5 +1,8 @@
-import Foundation
+import AnalysisKit
+import ChessCore
+import CoachKit
 import EngineKit
+import Foundation
 import Persistence
 
 public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
@@ -251,23 +254,7 @@ public final class EngineService: ObservableObject {
         fen: String,
         quality: AnalysisQuality
     ) async throws -> [AnalysisRecord] {
-        batchCollector = BatchCollector()
-        let generation = await engine.setPosition(fen: fen)
-        batchGeneration = generation
-        await engine.go(movetimeMilliseconds: quality.movetimeMilliseconds)
-
-        do {
-            try await awaitBatchSearch()
-        } catch {
-            batchCollector = nil
-            batchGeneration = nil
-            throw error
-        }
-
-        let infos = batchCollector?.rankedInfos ?? []
-        batchCollector = nil
-        batchGeneration = nil
-
+        let infos = try await searchOneShot(fen: fen, movetimeMilliseconds: quality.movetimeMilliseconds)
         return infos.map { info in
             AnalysisRecord(
                 gameId: gameId,
@@ -280,6 +267,33 @@ public final class EngineService: ObservableObject {
                 multiPVRank: info.multiPVRank ?? 1
             )
         }
+    }
+
+    /// The shared one-shot batch-search core: set position, search for a
+    /// fixed movetime, await the terminating bestmove, return the ranked
+    /// MultiPV infos (side-to-move perspective, un-normalized). Used by
+    /// `searchPly` (game analysis) and `coachEvaluate` (the coach's engine
+    /// tool) alike - both are sequential one-shot searches, safe by
+    /// construction per `AnalysisEngine.setPosition`'s generation-counter
+    /// fix (M2).
+    func searchOneShot(fen: String, movetimeMilliseconds: Int) async throws -> [AnalysisEngine.EngineInfo] {
+        batchCollector = BatchCollector()
+        let generation = await engine.setPosition(fen: fen)
+        batchGeneration = generation
+        await engine.go(movetimeMilliseconds: movetimeMilliseconds)
+
+        do {
+            try await awaitBatchSearch()
+        } catch {
+            batchCollector = nil
+            batchGeneration = nil
+            throw error
+        }
+
+        let infos = batchCollector?.rankedInfos ?? []
+        batchCollector = nil
+        batchGeneration = nil
+        return infos
     }
 
     /// Waits for the current batch search's terminating bestmove. If the
@@ -296,4 +310,67 @@ public final class EngineService: ObservableObject {
         }
         try Task.checkCancellation()
     }
+
+    // MARK: - EngineToolExecutor (the coach's `evaluate` tool, Layer 3)
+
+    /// The tool-loop core (fact 20's step 2): validate the args by ChessCore
+    /// replay first (fact 10 - small models mangle tool arguments routinely,
+    /// so the engine must never see garbage), search the replay's resulting
+    /// FEN, normalize white-perspective, resume any pending live analysis.
+    /// Refuses while a batch analysis is running - narration only ever
+    /// triggers on fully-analyzed games, so this is belt-and-braces.
+    public func coachEvaluate(fen: String, movesUCI: [String]) async throws -> EngineToolResult {
+        guard isStarted else {
+            throw EngineToolArgumentError("engine is not running")
+        }
+        guard ChessGame.isValidFEN(fen) else {
+            throw EngineToolArgumentError("'\(fen)' is not a valid FEN")
+        }
+        let resultingFEN: String
+        if movesUCI.isEmpty {
+            resultingFEN = fen
+        } else {
+            let replay = ChessGame.replayLine(fromUCI: movesUCI, startingFEN: fen)
+            guard replay.count == movesUCI.count else {
+                throw EngineToolArgumentError("illegal move in \(movesUCI) from position \(fen)")
+            }
+            resultingFEN = replay.last!.resultingFEN
+        }
+        guard !isAnalyzing else {
+            throw EngineToolArgumentError("a batch analysis is already running")
+        }
+
+        stopLive()
+        defer { resumeLiveIfPending() }
+
+        let infos = try await searchOneShot(fen: resultingFEN, movetimeMilliseconds: 500)
+        guard let rank1 = infos.first(where: { ($0.multiPVRank ?? 1) == 1 }) ?? infos.first else {
+            throw EngineToolArgumentError("engine returned no analysis for \(resultingFEN)")
+        }
+        let scoreCentipawns = EngineScoreNormalizer.whitePerspectiveScore(rank1.scoreCentipawns, fen: resultingFEN)
+        let mateIn = EngineScoreNormalizer.whitePerspectiveMate(rank1.mateIn, fen: resultingFEN)
+        return EngineToolResult(
+            resultingFEN: resultingFEN,
+            scoreCentipawnsWhitePerspective: scoreCentipawns,
+            mateInWhitePerspective: mateIn,
+            evalLabel: EvalLabel.format(scoreCentipawns: scoreCentipawns, mateIn: mateIn),
+            principalVariationUCI: rank1.principalVariation,
+            principalVariationSAN: ChessGame.sanLine(fromUCI: rank1.principalVariation, startingFEN: resultingFEN),
+            depth: rank1.depth ?? 0
+        )
+    }
 }
+
+extension EngineService: EngineToolExecutor {
+    public func evaluate(fen: String, movesUCI: [String]) async throws -> EngineToolResult {
+        try await coachEvaluate(fen: fen, movesUCI: movesUCI)
+    }
+}
+
+/// `EngineService` is `@MainActor`; every access to its mutable state
+/// happens on that actor, and `coachEvaluate` is only ever invoked (from
+/// `CoachNarrator`, off the main actor) via the async `EngineToolExecutor`
+/// protocol, which hops back to the main actor for the call itself - the
+/// same cross-actor pattern SwiftUI's `ObservableObject` classes already
+/// rely on.
+extension EngineService: @unchecked Sendable {}

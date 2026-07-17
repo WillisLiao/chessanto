@@ -204,11 +204,81 @@ Read this first at session start; update it at session end.
     `UserProfileRecord` already maps them. `project.yml` already carries
     `NSAllowsLocalNetworking` + the network-client entitlement, and the
     App target already links CoachKit.
-- Next step: **execute M6** by following `handoffs/NEXT-SESSION-M6.md`
-  step by step (the same way M2 and M5 were executed from their prep
-  plans). Do not re-verify or re-litigate what that file already fixes;
-  every step has its own verification gate, ending in the PLAN.md M6
-  acceptance pass.
+- **M6 complete (2026-07-17): local LLM coach.** Followed
+  `handoffs/NEXT-SESSION-M6.md` step by step; every step's verification
+  gate passed. Full detail in the devlog's "M6 execution" section. What's
+  new:
+  - `CoachKit` is no longer a placeholder. `OllamaModels`/`OllamaClient`
+    (native `/api/*` only, explicit `CodingKeys` throughout, a plain
+    `Sendable` class rather than an actor), `CoachVerifier` (Layer 2's
+    hard gate: regex token extraction, SAN-legality-then-UCI-re-replay
+    per fact 15, PV-prefix or landed-on-known-anchor line verification,
+    exact check/mate suffix matching, tolerance-based eval/mate/percentage
+    checks, an at-most-once-per-response fresh-verification hook via
+    `EngineToolExecutor`), `CoachPayloadBuilder`/`CoachPrompt` (Layer 1),
+    `EngineToolExecutor`/`EngineToolResult` (Layer 3's protocol),
+    `CoachNarrator` (the orchestrator: generate -> verify -> regenerate
+    once -> fallback), `CoachModelCatalog` (the picker table). 40 tests,
+    including a gate that runs the real M5 golden rule-based report text
+    through `CoachVerifier` expecting zero violations.
+  - `AnalysisKit`/`ChessCore`: `Codable` added to the Fact structs,
+    `KeyMoment`, `ClassificationCount`, `MoveClassification`, `PieceKind`,
+    `PieceColor` (additive); `ReportText.momentSummary(_:report:)`
+    (public, reuses the existing private renderer) and
+    `ChessGame.isValidFEN(_:)` added.
+  - `App`: `EngineService.coachEvaluate` (the `EngineToolExecutor` impl,
+    replay-validates args before touching the engine, refuses during
+    batch analysis, stop/resume around live analysis like `analyze()`);
+    `CoachService` (`@MainActor`, health checks, sequential per-game
+    narration generation), `CoachSettingsView` (a real `Settings` scene:
+    enable toggle, teaching level, Intel warning, Ollama guidance +
+    recovery, installed-model picker with tool-capability badges,
+    free-text pull with progress), `MachineProfile` (sysctl detection).
+    `GameReplayViewModel` keeps `reportInput` alongside `report`;
+    `GameReportView` triggers narration via `.task(id: viewModel.report)`
+    and renders a labeled ("Coach" vs "Rule-based") text slot per key
+    moment plus a summary section - the rule-based path is byte-identical
+    when the coach is off.
+  - `coach-grounding` (new CoachKit executable, `engine-smoke` precedent):
+    a standalone `GroundingEngine` actor drives a real in-process
+    Stockfish directly (duplicates `EngineScoreNormalizer`'s ~10 lines
+    since it can't import the App target); runs the full narrate->verify
+    loop against real Ollama + the real fixture, independently
+    re-verifying every rendered "coach" text with a fresh context (not
+    the in-generation tool-call anchors); also carries step 4's live
+    "one legal + one illegal `evaluate()` call" gate. `swift run
+    coach-grounding` exits 0; multiple live runs show the verifier
+    genuinely firing (violations/fallbacks with `qwen3:0.6b`, zero leaks
+    every time).
+  - Real E2E verification (Release build, `osascript`/System Events, on
+    the real `MagnusCarlsen vs artin10862` fixture game): real narration
+    rendered for all 3 key moments + summary, every cited move/eval
+    grounded (including one moment's `Ka2` getting grounded through the
+    verifier's live fresh-verification tool call - Layer 3 confirmed
+    working end to end in production); prose *reasoning* quality is
+    often weak with this harness model, which is the documented,
+    expected tradeoff - the architectural guarantee (no invented
+    moves/evals) held in every rendered sentence, general commentary
+    accuracy was never part of that guarantee. Killed Ollama outright:
+    all moments/summary fell back to the exact M5 rule-based text,
+    correctly labeled, no crash/hang. Restarted Ollama: Settings'
+    "Check again" recovered live. Settings guidance states (no-Ollama,
+    non-tools-model note via the locally-installed `llava:7b`, model
+    recommendation matching this machine's real 16 GB) all verified via
+    AX. `coach-grounding` + every package's `swift test` + the full
+    `xcodebuild test` app suite all green.
+  - Known limitations carried forward (not blocking, documented
+    deliberate simplifications - see the plan's CoachVerifier design and
+    the devlog): eval/mate/percentage claims are checked against a pool
+    of known-good values rather than strictly tied to the specific cited
+    line they follow, so a real number can occasionally be misattributed
+    (never fabricated); the bare-square exemption occasionally exempts a
+    genuine single-word move reference (e.g. a played move stated with no
+    leading number marker) from verification rather than checking it;
+    general prose/qualitative-claim accuracy (as opposed to moves/lines/
+    evals) is explicitly out of scope for M6 v1 per PLAN.md's residual-risk
+    note.
+- Next step: **M7 - position chat**, per `handoffs/NEXT-SESSION-M7.md`.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Count of mainline moves at one classification, for one player.
-public struct ClassificationCount: Sendable, Equatable {
+public struct ClassificationCount: Sendable, Equatable, Codable {
     public let classification: MoveClassification
     public let count: Int
 }

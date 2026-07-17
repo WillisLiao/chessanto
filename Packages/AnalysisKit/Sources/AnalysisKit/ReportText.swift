@@ -71,6 +71,13 @@ public enum ReportText {
         return text
     }
 
+    /// The rule-based one-line summary of a single key moment, without the
+    /// leading list marker - used both by `render` and (as a Layer 1 input)
+    /// by CoachKit's whole-game summary payload.
+    public static func momentSummary(_ moment: KeyMoment, report: GameReport) -> String {
+        momentLines(moment, report: report)[0].replacingOccurrences(of: "- ", with: "", options: [.anchored])
+    }
+
     private static func momentLines(_ moment: KeyMoment, report: GameReport) -> [String] {
         var text = evalSwingSentence(moment.evalSwing, report: report)
         if let betterMove = moment.betterMove {
