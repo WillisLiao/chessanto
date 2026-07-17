@@ -122,10 +122,13 @@ Read this first at session start; update it at session end.
   Persistence - each a local SPM package per `PLAN.md`'s architecture).
 - Git repo initialized and pushed: https://github.com/WillisLiao/chessanto
   (branch `main`). Commit and push M2 work alongside these docs.
-- Next step: execute M5 (rule-based coaching report). No
-  `NEXT-SESSION-M5.md` bootstrap exists yet - write one before starting,
-  per PLAN.md's M5 bullet (theme detection, key-moment selection, game
-  report view, whole-game takeaways).
+- Next step: execute M5 (rule-based coaching report) by following
+  `handoffs/NEXT-SESSION-M5.md` step by step. It was prepared 2026-07-17
+  by a planning session that verified its claims against the real source
+  and live ChessCore probe runs (typed Facts + closed templates + a
+  FactAuditor to enforce the zero-false-statement accept criterion, a
+  real lichess CC0 opening book replacing the placeholder eco.json, and
+  the M4 "engine still starting" toolbar bug fixed along the way).
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
