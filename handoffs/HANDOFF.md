@@ -173,25 +173,42 @@ Read this first at session start; update it at session end.
     structurally correct but wasn't caught live in automation (the
     Release-build engine now starts faster than System Events can query
     the window after launch).
-- Next step: **a planning/prep session for M6** (local LLM coach) -
-  same role M2's and M5's prep sessions played (see the 2026-07-17 devlog's
-  "M2 prep" section and the "Write M5 execution plan" commit). Its job is
-  to turn `handoffs/NEXT-SESSION-M6.md` (currently a bootstrap with real
-  but unverified pointers) into a fully self-contained, pre-verified
-  execution plan, the way `NEXT-SESSION-M5.md` was before the M5
-  execution session started - by actually running a live `ollama serve`
-  instance and curling its real endpoints (model list, pull-with-progress,
-  chat/generate streaming) rather than guessing at request/response
-  shapes, confirming the PLAN.md RAM/model table's tags still resolve,
-  checking `Schema.swift` for whether `userProfile` already has
-  `ratingBand`/`coachModel`/`coachEnabled` columns, and designing
-  `CoachVerifier`'s SAN/UCI-extraction-and-reverification approach against
-  the real `ChessGame.replayLine`/`FactAuditor` primitives M5 left behind.
-  It should rewrite `NEXT-SESSION-M6.md` in place with its findings (mirror
-  `NEXT-SESSION-M5.md`'s structure: verified facts, fixed design decisions,
-  step-by-step build order with a verification gate per step) for a
-  **later execution session** to follow step by step - do not implement
-  M6 itself in the prep session.
+- **M6 prep complete (2026-07-17): live Ollama verification and execution
+  plan.** A planning session (no app code changes) verified everything M6
+  will code against and rewrote `handoffs/NEXT-SESSION-M6.md` as a
+  self-contained execution plan (verified facts with real curl
+  transcripts, fixed design decisions, 9 build steps each with a
+  verification gate). Highlights, full detail in the devlog's "M6 prep"
+  section and the plan itself:
+  - Live-verified Ollama 0.31.2's real API end to end: tags/ps/show
+    (including the `capabilities` array the picker needs for tool
+    support), chat streaming NDJSON, thinking-model handling (`qwen3`
+    emits a separate `message.thinking` field; `think:false` disables),
+    tool calling (arguments arrive as a JSON object; streamed tool calls
+    arrive whole in one chunk; round-trip via `role:"tool"` messages
+    verified), pull-with-progress (a real mid-stream `{"error":"503: "}`
+    inside an HTTP 200 stream was observed live, and retry resumes), and
+    the 4096-default-context trap (`options.num_ctx` is mandatory).
+  - All PLAN.md model tags resolve in the registry with real sizes - but
+    **gemma3 has no tools capability**, so the 32GB alternative becomes
+    `qwen2.5:32b` (19.9 GB, tools). `qwen3:0.6b` (~0.5 GB, tools +
+    thinking) was pulled and stays installed as the dev/harness model.
+  - Scratch-run against ChessCore proved SAN replay from arbitrary
+    mid-game FENs works and exposed a real trap: `playMove(san:)` trusts
+    `+`/`#` suffixes instead of deriving check state (bare `Qh5` on a
+    mate reports `isCheckmate=false`; spurious `e4+` is echoed back).
+    CoachVerifier's fixed pattern: SAN path for legality + UCI extraction
+    only, then re-replay via `replayLine(fromUCI:)` for every board fact.
+  - No schema work needed: `userProfile` has had `ratingBand`/
+    `coachModel`/`coachEnabled` since the v1 migration, and
+    `UserProfileRecord` already maps them. `project.yml` already carries
+    `NSAllowsLocalNetworking` + the network-client entitlement, and the
+    App target already links CoachKit.
+- Next step: **execute M6** by following `handoffs/NEXT-SESSION-M6.md`
+  step by step (the same way M2 and M5 were executed from their prep
+  plans). Do not re-verify or re-litigate what that file already fixes;
+  every step has its own verification gate, ending in the PLAN.md M6
+  acceptance pass.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
