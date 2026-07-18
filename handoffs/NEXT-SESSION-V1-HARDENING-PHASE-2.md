@@ -623,6 +623,45 @@ Record the reproduction evidence, the engine facts you confirmed, the F5 correct
 Write `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md` describing the next slice.
 The obvious candidate is the full practice render-state machine together with non-disclosing feedback and the distinct Reveal state, because Step 6 deliberately touches only the recovery path.
 
+That phase-3 document must also carry forward the two repository-hygiene items below.
+Both were deliberately excluded from phase 2 because changing repository-wide instruction files during an implementation slice adds risk for no benefit.
+Do not start either one in this session.
+Record them as scoped, ready-to-execute follow-ups.
+
+#### Follow-up A - Add a project-level `CLAUDE.md`
+
+This repository has no project-level `CLAUDE.md` and no `AGENTS.md`.
+Every durable rule currently reaches the agent through the session prompt instead of through the checkout.
+The `V1 hardening execution` section of `devlogs/2026-07-18.md` already records the consequence, noting that the missing physical file left the prompt-supplied rules authoritative.
+That is fragile, because a rule that is only ever pasted is a rule that will eventually be forgotten.
+
+The phase-3 plan should specify capturing at least the following in a project `CLAUDE.md`.
+
+- The forced-light warm-neutral and brass visual identity, and the rule that the board, pieces, app icon, and Chessanto identity are not to be redesigned.
+- The rule that green stays confined to the board arrow and the reserved move-classification colors, and never enters application chrome.
+- The native database-safety procedure, including the sandbox path, the backup step, the disposable-copy step, and the two required opt-in environment variables.
+- The standard verification command set, including the per-package suites, the app suite, `engine-smoke`, `coach-grounding`, and `scripts/release-build.sh`.
+- The rule that `xcodegen generate` must run after adding or removing files, because `Chessanto.xcodeproj` is generated and gitignored.
+- The documentation rules already in force, which are one full sentence per physical line in Markdown, never the em dash character, no modification of `CHANGELOG.md` or generated files, and no agent co-author on commits.
+
+Note explicitly that this is a documentation change only.
+It must not alter behavior, and it must not silently become a place to invent new rules that the project has not actually agreed.
+
+#### Follow-up B - Author a root `CONTEXT.md`
+
+The project now has a substantial domain vocabulary that exists only as prose spread across roughly one hundred kilobytes of `handoffs/HANDOFF.md` and the devlogs.
+Representative terms include ply, source ply, pre-move FEN, key moment, ranked line, MultiPV rank, generation, bounded search, white-perspective score, reconciliation, mastery state, review scheduling, and learner-owned filtering.
+
+Four installed skills read a root `CONTEXT.md` when one exists, which are `tdd`, `diagnosing-bugs`, `improve-codebase-architecture`, and `ask-matt`.
+Each of them guards the read with an explicit existence check, so the absence of the file is currently a missed opportunity rather than a defect.
+
+Use the `domain-modeling` skill to author it, and follow its `CONTEXT-FORMAT.md`.
+Do not hand-roll a format.
+Do not use `setup-matt-pocock-skills` for this, because that skill only records where domain documents live and never writes their content.
+
+The payoff is compounding rather than immediate.
+It improves every later session's naming and mental model, so schedule it once V1 hardening is closed rather than in the middle of it.
+
 Run `mattpocock-skills:code-review` over the diff before committing, using this document as the spec axis.
 Do not skip it because the tests pass, since neither the F1 race nor the F2 contamination was catchable by the offline suite.
 
@@ -660,6 +699,8 @@ Tick these only when they are literally true.
 - [ ] All package suites, the app suite, `engine-smoke`, `coach-grounding`, and `scripts/release-build.sh` pass.
 - [ ] Native acceptance ran against a disposable database and the live database was never mutated.
 - [ ] Handoff, devlog, and the phase-3 plan are written and committed with the code.
+- [ ] The phase-3 plan carries forward Follow-up A, which is the project-level `CLAUDE.md`.
+- [ ] The phase-3 plan carries forward Follow-up B, which is the root `CONTEXT.md` authored with `domain-modeling`.
 
 The following remain open V1 work and are **not** complete after this session.
 
@@ -672,6 +713,8 @@ The following remain open V1 work and are **not** complete after this session.
 - [ ] Contrast, target size, keyboard, focus, announcement, and reduced-motion coverage.
 - [ ] Promotion moves in practice.
 - [ ] README and version alignment.
+- [ ] A project-level `CLAUDE.md`, which is Follow-up A.
+- [ ] A root `CONTEXT.md`, which is Follow-up B.
 
 ## Recommended skills
 
