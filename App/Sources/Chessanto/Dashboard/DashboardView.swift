@@ -39,23 +39,24 @@ struct DashboardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Progress").font(.title2.bold())
+                Text("Progress").font(.dsTitle).foregroundStyle(DesignColors.textPrimary)
                 Spacer()
                 Button("Done") { dismiss() }
             }
             .padding()
-            Divider()
+            Divider().overlay(DesignColors.hairline)
 
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            Divider().overlay(DesignColors.hairline)
             Text(coverageLine)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
                 .padding()
         }
-        .frame(width: 620, height: 520)
+        .frame(width: 620, height: 470)
+        .background(DesignColors.surface0)
         .task { await load() }
     }
 
@@ -77,51 +78,103 @@ struct DashboardView: View {
             )
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    accuracyTrend
-                    mistakeThemes
+                VStack(alignment: .leading, spacing: DesignSpacing.md) {
+                    Card { accuracyTrend }
+                    Card { mistakeThemes }
+                    if points.count < 3 {
+                        Card { firstTrendMilestone }
+                    }
                 }
                 .padding()
             }
         }
     }
 
+    private var firstTrendMilestone: some View {
+        let remaining = max(3 - points.count, 0)
+        return Group {
+            SectionHeader(title: "Next milestone")
+            Text("Build your first trend")
+                .font(.dsBody.weight(.semibold))
+                .foregroundStyle(DesignColors.textPrimary)
+            ProgressView(value: Double(points.count), total: 3)
+                .tint(DesignColors.accent)
+            Text("Analyze \(remaining) more of your game\(remaining == 1 ? "" : "s") to reveal the direction of your accuracy.")
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
+        }
+    }
+
+    @ViewBuilder
     private var accuracyTrend: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Accuracy trend").font(.headline)
+        SectionHeader(title: "Accuracy trend")
+        if points.count == 1, let only = points.first {
+            VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                HStack(spacing: DesignSpacing.sm) {
+                    Text("\(String(format: "%.0f", only.accuracy))%")
+                        .font(.dsTitle)
+                        .foregroundStyle(DesignColors.accent)
+                    Text("accuracy in your only analyzed game so far")
+                        .font(.dsBody)
+                        .foregroundStyle(DesignColors.textSecondary)
+                }
+                Text("Analyze a few more of your games to see a trend here.")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+            }
+            .padding(.vertical, DesignSpacing.sm)
+        } else {
             Chart(points) { point in
                 LineMark(x: .value("Date", point.date), y: .value("Accuracy", point.accuracy))
+                    .foregroundStyle(DesignColors.accent)
                 PointMark(x: .value("Date", point.date), y: .value("Accuracy", point.accuracy))
+                    .foregroundStyle(DesignColors.accent)
             }
             .chartYScale(domain: 0...100)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine().foregroundStyle(DesignColors.hairline)
+                    AxisValueLabel().foregroundStyle(DesignColors.textSecondary)
+                }
+            }
+            .chartXAxis {
+                AxisMarks { value in
+                    AxisGridLine().foregroundStyle(DesignColors.hairline)
+                    AxisValueLabel().foregroundStyle(DesignColors.textSecondary)
+                }
+            }
             .frame(height: 180)
         }
     }
 
+    @ViewBuilder
     private var mistakeThemes: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Most frequent mistake themes").font(.headline)
-            ForEach(themeCounts) { theme in
-                HStack {
-                    Text(theme.label)
-                    Spacer()
-                    Text("\(theme.count)").foregroundStyle(.secondary)
-                }
-            }
-            Divider()
-            HStack(spacing: 12) {
-                ForEach(classificationCounts.filter { $0.count > 0 }) { count in
-                    HStack(spacing: 4) {
-                        ClassificationBadge(classification: count.classification)
-                        Text("\(count.count)")
+        SectionHeader(title: "Most frequent mistake themes")
+        if themeCounts.isEmpty {
+            Text("No recurring mistake pattern yet.")
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
+        } else {
+            VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                ForEach(themeCounts) { theme in
+                    HStack {
+                        Text(theme.label).font(.dsBody)
+                        Spacer()
+                        Text("\(theme.count)").font(.dsNotation).foregroundStyle(DesignColors.textSecondary)
                     }
                 }
+            }
+        }
+        Divider()
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: DesignSpacing.xs)], alignment: .leading, spacing: DesignSpacing.xs) {
+            ForEach(classificationCounts.filter { $0.count > 0 }) { count in
+                Chip("\(count.classification.shortAbbreviation) \(count.count)", color: count.classification.color)
             }
         }
     }
 
     private var coverageLine: String {
-        "\(analyzedGameCount) of \(library.games.count) imported games analyzed (user-matched: \(userMatchedGameCount))"
+        "\(userMatchedGameCount) of your games analyzed · \(library.games.count) games imported"
     }
 
     private func load() async {

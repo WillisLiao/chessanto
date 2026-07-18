@@ -473,7 +473,7 @@ Read this first at session start; update it at session end.
   controls). The board artwork/themes/coordinates look good and are
   explicitly protected.
   **User design decisions (recorded in the plan):** light / white-forward
-  default appearance (dark still supported); brass/gilt accent (`#A6791F`
+  default appearance (the planned dark support was later superseded by the user's explicit force-light request during execution); brass/gilt accent (`#A6791F`
   light / `#C9A24B` dark), **no green** (user: green would be "vandalism"),
   near-monochrome warm chrome otherwise; the Coach becomes a slide-over
   panel (dock-as-third-column when wide, slide-over when narrow) that never
@@ -481,6 +481,24 @@ Read this first at session start; update it at session end.
   **Next:** a Sonnet session executes `handoffs/NEXT-SESSION-UIUX-EXECUTE.md`
   step by step. This is visual + IA only - no new features, no schema, no
   behavior change.
+- **UI/UX redesign execution complete (2026-07-18).**
+  The paused Sonnet task was reconstructed from its local session log and continued from Step 11 through acceptance.
+  A shared design system now governs warm-neutral surfaces, graphite text, brass accents, spacing, typography, cards, chips, and primary controls.
+  The user explicitly corrected the earlier plan and required the app to force the light palette even when macOS is dark, so `ChessantoApp` intentionally pins Aqua and `.light`.
+  The sidebar now has room for real names and metadata, a stable Progress/Add bottom bar, and richer game rows.
+  Empty selection and onboarding use a code-native Chessanto emblem and clearer value messaging.
+  A generated macOS app icon carries the same ivory, graphite, brass, tilted-board, and improvement-line identity into Finder and the Dock.
+  The replay workspace now has a quieter eval bar and graph, two-column notation, compact classification marks, polished controls, card-based reports, and a clear text-labeled Coach entry point.
+  Coach is no longer a third tab.
+  It docks as a third column when wide and slides over the right pane when narrow, while leaving the board visible.
+  Coach can follow the board or pin to an exact position, and move/report entry points open it already pinned.
+  Markdown now renders as formatting rather than literal asterisks.
+  A regression test found and fixed an existing chat-context bug where move paths omitted White's first move and could subscript an empty history at the start position.
+  The live grounding gate also exposed a mismatch between production chat verification and the independent harness.
+  Fresh re-verification now recreates legal-proposal anchors, and trusted PV prefixes carry their resulting position forward.
+  Full package tests, the app tests, a universal Release build, and `coach-grounding` all pass.
+  The final product audit and next implementation plan are in `handoffs/NEXT-SESSION-LEARNING-LOOP.md`.
+  Large UI audit screenshots remain local and are intentionally ignored because the capture set exceeds 160MB.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

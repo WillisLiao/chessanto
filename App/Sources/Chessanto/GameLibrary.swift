@@ -1,5 +1,7 @@
 import Foundation
 import Persistence
+import ChessCore
+import AnalysisKit
 
 @MainActor
 final class GameLibrary: ObservableObject {
@@ -9,6 +11,8 @@ final class GameLibrary: ObservableObject {
     @Published var analysisQuality: AnalysisQuality
     @Published var boardTheme: BoardTheme
     @Published private(set) var hasCompletedOnboarding: Bool
+    @Published private(set) var analyzedGameIDs: Set<Int64> = []
+    @Published private(set) var openingByGameID: [Int64: String] = [:]
 
     let store: GameStore
 
@@ -76,6 +80,32 @@ final class GameLibrary: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+        let store = self.store
+        let currentGames = games
+        Task {
+            let ids = (try? await store.analyzedGameIDs()) ?? []
+            let openings = Self.openings(for: currentGames, analyzedGameIDs: ids)
+            await MainActor.run {
+                self.analyzedGameIDs = ids
+                self.openingByGameID = openings
+            }
+        }
+    }
+
+    /// Opening names for the sidebar's "analyzed" rows - pure move replay
+    /// against the opening book, no analysis rows needed (M8's `OpeningBook`
+    /// only needs FENs), so this stays cheap even for a full library.
+    nonisolated private static func openings(for games: [GameRecord], analyzedGameIDs: Set<Int64>) -> [Int64: String] {
+        var result: [Int64: String] = [:]
+        for game in games {
+            guard let id = game.id, analyzedGameIDs.contains(id) else { continue }
+            guard let chessGame = try? ChessGame(pgn: game.pgn) else { continue }
+            let moveIndices = [chessGame.startIndex] + chessGame.mainlineIndices
+            let fens = moveIndices.map { chessGame.fen(at: $0) ?? "" }
+            guard let match = OpeningBook.shared.lookup(fens: fens) else { continue }
+            result[id] = match.name
+        }
+        return result
     }
 
     @discardableResult

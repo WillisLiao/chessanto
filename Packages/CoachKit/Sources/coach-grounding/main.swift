@@ -222,19 +222,38 @@ Task.detached {
             // token exactly as intended (it isn't a cited line, it's part
             // of the canned sentence).
             // Independent re-verification with a FRESH context (not this
-            // turn's own accumulated anchors) - the same leak check
-            // narration gets.
+            // turn's own accumulated anchors). Re-run the legal-proposal
+            // precheck so the fresh verifier has independently produced
+            // the same class of trusted anchor that production verification
+            // uses. Omitting it makes valid continuations look like leaks.
+            var freshAnchors = [CoachVerifier.Anchor(
+                fen: chatFEN,
+                lines: chatPayload.preMoveLines.map {
+                    CoachVerifier.VerifiedLine(
+                        scoreCentipawnsWhitePerspective: $0.scoreCentipawnsWhitePerspective,
+                        mateInWhitePerspective: $0.mateInWhitePerspective,
+                        principalVariationUCI: $0.principalVariationUCI
+                    )
+                }
+            )]
+            let freshClassifications = ProposedLineCheck.classify(text: question, currentFEN: chatFEN)
+            let freshLegalProposals = freshClassifications.compactMap { pair -> [String]? in
+                guard case .legalProposal(let uci) = pair.classification else { return nil }
+                return uci
+            }
+            for proposal in freshLegalProposals.prefix(2) {
+                guard let result = try? await groundingEngine.evaluate(fen: chatFEN, movesUCI: proposal) else { continue }
+                freshAnchors.append(CoachVerifier.Anchor(
+                    fen: result.resultingFEN,
+                    lines: [CoachVerifier.VerifiedLine(
+                        scoreCentipawnsWhitePerspective: result.scoreCentipawnsWhitePerspective,
+                        mateInWhitePerspective: result.mateInWhitePerspective,
+                        principalVariationUCI: result.principalVariationUCI
+                    )]
+                ))
+            }
             let freshContext = CoachVerifier.Context(
-                anchors: [CoachVerifier.Anchor(
-                    fen: chatFEN,
-                    lines: chatPayload.preMoveLines.map {
-                        CoachVerifier.VerifiedLine(
-                            scoreCentipawnsWhitePerspective: $0.scoreCentipawnsWhitePerspective,
-                            mateInWhitePerspective: $0.mateInWhitePerspective,
-                            principalVariationUCI: $0.principalVariationUCI
-                        )
-                    }
-                )],
+                anchors: freshAnchors,
                 knownWinProbabilities: [
                     chatMoment.evalSwing.moverWinProbabilityBefore.rounded(),
                     chatMoment.evalSwing.moverWinProbabilityAfter.rounded(),

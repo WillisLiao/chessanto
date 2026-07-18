@@ -497,18 +497,50 @@ final class GameReplayViewModel: ObservableObject {
 
     // MARK: - Position chat (M7)
 
-    /// The current key moment, if the displayed position's mainline
-    /// ancestor ply is one of the report's key moments.
-    var currentKeyMoment: KeyMoment? {
-        report?.keyMoments.first { $0.ply == currentGraphPly }
+    /// Position pinning for the Coach panel (UI/UX redesign, step 11): when
+    /// set, the chat subject (context/label/starter-questions/key-moment)
+    /// is computed from this ply instead of the currently displayed/
+    /// scrubbed position, so opening the Coach and then scrubbing the board
+    /// doesn't change what a turn is about mid-conversation. View state
+    /// only - not persisted, per the plan's "default to not persisting it".
+    @Published var pinnedChatIndex: MoveIndex?
+
+    var isChatPinned: Bool { pinnedChatIndex != nil }
+
+    func pinChat(to index: MoveIndex) {
+        pinnedChatIndex = index
     }
 
-    /// The current position's ranked lines from cached analysis, when the
-    /// displayed ply is an analyzed mainline ply - empty for a variation
-    /// position or an unanalyzed game, in which case `CoachChat` seeds one
-    /// live evaluation instead.
+    func unpinChat() {
+        pinnedChatIndex = nil
+    }
+
+    /// The ply the Coach panel is actually about - the pin if set, else
+    /// whatever the board is currently showing.
+    private var chatSubjectIndex: MoveIndex {
+        pinnedChatIndex ?? currentIndex
+    }
+
+    /// The mainline ply a new chat message should be recorded against - the
+    /// pin if set, else the board's current mainline ancestor ply.
+    var chatSubjectGraphPly: Int {
+        guard let chessGame else { return 0 }
+        return moveIndices.firstIndex(of: chessGame.mainlineAncestor(of: chatSubjectIndex)) ?? 0
+    }
+
+    /// The chat subject's key moment, if its mainline ancestor ply is one
+    /// of the report's key moments.
+    var currentKeyMoment: KeyMoment? {
+        report?.keyMoments.first { $0.ply == chatSubjectGraphPly }
+    }
+
+    /// The chat subject's ranked lines from cached analysis, when its ply
+    /// is an analyzed mainline ply - empty for a variation position or an
+    /// unanalyzed game, in which case `CoachChat` seeds one live evaluation
+    /// instead.
     var currentPositionRankedLines: [RankedLine] {
-        guard !isExploringVariation, let ply = moveIndices.firstIndex(of: currentIndex),
+        guard let chessGame, chessGame.isMainline(chatSubjectIndex),
+            let ply = moveIndices.firstIndex(of: chatSubjectIndex),
             let records = cachedAllRanksByPly[ply]
         else { return [] }
         return records.sorted { $0.multiPVRank < $1.multiPVRank }.map {
@@ -530,20 +562,40 @@ final class GameReplayViewModel: ObservableObject {
         guard let chessGame else { return ([], 0, []) }
         let fullPath = chessGame.history(upTo: index)
         let branch = chessGame.mainlineAncestor(of: index)
-        let branchPosition = fullPath.firstIndex(of: branch) ?? 0
-        let mainlinePart = fullPath[0...branchPosition]
-        let variationPart = branchPosition + 1 < fullPath.count ? fullPath[(branchPosition + 1)...] : []
-        let mainlineSAN = mainlinePart.dropFirst().compactMap { san(at: $0) }
-        let variationSAN = variationPart.compactMap { san(at: $0) }
         let branchPly = moveIndices.firstIndex(of: branch) ?? 0
-        return (Array(mainlineSAN), branchPly, Array(variationSAN))
+
+        // `ChessGame.history(upTo:)` contains played moves only. It is
+        // empty at the start position, so never subscript it until the
+        // branch point has actually been found.
+        guard !fullPath.isEmpty else { return ([], 0, []) }
+
+        if branch == chessGame.startIndex {
+            return (
+                [],
+                0,
+                fullPath.compactMap { san(at: $0) }
+            )
+        }
+
+        guard let branchPosition = fullPath.firstIndex(of: branch) else {
+            return (fullPath.compactMap { san(at: $0) }, branchPly, [])
+        }
+
+        let mainlinePart = fullPath[...branchPosition]
+        let variationPart = branchPosition + 1 < fullPath.count ? fullPath[(branchPosition + 1)...] : []
+        return (
+            mainlinePart.compactMap { san(at: $0) },
+            branchPly,
+            variationPart.compactMap { san(at: $0) }
+        )
     }
 
-    /// Assembles M7's chat payload input from the currently displayed
-    /// position - `nil` only if the game failed to load.
+    /// Assembles M7's chat payload input from the chat subject position (the
+    /// pin if set, else whatever's currently displayed) - `nil` only if the
+    /// game failed to load.
     func chatContext() -> CoachChatContext? {
-        guard let fen = currentFEN else { return nil }
-        let path = chatMovePath(upTo: currentIndex)
+        guard let chessGame, let fen = chessGame.fen(at: chatSubjectIndex) else { return nil }
+        let path = chatMovePath(upTo: chatSubjectIndex)
         var oneLiner: String?
         var before: Double?
         var after: Double?
@@ -554,7 +606,7 @@ final class GameReplayViewModel: ObservableObject {
         }
         return CoachChatContext(
             currentFEN: fen,
-            isMainlinePosition: !isExploringVariation,
+            isMainlinePosition: chessGame.isMainline(chatSubjectIndex),
             mainlineMovesSAN: path.mainlineSAN,
             variationBranchPly: path.variationBranchPly,
             variationMovesSAN: path.variationSAN,
@@ -571,15 +623,19 @@ final class GameReplayViewModel: ObservableObject {
     }
 
     /// A short label for what the chat is attached to ("Start position",
-    /// "Move 12. Nf3", "Variation after 12...Nf3").
+    /// "Move 12. Nf3", "Variation after 12...Nf3") - the chat subject (pin
+    /// if set, else whatever's displayed), not necessarily the board ply.
     var chatPositionLabel: String {
         guard let chessGame else { return "Current position" }
-        guard currentIndex != chessGame.startIndex else { return "Start position" }
-        guard let san = sanAtCurrent else { return "Current position" }
-        let plyDepth = chessGame.history(upTo: currentIndex).count - 1
+        let index = chatSubjectIndex
+        guard index != chessGame.startIndex else { return "Start position" }
+        guard let san = san(at: index) else { return "Current position" }
+        // `history(upTo:)` contains the moves themselves but not the start
+        // position, so its count is already the one-based ply number.
+        let plyDepth = chessGame.history(upTo: index).count
         let moveNumber = (plyDepth + 1) / 2
         let numberLabel = plyDepth % 2 == 1 ? "\(moveNumber)." : "\(moveNumber)..."
-        return isExploringVariation ? "Variation after \(numberLabel) \(san)" : "Move \(numberLabel) \(san)"
+        return chessGame.isMainline(index) ? "Move \(numberLabel) \(san)" : "Variation after \(numberLabel) \(san)"
     }
 
     private func removeSubtree(at index: MoveIndex) {

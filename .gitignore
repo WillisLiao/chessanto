@@ -13,3 +13,6 @@ Chessanto.xcodeproj/
 # verifies them against the sha256 prefix embedded in their filenames.
 *.nnue
 handoffs/db-backups/
+
+# UI audit captures are local working artifacts and can exceed 100MB.
+handoffs/screenshots/

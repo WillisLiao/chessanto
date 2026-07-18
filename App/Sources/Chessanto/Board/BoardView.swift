@@ -8,6 +8,11 @@ struct BoardView: View {
     var showCoordinates: Bool = true
     var selectedSquare: BoardSquare?
     var legalDestinations: Set<BoardSquare> = []
+    /// Suggested-move arrows (engine best line, "Better was..." moves) -
+    /// drawn green like most match-analysis tools (chess.com/Lichess),
+    /// reusing the app's own move-quality green (`MoveClassification.best`)
+    /// rather than an unrelated ad-hoc color.
+    var arrows: [(from: BoardSquare, to: BoardSquare)] = []
     var onSquareTapped: ((BoardSquare) -> Void)?
 
     var body: some View {
@@ -64,10 +69,32 @@ struct BoardView: View {
                         }
                     }
                 }
+
+                ForEach(Array(arrows.enumerated()), id: \.offset) { _, arrow in
+                    arrowShape(from: arrow.from, to: arrow.to, squareSize: squareSize)
+                        .fill(Color(NSColor(hex: "#6F9E4C")).opacity(0.75))
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: size, height: size)
         }
         .aspectRatio(1, contentMode: .fit)
+    }
+
+    /// A center-of-square-to-center-of-square arrow with a triangular head,
+    /// the standard chess-analysis-tool move suggestion.
+    private func arrowShape(from: BoardSquare, to: BoardSquare, squareSize: CGFloat) -> some Shape {
+        let (fromRow, fromCol) = rowCol(for: from)
+        let (toRow, toCol) = rowCol(for: to)
+        let start = CGPoint(x: CGFloat(fromCol) * squareSize + squareSize / 2, y: CGFloat(fromRow) * squareSize + squareSize / 2)
+        let end = CGPoint(x: CGFloat(toCol) * squareSize + squareSize / 2, y: CGFloat(toRow) * squareSize + squareSize / 2)
+        return ArrowShape(start: start, end: end, lineWidth: squareSize * 0.16, headLength: squareSize * 0.42, headWidth: squareSize * 0.36)
+    }
+
+    private func rowCol(for square: BoardSquare) -> (row: Int, col: Int) {
+        let col = flipped ? 7 - square.file : square.file
+        let row = flipped ? square.rank : 7 - square.rank
+        return (row, col)
     }
 
     private func square(atRow row: Int, col: Int) -> BoardSquare {
@@ -117,6 +144,42 @@ struct BoardView: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// A straight shaft with a triangular arrowhead from `start` to `end`,
+/// shortened at both ends so it doesn't cover the piece glyphs it points
+/// between.
+private struct ArrowShape: Shape {
+    let start: CGPoint
+    let end: CGPoint
+    let lineWidth: CGFloat
+    let headLength: CGFloat
+    let headWidth: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = sqrt(dx * dx + dy * dy)
+        guard length > 1 else { return Path() }
+        let unit = CGPoint(x: dx / length, y: dy / length)
+        let perpendicular = CGPoint(x: -unit.y, y: unit.x)
+
+        let inset = length * 0.18
+        let trueStart = CGPoint(x: start.x + unit.x * inset, y: start.y + unit.y * inset)
+        let trueEnd = CGPoint(x: end.x - unit.x * inset, y: end.y - unit.y * inset)
+        let shaftEnd = CGPoint(x: trueEnd.x - unit.x * headLength, y: trueEnd.y - unit.y * headLength)
+
+        var path = Path()
+        path.move(to: CGPoint(x: trueStart.x + perpendicular.x * lineWidth / 2, y: trueStart.y + perpendicular.y * lineWidth / 2))
+        path.addLine(to: CGPoint(x: shaftEnd.x + perpendicular.x * lineWidth / 2, y: shaftEnd.y + perpendicular.y * lineWidth / 2))
+        path.addLine(to: CGPoint(x: shaftEnd.x + perpendicular.x * headWidth / 2, y: shaftEnd.y + perpendicular.y * headWidth / 2))
+        path.addLine(to: trueEnd)
+        path.addLine(to: CGPoint(x: shaftEnd.x - perpendicular.x * headWidth / 2, y: shaftEnd.y - perpendicular.y * headWidth / 2))
+        path.addLine(to: CGPoint(x: shaftEnd.x - perpendicular.x * lineWidth / 2, y: shaftEnd.y - perpendicular.y * lineWidth / 2))
+        path.addLine(to: CGPoint(x: trueStart.x - perpendicular.x * lineWidth / 2, y: trueStart.y - perpendicular.y * lineWidth / 2))
+        path.closeSubpath()
+        return path
     }
 }
 

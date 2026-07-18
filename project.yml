@@ -43,6 +43,7 @@ targets:
         SWIFT_VERSION: "5.10"
         ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
     info:
       path: App/Resources/Info.plist

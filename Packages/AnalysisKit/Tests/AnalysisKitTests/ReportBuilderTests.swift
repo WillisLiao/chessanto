@@ -90,7 +90,11 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     #expect(report != nil)
     guard let report else { return }
     let text = ReportText.render(report)
-    #expect(text.contains("BlackPlayer's winning chances"))
+    // Winning-chances prose says "White"/"Black", not the player's real
+    // name (user decision, UI/UX redesign session) - color reads faster
+    // than usernames on a board-focused report.
+    #expect(text.contains("Black's winning chances"))
+    #expect(!text.contains("BlackPlayer's winning chances"))
     #expect(!text.contains(" your "))
 }
 

@@ -10,26 +10,25 @@ struct GameReportView: View {
     @ObservedObject var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
     @EnvironmentObject private var coachService: CoachService
+    /// Opens the Coach panel pinned to a ply - the Report key-moment entry
+    /// point (decision A).
+    let onAskCoach: (Int) -> Void
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignSpacing.md) {
                 if let report = viewModel.report {
                     reportContent(report)
-                    if isCoachEnabled {
-                        Divider()
-                        coachSummarySection
-                    }
                 } else if engineService.isAnalyzing {
                     ProgressView("Analyzing...")
                         .padding()
                 } else if viewModel.loadError != nil {
                     Text("This game couldn't be parsed, so no report is available.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DesignColors.textSecondary)
                         .padding()
                 } else {
-                    Text("Analyze this game (see the Analyze button in the toolbar) to see the coaching report.")
-                        .foregroundStyle(.secondary)
+                    Text("Analyze this game (see the Analyze button above the board) to see the coaching report.")
+                        .foregroundStyle(DesignColors.textSecondary)
                         .padding()
                 }
             }
@@ -57,86 +56,102 @@ struct GameReportView: View {
     }
 
     @ViewBuilder
-    private var coachSummarySection: some View {
-        Text("Coach summary").font(.subheadline.bold())
-        if let narration = coachService.summaryNarration {
-            narrationView(narration)
-        } else if coachService.isGenerating {
-            HStack {
-                ProgressView().controlSize(.small)
-                Text("Coach is writing…").foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    @ViewBuilder
     private func narrationView(_ narration: CoachNarration) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(narration.text)
-                .font(.callout)
+                .font(.dsBody)
             Text(narration.source == .coach ? "Coach" : "Rule-based")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
         }
     }
 
     @ViewBuilder
     private func reportContent(_ report: GameReport) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        Card {
             Text("\(report.whiteName) vs \(report.blackName) - \(report.result)")
-                .font(.headline)
-            HStack {
-                Text("White: \(String(format: "%.1f", report.whiteAccuracy))% accuracy")
-                Text("·").foregroundStyle(.secondary)
-                Text("Black: \(String(format: "%.1f", report.blackAccuracy))% accuracy")
+                .font(.dsTitle)
+                .foregroundStyle(DesignColors.textPrimary)
+            HStack(spacing: DesignSpacing.xs) {
+                Text("White \(String(format: "%.1f", report.whiteAccuracy))%")
+                    .foregroundStyle(DesignColors.accent)
+                Text("·").foregroundStyle(DesignColors.textSecondary)
+                Text("Black \(String(format: "%.1f", report.blackAccuracy))%")
+                    .foregroundStyle(DesignColors.accent)
             }
-            .font(.callout)
-        }
+            .font(.dsNotation)
 
-        VStack(alignment: .leading, spacing: 2) {
-            classificationRow(name: report.whiteName, counts: report.whiteClassificationCounts)
-            classificationRow(name: report.blackName, counts: report.blackClassificationCounts)
+            Divider()
+
+            VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                classificationRow(name: report.whiteName, counts: report.whiteClassificationCounts)
+                classificationRow(name: report.blackName, counts: report.blackClassificationCounts)
+            }
         }
 
         if let opening = report.opening {
-            Divider()
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Opening").font(.subheadline.bold())
+            Card {
+                SectionHeader(title: "Opening")
                 Text("\(opening.name) (\(opening.eco))")
+                    .font(.dsBody)
                 if let deviationSAN = opening.deviationSAN, let deviationPly = opening.deviationPly {
-                    Text("Left book on move \(moveNumberLabel(ply: deviationPly)) with \(deviationSAN).")
-                        .foregroundStyle(.secondary)
+                    Text("Left book on move \(bareMoveNumber(ply: deviationPly)) with \(deviationSAN).")
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.textSecondary)
                 }
             }
         }
 
-        Divider()
-        Text("Key moments").font(.subheadline.bold())
-        if report.keyMoments.isEmpty {
-            Text("No significant mistakes at this analysis depth.")
-                .foregroundStyle(.secondary)
-        } else {
-            ForEach(report.keyMoments, id: \.ply) { moment in
-                keyMomentRow(moment)
+        Card {
+            SectionHeader(title: "Key moments")
+            if report.keyMoments.isEmpty {
+                Text("No significant mistakes at this analysis depth.")
+                    .font(.dsBody)
+                    .foregroundStyle(DesignColors.textSecondary)
+            } else {
+                VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                    ForEach(Array(report.keyMoments.enumerated()), id: \.element.ply) { offset, moment in
+                        if offset > 0 { Divider() }
+                        keyMomentRow(moment)
+                    }
+                }
             }
         }
 
-        Divider()
-        Text("Takeaways").font(.subheadline.bold())
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(report.takeaways, id: \.self) { takeaway in
-                Text("- \(takeaway)")
+        Card {
+            SectionHeader(title: "Takeaways")
+            VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                ForEach(report.takeaways, id: \.self) { takeaway in
+                    Text("- \(takeaway)").font(.dsBody)
+                }
+            }
+        }
+
+        if isCoachEnabled {
+            Card {
+                SectionHeader(title: "Coach summary")
+                if let narration = coachService.summaryNarration {
+                    narrationView(narration)
+                } else if coachService.isGenerating {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Coach is writing…").foregroundStyle(DesignColors.textSecondary)
+                    }
+                }
             }
         }
     }
 
+    /// A per-player row of classification chips that must never wrap
+    /// mid-word or wrap a chip's own text, even in the narrowest (260pt)
+    /// right-pane width (fact 3) - an adaptive grid wraps whole chips onto a
+    /// second line instead of letting `HStack` overflow.
     private func classificationRow(name: String, counts: [ClassificationCount]) -> some View {
-        HStack(spacing: 6) {
-            Text(name).font(.callout.bold())
-            ForEach(counts, id: \.classification) { count in
-                HStack(spacing: 2) {
-                    ClassificationBadge(classification: count.classification)
-                    Text("\(count.count)").font(.caption)
+        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+            Text(name).font(.dsBody.weight(.semibold))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 58), spacing: DesignSpacing.xs)], alignment: .leading, spacing: DesignSpacing.xs) {
+                ForEach(counts, id: \.classification) { count in
+                    Chip("\(count.classification.shortAbbreviation) \(count.count)", color: count.classification.color)
                 }
             }
         }
@@ -144,31 +159,42 @@ struct GameReportView: View {
 
     @ViewBuilder
     private func keyMomentRow(_ moment: KeyMoment) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
             Button {
                 guard moment.ply < viewModel.moveIndices.count else { return }
                 viewModel.jump(to: viewModel.moveIndices[moment.ply])
             } label: {
-                Text("\(moveNumberLabel(ply: moment.ply)) \(moment.evalSwing.playedSAN)\n\(momentSummary(moment))")
-                    .font(.callout)
-                    .foregroundStyle(moment.evalSwing.classification.color)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
+                HStack(spacing: DesignSpacing.xs) {
+                    Text(moveNumberLabel(ply: moment.ply))
+                        .font(.dsNotation)
+                        .foregroundStyle(DesignColors.textSecondary)
+                    Text(moment.evalSwing.playedSAN)
+                        .font(.dsNotation.weight(.semibold))
+                    Chip(moment.evalSwing.classification.shortAbbreviation, color: moment.evalSwing.classification.color)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moment.evalSwing.playedSAN). \(momentSummary(moment))")
+            .contextMenu {
+                Button("Ask the coach about this moment") {
+                    onAskCoach(moment.ply)
+                }
+            }
+
+            Text(momentSummary(moment))
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
 
             if isCoachEnabled {
                 if let narration = coachService.narrationsByPly[moment.ply] {
                     narrationView(narration)
-                        .padding(.leading, 8)
                 } else if coachService.isGenerating {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DesignSpacing.xs) {
                         ProgressView().controlSize(.mini)
-                        Text("Coach is writing…").font(.caption).foregroundStyle(.secondary)
+                        Text("Coach is writing…").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary)
                     }
-                    .padding(.leading, 8)
                 }
             }
         }
@@ -196,5 +222,12 @@ struct GameReportView: View {
         let moveNumber = (ply + 1) / 2
         let isWhite = ply % 2 == 1
         return isWhite ? "\(moveNumber)." : "\(moveNumber)..."
+    }
+
+    /// Bare move number (no trailing "." / "...") for mid-sentence use, so
+    /// the opening-deviation sentence doesn't collide two periods together
+    /// (fact 11: "Left book on move 3. with Nc3.").
+    private func bareMoveNumber(ply: Int) -> String {
+        String((ply + 1) / 2)
     }
 }

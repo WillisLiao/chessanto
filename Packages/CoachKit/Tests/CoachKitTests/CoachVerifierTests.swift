@@ -236,6 +236,40 @@ struct CoachVerifierTests {
         #expect(verdict == .verified("Best is \(sans.first!)."))
     }
 
+    @Test func continuationAfterCitedProposalReconstructsItsTrustedAnchor() async throws {
+        let input = try loadFixtureInput()
+        let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        guard let moment = report?.keyMoments.first else {
+            Issue.record("fixture has no key moment")
+            return
+        }
+        let preMovePly = input.plies[moment.ply - 1]
+        let proposalUCI = CoachVerifier.legalUCILine(tokens: ["O-O"], startingFEN: preMovePly.fen) ?? []
+        let proposalFEN = ChessGame.replayLine(fromUCI: proposalUCI, startingFEN: preMovePly.fen).last?.resultingFEN ?? ""
+        let continuationTokens = ["O-O-O", "cxd5", "Bxc5", "Nxc5", "Qd4"]
+        let continuationUCI = CoachVerifier.legalUCILine(tokens: continuationTokens, startingFEN: proposalFEN) ?? []
+        let continuationFEN = ChessGame.replayLine(fromUCI: continuationUCI, startingFEN: proposalFEN).last?.resultingFEN ?? ""
+        let executor = StubExecutor(result: EngineToolResult(
+            resultingFEN: continuationFEN,
+            scoreCentipawnsWhitePerspective: 30,
+            mateInWhitePerspective: nil,
+            evalLabel: "+0.3",
+            principalVariationUCI: [],
+            principalVariationSAN: [],
+            depth: 9
+        ))
+        let context = CoachVerifier.Context(
+            anchors: [anchor(for: input, plyIndex: moment.ply - 1)],
+            knownEvalsCentipawns: preMovePly.lines.compactMap(\.scoreCentipawns),
+            engineExecutor: executor
+        )
+        let text = "If you play O-O, the evaluation is +0.3. The continuation O-O-O cxd5 Bxc5 Nxc5 Qd4 stays solid."
+
+        let verdict = await CoachVerifier.verify(text: text, context: context)
+
+        #expect(verdict == .verified(text))
+    }
+
     // MARK: - Fresh verification via the engine tool
 
     private struct StubExecutor: EngineToolExecutor {

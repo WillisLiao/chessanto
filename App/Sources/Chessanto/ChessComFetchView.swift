@@ -23,12 +23,13 @@ struct ChessComFetchView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
+            Divider().overlay(DesignColors.hairline)
             content
-            Divider()
+            Divider().overlay(DesignColors.hairline)
             footer
         }
         .frame(minWidth: 520, minHeight: 420)
+        .background(DesignColors.surface0)
         .onAppear { username = library.chessComUsername }
         .alert("Couldn't fetch from chess.com", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
@@ -39,8 +40,11 @@ struct ChessComFetchView: View {
 
     private var header: some View {
         HStack {
+            Text("Fetch from chess.com").font(.dsTitle).foregroundStyle(DesignColors.textPrimary)
+            Spacer()
             TextField("chess.com username", text: $username)
                 .textFieldStyle(.roundedBorder)
+                .frame(width: 200)
                 .onSubmit { Task { await fetch() } }
             Button {
                 Task { await fetch() }
@@ -51,6 +55,7 @@ struct ChessComFetchView: View {
                     Text("Fetch")
                 }
             }
+            .buttonStyle(.dsPrimary)
             .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
         }
         .padding()
@@ -79,28 +84,32 @@ struct ChessComFetchView: View {
 
     private func gameRow(_ game: ChessComGame) -> some View {
         let imported = alreadyImportedURLs.contains(game.url)
-        return HStack {
+        return HStack(spacing: DesignSpacing.sm) {
             Button {
                 toggle(game.url)
             } label: {
                 Image(systemName: imported ? "checkmark.circle.fill" : (selection.contains(game.url) ? "checkmark.square.fill" : "square"))
+                    .foregroundStyle(imported || selection.contains(game.url) ? DesignColors.accent : DesignColors.textSecondary)
             }
             .buttonStyle(.plain)
             .disabled(imported)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(game.white.username) (\(game.white.rating)) vs \(game.black.username) (\(game.black.rating))")
-                    .font(.body)
-                HStack(spacing: 6) {
+                    .font(.dsBody)
+                    .foregroundStyle(DesignColors.textPrimary)
+                HStack(spacing: DesignSpacing.xs) {
                     Text(game.white.result)
+                    Text("·")
                     Text(game.timeControl)
+                    Text("·")
                     Text(game.endTime, style: .date)
                     if imported {
-                        Text("Already imported").foregroundStyle(.secondary)
+                        Chip("Imported", color: DesignColors.accent)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
             }
         }
         .opacity(imported ? 0.6 : 1)
@@ -111,17 +120,24 @@ struct ChessComFetchView: View {
     private var footer: some View {
         HStack {
             Text(footerSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
             Spacer()
             Button("Cancel", role: .cancel) { dismiss() }
-            Button("Import \(selection.count) Game\(selection.count == 1 ? "" : "s")") {
+            Button(importButtonLabel) {
                 importSelected()
             }
+            .buttonStyle(.dsPrimary)
             .keyboardShortcut(.defaultAction)
             .disabled(selection.isEmpty)
         }
         .padding()
+    }
+
+    /// Never reads "Import 0 Games" (fact 11) - the count only appears once
+    /// there's something selected to import.
+    private var importButtonLabel: String {
+        selection.isEmpty ? "Import selected" : "Import \(selection.count) Game\(selection.count == 1 ? "" : "s")"
     }
 
     private var footerSummary: String {

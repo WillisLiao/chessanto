@@ -30,8 +30,10 @@ struct OnboardingView: View {
                 case .coach: coachPage
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding()
+
+            pageProgress
 
             Divider()
 
@@ -42,36 +44,94 @@ struct OnboardingView: View {
                 Spacer()
                 Button("Skip") { finish() }
                 Button(page == .coach ? "Finish" : "Next") { advance() }
+                    .buttonStyle(.dsPrimary)
                     .keyboardShortcut(.defaultAction)
             }
             .padding()
         }
-        .frame(width: 480, height: 420)
+        .frame(width: 480, height: 460)
+        .background(DesignColors.surface0)
         .onAppear {
             username = library.chessComUsername
         }
     }
 
+    private var pageProgress: some View {
+        HStack(spacing: DesignSpacing.sm) {
+            ForEach(Page.allCases, id: \.self) { candidate in
+                Circle()
+                    .fill(candidate == page ? DesignColors.accent : DesignColors.hairline)
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .padding(.bottom, DesignSpacing.sm)
+        .accessibilityLabel("Page \(page.rawValue + 1) of \(Page.allCases.count)")
+    }
+
     private var welcomePage: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "checkerboard.rectangle")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("Welcome to Chessanto")
-                .font(.title.bold())
-            Text("Import your chess.com or PGN games, analyze them with a local chess engine, and get a coached report explaining your key moments - all running on this Mac.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: DesignSpacing.xl) {
+            HStack(spacing: DesignSpacing.lg) {
+                ChessantoEmblem(size: 112)
+
+                VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                    Text("Welcome to Chessanto")
+                        .font(.dsTitle)
+                        .foregroundStyle(DesignColors.textPrimary)
+                    Text("Turn your own games into clear, trustworthy lessons - privately on this Mac.")
+                        .font(.dsBody)
+                        .foregroundStyle(DesignColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: DesignSpacing.md) {
+                welcomeBenefit(
+                    icon: "lock.shield.fill",
+                    title: "Private by default",
+                    detail: "Your games and analysis stay on this Mac."
+                )
+                welcomeBenefit(
+                    icon: "checkmark.seal.fill",
+                    title: "Engine-verified guidance",
+                    detail: "Coaching stays grounded in legal moves and real evaluation."
+                )
+                welcomeBenefit(
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "Built for improvement",
+                    detail: "See the moments and patterns that will help your next game."
+                )
+            }
+        }
+    }
+
+    private func welcomeBenefit(icon: String, title: String, detail: String) -> some View {
+        HStack(spacing: DesignSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(DesignColors.accent)
+                .frame(width: 28, height: 28)
+                .background(DesignColors.accent.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.dsBody.weight(.semibold))
+                    .foregroundStyle(DesignColors.textPrimary)
+                Text(detail)
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+            }
         }
     }
 
     private var usernamePage: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DesignSpacing.lg) {
             Text("Your chess.com username")
-                .font(.title2.bold())
+                .font(.dsTitle)
+                .foregroundStyle(DesignColors.textPrimary)
             Text("Optional - PGN-only import works fine without one. If you set it, you can fetch your recent games straight from chess.com.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
             ChessComUsernameField(username: $username) { validated in
                 library.saveChessComUsername(validated)
             }
@@ -79,12 +139,13 @@ struct OnboardingView: View {
     }
 
     private var ratingBandPage: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DesignSpacing.lg) {
             Text("Teaching level")
-                .font(.title2.bold())
+                .font(.dsTitle)
+                .foregroundStyle(DesignColors.textPrimary)
             Text("How the coach pitches its explanations. You can change this any time in Settings.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
             Picker("Teaching level", selection: $ratingBand) {
                 Text("Adaptive (recommended)").tag("adaptive")
                 Text("Beginner").tag("beginner")
@@ -97,15 +158,14 @@ struct OnboardingView: View {
     }
 
     private var coachPage: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DesignSpacing.lg) {
             Text("Verified Coach")
-                .font(.title2.bold())
+                .font(.dsTitle)
+                .foregroundStyle(DesignColors.textPrimary)
             Text("Optional local AI narration on top of the rule-based report, grounded so it never states an unverified move or evaluation. Needs Ollama running locally.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Form {
-                CoachSetupView(coachEnabled: $coachEnabled, ratingBand: $ratingBand, coachModel: $coachModel, showsTeachingLevel: false)
-            }
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
+            CoachSetupView(coachEnabled: $coachEnabled, ratingBand: $ratingBand, coachModel: $coachModel, showsTeachingLevel: false)
         }
     }
 

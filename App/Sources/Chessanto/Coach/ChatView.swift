@@ -3,54 +3,41 @@ import CoachKit
 import Persistence
 import SwiftUI
 
-/// The "Chat" tab of the game replay pane (M7 PLAN.md's Position chat):
-/// legality precheck, engine-tool loop, and `CoachVerifier` gate all happen
-/// in `CoachChat`/`CoachService` - this view is purely presentation. A
-/// `List`-based message view (M5's AX lesson: `List` rows expose text where
-/// bare `ScrollView`/`VStack` did not); every interactive element is a real
-/// native control.
+/// The Coach slide-over panel (UI/UX redesign step 11, replacing M7's
+/// third-tab "Chat"): legality precheck, engine-tool loop, and
+/// `CoachVerifier` gate all happen in `CoachChat`/`CoachService` - this view
+/// is purely presentation. A `List`-based message view (M5's AX lesson:
+/// `List` rows expose text where bare `ScrollView`/`VStack` did not); every
+/// interactive element is a real native control.
 struct ChatView: View {
     @ObservedObject var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
     @EnvironmentObject private var coachService: CoachService
     let store: GameStore
+    var onClose: (() -> Void)?
 
     @State private var inputText = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(viewModel.chatPositionLabel)
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if !coachService.chatMessages.isEmpty {
-                    Button("Clear") {
-                        Task { await clearChat() }
-                    }
-                    .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 4)
+            header
 
             if isCoachAvailable {
                 messageList
                 starterChips
                 if coachService.isSendingChatMessage {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DesignSpacing.xs) {
                         ProgressView().controlSize(.mini)
-                        Text("Coach is thinking…").font(.caption).foregroundStyle(.secondary)
+                        Text("Coach is thinking…").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary)
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, DesignSpacing.sm)
                 }
                 inputBar
             } else {
                 offlineState
             }
         }
+        .background(DesignColors.surface0)
         .task(id: viewModel.id) {
             await loadChatIfNeeded()
         }
@@ -58,6 +45,68 @@ struct ChatView: View {
             if coachService.health == .unknown {
                 await coachService.checkHealth()
             }
+        }
+    }
+
+    // MARK: - Header (position control)
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+            HStack {
+                Text("Coach").font(.dsSectionHeader).foregroundStyle(DesignColors.textPrimary)
+                Spacer()
+                if let onClose {
+                    Button {
+                        onClose()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(DesignColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Close Coach panel")
+                }
+            }
+
+            HStack(spacing: DesignSpacing.xs) {
+                Image(systemName: viewModel.isChatPinned ? "pin.fill" : "circle.fill")
+                    .font(.system(size: 6))
+                    .foregroundStyle(viewModel.isChatPinned ? DesignColors.accent : DesignColors.textSecondary)
+                Text(
+                    viewModel.isChatPinned
+                        ? "Pinned to \(viewModel.chatPositionLabel)"
+                        : "Following board · \(viewModel.chatPositionLabel)"
+                )
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                Spacer()
+                Button {
+                    if viewModel.isChatPinned {
+                        viewModel.unpinChat()
+                    } else {
+                        viewModel.pinChat(to: viewModel.currentIndex)
+                    }
+                } label: {
+                    Label(viewModel.isChatPinned ? "Pinned" : "Pin", systemImage: viewModel.isChatPinned ? "pin.slash" : "pin")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityLabel(viewModel.isChatPinned ? "Unpin position" : "Pin to current position")
+            }
+
+            if !coachService.chatMessages.isEmpty {
+                Button("Clear chat") {
+                    Task { await clearChat() }
+                }
+                .font(.dsSecondary)
+                .buttonStyle(.plain)
+                .foregroundStyle(DesignColors.textSecondary)
+            }
+        }
+        .padding(DesignSpacing.sm)
+        .background(DesignColors.surface1)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DesignColors.hairline).frame(height: 1)
         }
     }
 
@@ -75,7 +124,7 @@ struct ChatView: View {
 
     @ViewBuilder
     private var offlineState: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
             if coachService.isIntel {
                 Text("Position chat needs the AI coach, which defaults to off on Intel Macs.")
             } else if !isCoachEnabled {
@@ -89,8 +138,8 @@ struct ChatView: View {
                 Task { await coachService.checkHealth() }
             }
         }
-        .font(.callout)
-        .foregroundStyle(.secondary)
+        .font(.dsBody)
+        .foregroundStyle(DesignColors.textSecondary)
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -101,37 +150,51 @@ struct ChatView: View {
         List(coachService.chatMessages, id: \.id) { message in
             messageRow(message)
                 .listRowSeparator(.hidden)
+                .listRowBackground(DesignColors.surface0)
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(DesignColors.surface0)
     }
 
     @ViewBuilder
     private func messageRow(_ message: ChatMessageRecord) -> some View {
         let isUser = message.role == "user"
         VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
-            Text(message.content)
-                .font(.callout)
-                .padding(8)
-                .background(isUser ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            HStack(spacing: 6) {
+            markdownText(message.content)
+                .font(.dsBody)
+                .padding(DesignSpacing.sm)
+                .background(isUser ? DesignColors.accent.opacity(0.16) : DesignColors.surface1)
+                .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+            HStack(spacing: DesignSpacing.xs) {
                 if let source = message.source {
                     Text(sourceCaption(source))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.textSecondary)
                 }
                 Button("at move \(moveLabel(plyIndex: message.plyIndex))") {
                     jump(toPly: message.plyIndex)
                 }
-                .font(.caption2)
+                .font(.dsSecondary)
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(DesignColors.accent)
                 .accessibilityIdentifier("chat-jump-\(message.id ?? 0)")
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(isUser ? "You" : "Coach"): \(message.content)")
+    }
+
+    /// Renders `**bold**`/lists rather than showing literal asterisks
+    /// (fact 4) - `AttributedString(markdown:)` handles the coach's actual
+    /// output shape (bold emphasis, simple line-based lists) without a
+    /// hand-rolled parser.
+    private func markdownText(_ content: String) -> Text {
+        if let attributed = try? AttributedString(markdown: content, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return Text(attributed)
+        }
+        return Text(content)
     }
 
     private func sourceCaption(_ source: String) -> String {
@@ -161,16 +224,16 @@ struct ChatView: View {
         let chips = starterQuestions()
         if !chips.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: DesignSpacing.xs) {
                     ForEach(chips, id: \.self) { chip in
                         Button(chip) { send(chip) }
-                            .font(.caption)
+                            .font(.dsSecondary)
                             .buttonStyle(.bordered)
                     }
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, DesignSpacing.sm)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DesignSpacing.xs)
         }
     }
 
@@ -204,9 +267,10 @@ struct ChatView: View {
                 .disabled(coachService.isSendingChatMessage)
                 .onSubmit { send(inputText) }
             Button("Send") { send(inputText) }
+                .buttonStyle(.dsPrimary)
                 .disabled(coachService.isSendingChatMessage || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(8)
+        .padding(DesignSpacing.sm)
     }
 
     // MARK: - Actions
@@ -228,7 +292,7 @@ struct ChatView: View {
             let context = viewModel.chatContext()
         else { return }
         inputText = ""
-        let plyIndex = viewModel.currentGraphPly
+        let plyIndex = viewModel.chatSubjectGraphPly
         Task {
             await coachService.sendChatMessage(
                 text: question, gameId: gameId, plyIndex: plyIndex, context: context,

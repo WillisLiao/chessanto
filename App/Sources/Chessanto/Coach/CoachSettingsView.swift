@@ -14,10 +14,11 @@ struct CoachSettingsView: View {
     @State private var coachModel = ""
 
     var body: some View {
-        Form {
+        ScrollView {
             CoachSetupView(coachEnabled: $coachEnabled, ratingBand: $ratingBand, coachModel: $coachModel)
+                .padding()
         }
-        .padding()
+        .background(DesignColors.surface0)
         .frame(minWidth: 460, minHeight: 360)
         .onAppear { load() }
         .onChange(of: coachEnabled) { _, newValue in save(coachEnabled: newValue) }

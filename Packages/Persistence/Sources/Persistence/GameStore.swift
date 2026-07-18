@@ -127,6 +127,18 @@ public final class GameStore: Sendable {
         }
     }
 
+    /// IDs of games that have at least one saved analysis row - used by the
+    /// sidebar's "analyzed" marker. A single distinct-gameId query, not a
+    /// per-game round trip.
+    public func analyzedGameIDs() async throws -> Set<Int64> {
+        try await dbQueue.read { db in
+            let ids = try Int64.fetchAll(
+                db, sql: "SELECT DISTINCT gameId FROM analysis"
+            )
+            return Set(ids)
+        }
+    }
+
     public func deleteAnalysis(gameId: Int64) async throws {
         _ = try await dbQueue.write { db in
             try AnalysisRecord

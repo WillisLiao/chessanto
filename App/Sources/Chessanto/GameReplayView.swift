@@ -1,6 +1,7 @@
 import SwiftUI
 import ChessCore
 import Persistence
+import AnalysisKit
 
 struct GameReplayView: View {
     @StateObject private var viewModel: GameReplayViewModel
@@ -14,12 +15,18 @@ struct GameReplayView: View {
     @State private var selectedSquare: BoardSquare?
     @State private var rightPaneTab: RightPaneTab = .moves
     @State private var flipped = false
+    @State private var isCoachOpen = false
 
     private enum RightPaneTab: String, CaseIterable {
         case moves = "Moves"
         case report = "Report"
-        case chat = "Chat"
     }
+
+    /// Below this window width the Coach panel slides over the Moves/Report
+    /// pane instead of docking as a third column (decision A) - board(420)
+    /// + moves/report(~300) + coach(~320) needs roughly this much room to
+    /// coexist comfortably.
+    private static let coachDockWidthThreshold: CGFloat = 1100
 
     init(game: GameRecord, store: GameStore) {
         self.game = game
@@ -28,69 +35,37 @@ struct GameReplayView: View {
     }
 
     var body: some View {
-        HSplitView {
-            VStack {
-                HStack(alignment: .top, spacing: 8) {
-                    EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
-                    BoardView(
-                        position: viewModel.position,
-                        lastMove: viewModel.lastMove,
-                        flipped: flipped,
-                        theme: library.boardTheme,
-                        selectedSquare: selectedSquare,
-                        legalDestinations: legalDestinations,
-                        onSquareTapped: handleSquareTapped
-                    )
-                }
-                .padding()
-                if viewModel.isExploringVariation {
-                    Button("Back to game") { viewModel.backToGame() }
-                        .font(.caption)
-                }
-                controls
-                EvalGraphView(
-                    series: viewModel.evalGraphSeries,
-                    currentPly: viewModel.currentGraphPly
-                ) { ply in
-                    guard ply >= 0, ply < viewModel.moveIndices.count else { return }
-                    viewModel.jump(to: viewModel.moveIndices[ply])
-                }
-                .padding(.horizontal)
-                if let fen = viewModel.currentFEN {
-                    LinesPanelView(lines: engineService.liveEvaluation?.lines ?? [], fen: fen) { uciMoves in
-                        Task { await viewModel.adoptLine(sanMoves: ChessGame.sanLine(fromUCI: uciMoves, startingFEN: fen)) }
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 4)
-                }
-            }
-            .frame(minWidth: 420)
+        GeometryReader { proxy in
+            let isWide = proxy.size.width >= Self.coachDockWidthThreshold
+            ZStack(alignment: .trailing) {
+                HSplitView {
+                    boardColumn
+                        .frame(minWidth: 420)
 
-            VStack(spacing: 0) {
-                accuracySummary
-                Picker("", selection: $rightPaneTab) {
-                    ForEach(RightPaneTab.allCases, id: \.self) { tab in
-                        Text(tab.rawValue).tag(tab)
+                    movesReportColumn
+                        .frame(minWidth: 260, maxWidth: 340)
+
+                    if isCoachOpen && isWide {
+                        coachColumn
+                            .frame(minWidth: 280, maxWidth: 380)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 8)
-                .padding(.bottom, 4)
 
-                switch rightPaneTab {
-                case .moves:
-                    MoveListView(viewModel: viewModel)
-                case .report:
-                    GameReportView(viewModel: viewModel)
-                case .chat:
-                    ChatView(viewModel: viewModel, store: store)
+                if isCoachOpen && !isWide {
+                    coachColumn
+                        .frame(width: min(340, proxy.size.width * 0.9))
+                        .background(DesignColors.surface0)
+                        .overlay(alignment: .leading) {
+                            Rectangle().fill(DesignColors.hairline).frame(width: 1)
+                        }
+                        .shadow(color: .black.opacity(0.18), radius: 12, x: -2, y: 0)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(1)
                 }
             }
-            .frame(minWidth: 260, maxWidth: 340)
+            .animation(.easeInOut(duration: 0.2), value: isCoachOpen)
         }
         .navigationTitle("\(game.white) vs \(game.black)")
-        .toolbar { analysisToolbar }
         .alert("Load error", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -108,6 +83,9 @@ struct GameReplayView: View {
             case .left: viewModel.stepBackward()
             default: break
             }
+        }
+        .onExitCommand {
+            if isCoachOpen { isCoachOpen = false }
         }
         .onAppear {
             quality = library.analysisQuality
@@ -129,6 +107,121 @@ struct GameReplayView: View {
     private func showLivePosition() {
         guard let fen = viewModel.currentFEN else { return }
         engineService.showPosition(fen: fen)
+    }
+
+    // MARK: - Columns
+
+    private var boardColumn: some View {
+        VStack {
+            HStack(alignment: .top, spacing: DesignSpacing.md) {
+                EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
+                BoardView(
+                    position: viewModel.position,
+                    lastMove: viewModel.lastMove,
+                    flipped: flipped,
+                    theme: library.boardTheme,
+                    selectedSquare: selectedSquare,
+                    legalDestinations: legalDestinations,
+                    arrows: suggestedMoveArrows,
+                    onSquareTapped: handleSquareTapped
+                )
+            }
+            .padding()
+            if viewModel.isExploringVariation {
+                Button("Back to game") { viewModel.backToGame() }
+                    .font(.caption)
+            }
+            controls
+            EvalGraphView(
+                series: viewModel.evalGraphSeries,
+                currentPly: viewModel.currentGraphPly,
+                keyMoments: viewModel.report?.keyMoments ?? []
+            ) { ply in
+                guard ply >= 0, ply < viewModel.moveIndices.count else { return }
+                viewModel.jump(to: viewModel.moveIndices[ply])
+            }
+            .padding(.horizontal)
+            if let fen = viewModel.currentFEN {
+                LinesPanelView(lines: engineService.liveEvaluation?.lines ?? [], fen: fen) { uciMoves in
+                    Task { await viewModel.adoptLine(sanMoves: ChessGame.sanLine(fromUCI: uciMoves, startingFEN: fen)) }
+                }
+                .padding(.horizontal)
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private var movesReportColumn: some View {
+        VStack(spacing: 0) {
+            analysisControls
+            accuracySummary
+            HStack(spacing: DesignSpacing.sm) {
+                Picker("", selection: $rightPaneTab) {
+                    ForEach(RightPaneTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                coachToggleButton
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
+
+            switch rightPaneTab {
+            case .moves:
+                MoveListView(viewModel: viewModel, onAskCoach: askCoach(aboutPly:))
+            case .report:
+                GameReportView(viewModel: viewModel, onAskCoach: askCoach(aboutPly:))
+            }
+        }
+    }
+
+    private var coachColumn: some View {
+        ChatView(viewModel: viewModel, store: store) {
+            isCoachOpen = false
+        }
+    }
+
+    /// The single, always-available Coach control (decision A) - toggles
+    /// the slide-over/dock panel without pinning; opening this way leaves
+    /// the subject following the board (default mode).
+    private var coachToggleButton: some View {
+        Button {
+            isCoachOpen.toggle()
+        } label: {
+            Label("Coach", systemImage: isCoachOpen ? "bubble.left.fill" : "bubble.left")
+                .font(.dsSecondary.weight(.semibold))
+                .foregroundStyle(isCoachOpen ? DesignColors.accent : DesignColors.textSecondary)
+                .padding(.horizontal, DesignSpacing.sm)
+                .padding(.vertical, 5)
+                .background(isCoachOpen ? DesignColors.accent.opacity(0.13) : DesignColors.surface1)
+                .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isCoachOpen ? "Close Coach panel" : "Open Coach panel")
+    }
+
+    /// Opens the Coach panel pinned to a specific ply - the move-row and
+    /// Report key-moment entry points (decision A).
+    private func askCoach(aboutPly ply: Int) {
+        guard ply < viewModel.moveIndices.count else { return }
+        viewModel.pinChat(to: viewModel.moveIndices[ply])
+        isCoachOpen = true
+    }
+
+    /// The live engine's top line's first move, drawn as a board arrow -
+    /// only trusted when its FEN matches the displayed position (same rule
+    /// as the eval bar/graph, so scrubbing never shows a stale suggestion).
+    private var suggestedMoveArrows: [(from: BoardSquare, to: BoardSquare)] {
+        guard let fen = viewModel.currentFEN, let live = engineService.liveEvaluation, live.fen == fen,
+            let topLine = live.lines.first(where: { ($0.multiPVRank ?? 1) == 1 }),
+            let uciMove = topLine.principalVariation.first, uciMove.count >= 4,
+            let from = BoardSquare(algebraic: String(uciMove.prefix(2))),
+            let to = BoardSquare(algebraic: String(uciMove.dropFirst(2).prefix(2)))
+        else { return [] }
+        return [(from: from, to: to)]
     }
 
     private var legalDestinations: Set<BoardSquare> {
@@ -164,9 +257,16 @@ struct GameReplayView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var analysisToolbar: some ToolbarContent {
-        ToolbarItemGroup {
+    /// Analysis controls (quality picker, Analyze/Re-analyze, engine status)
+    /// live at the top of the right pane rather than the window toolbar.
+    /// The unified toolbar's native title reserves nearly all its width for
+    /// the window/game title text, forcing anything placed there behind the
+    /// ">>" overflow chevron at every supported width (fact 1 in the
+    /// redesign plan, which also bit the sidebar's toolbar) - the right
+    /// pane's own fixed 260-340pt column has no such competition.
+    @ViewBuilder
+    private var analysisControls: some View {
+        Group {
             if let reason = engineService.unavailableReason {
                 Text(reason)
                     .font(.caption)
@@ -176,25 +276,30 @@ struct GameReplayView: View {
                     .disabled(true)
                     .accessibilityLabel("Starting engine")
             } else if engineService.isAnalyzing, let progress = engineService.batchProgress {
-                ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
-                    .frame(width: 100)
-                Button("Cancel") {
-                    analysisTask?.cancel()
-                }
-            } else {
-                Picker("Quality", selection: $quality) {
-                    ForEach(AnalysisQuality.allCases) { quality in
-                        Text(quality.label).tag(quality)
+                HStack {
+                    ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
+                    Button("Cancel") {
+                        analysisTask?.cancel()
                     }
                 }
-                .pickerStyle(.menu)
-                .frame(width: 110)
+            } else {
+                HStack {
+                    Picker("Quality", selection: $quality) {
+                        ForEach(AnalysisQuality.allCases) { quality in
+                            Text(quality.label).tag(quality)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
 
-                Button(viewModel.isAnalyzed ? "Re-analyze" : "Analyze") {
-                    startAnalysis(reanalyze: viewModel.isAnalyzed)
+                    Button(viewModel.isAnalyzed ? "Re-analyze" : "Analyze") {
+                        startAnalysis(reanalyze: viewModel.isAnalyzed)
+                    }
                 }
             }
         }
+        .padding(.horizontal, DesignSpacing.md)
+        .padding(.top, DesignSpacing.sm)
     }
 
     private func startAnalysis(reanalyze: Bool) {
@@ -205,6 +310,7 @@ struct GameReplayView: View {
             } else {
                 await viewModel.analyze(engineService: engineService, quality: quality)
             }
+            library.reload()
         }
     }
 
@@ -222,31 +328,69 @@ struct GameReplayView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 16) {
-            Button {
-                viewModel.stepBackward()
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(!viewModel.canStepBackward)
-            .accessibilityLabel("Previous move")
+        HStack(spacing: DesignSpacing.md) {
+            HStack(spacing: 1) {
+                Button {
+                    viewModel.jump(to: viewModel.moveIndices[0])
+                } label: {
+                    Image(systemName: "backward.end.fill")
+                        .padding(DesignSpacing.sm)
+                }
+                .disabled(!viewModel.canStepBackward)
+                .accessibilityLabel("Jump to start")
 
-            Button {
-                viewModel.stepForward()
-            } label: {
-                Image(systemName: "chevron.right")
+                Button {
+                    viewModel.stepBackward()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .padding(DesignSpacing.sm)
+                }
+                .disabled(!viewModel.canStepBackward)
+                .accessibilityLabel("Previous move")
+
+                Button {
+                    viewModel.stepForward()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .padding(DesignSpacing.sm)
+                }
+                .disabled(!viewModel.canStepForward)
+                .accessibilityLabel("Next move")
+
+                Button {
+                    if let last = viewModel.moveIndices.last {
+                        viewModel.jump(to: last)
+                    }
+                } label: {
+                    Image(systemName: "forward.end.fill")
+                        .padding(DesignSpacing.sm)
+                }
+                .disabled(!viewModel.canStepForward)
+                .accessibilityLabel("Jump to end")
             }
-            .disabled(!viewModel.canStepForward)
-            .accessibilityLabel("Next move")
+            .buttonStyle(.borderless)
+            .padding(.horizontal, DesignSpacing.xs)
+            .padding(.vertical, DesignSpacing.xs)
+            .background(DesignColors.surface1)
+            .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
 
             Button {
                 flipped.toggle()
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
+            .buttonStyle(.bordered)
             .accessibilityLabel("Flip board")
+
+            Button {
+                askCoach(aboutPly: viewModel.currentGraphPly)
+            } label: {
+                Label("Ask Coach", systemImage: "bubble.left.and.text.bubble.right")
+                    .font(.dsSecondary.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Ask the coach about this position")
         }
-        .buttonStyle(.bordered)
         .padding(.bottom)
     }
 
@@ -265,61 +409,125 @@ struct GameReplayView: View {
     }
 }
 
+/// Two-column notation table (move number | White | Black) - the standard
+/// analysis-board layout, replacing the single tall column of M1-M8 (also
+/// closes an M3 debt: variation rows sit inline in the same table).
+/// Classification stops being a full capsule on every move (visual noise on
+/// a 55-ply game); it's a quiet colored dot inline, with a chip reserved for
+/// anything worth a second look (inaccuracy and worse, plus brilliancies).
 private struct MoveListView: View {
     @ObservedObject var viewModel: GameReplayViewModel
+    /// Opens the Coach panel pinned to a ply - the move-row entry point
+    /// (decision A), wired from a right-click/hover context menu.
+    let onAskCoach: (Int) -> Void
+
+    private var pairs: [(number: Int, white: MoveIndex?, black: MoveIndex?)] {
+        let plies = Array(viewModel.moveIndices.dropFirst())
+        return stride(from: 0, to: plies.count, by: 2).map { i in
+            (number: i / 2 + 1, white: plies[i], black: i + 1 < plies.count ? plies[i + 1] : nil)
+        }
+    }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(viewModel.moveIndices.enumerated()), id: \.element) { position, index in
-                    if let san = viewModel.san(at: index) {
-                        Button {
-                            viewModel.jump(to: index)
-                        } label: {
-                            HStack {
-                                if position % 2 == 1 {
-                                    Text("\(position / 2 + 1).")
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text(san)
-                                Spacer()
-                                if let classification = viewModel.classification(at: index) {
-                                    ClassificationBadge(classification: classification)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
-                            .background(index == viewModel.currentIndex ? Color.accentColor.opacity(0.2) : .clear)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(
-                            position % 2 == 1 ? "Move \(position / 2 + 1), \(san)" : san
-                        )
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(pairs, id: \.number) { pair in
+                    HStack(spacing: 0) {
+                        Text("\(pair.number).")
+                            .font(.dsNotation)
+                            .foregroundStyle(DesignColors.textSecondary)
+                            .frame(width: 28, alignment: .leading)
+                        moveCell(pair.white)
+                        moveCell(pair.black)
                     }
 
-                    // Variations exploring off `index` - rendered even at the
-                    // start position, which has no SAN of its own.
-                    ForEach(viewModel.exploredChildren(of: index), id: \.self) { branchRoot in
+                    // Variations exploring off either move of this pair -
+                    // rendered as a full-width row under the pair.
+                    ForEach([pair.white, pair.black].compactMap { $0 }, id: \.self) { index in
+                        ForEach(viewModel.exploredChildren(of: index), id: \.self) { branchRoot in
+                            ForEach(viewModel.variationRows(startingAt: branchRoot, depth: 1), id: \.index) { row in
+                                variationRow(index: row.index, depth: row.depth)
+                            }
+                        }
+                    }
+                }
+
+                // Variations exploring off the start position.
+                if let start = viewModel.moveIndices.first {
+                    ForEach(viewModel.exploredChildren(of: start), id: \.self) { branchRoot in
                         ForEach(viewModel.variationRows(startingAt: branchRoot, depth: 1), id: \.index) { row in
                             variationRow(index: row.index, depth: row.depth)
                         }
                     }
                 }
             }
-            .padding()
+            .padding(DesignSpacing.sm)
+        }
+    }
+
+    @ViewBuilder
+    private func moveCell(_ index: MoveIndex?) -> some View {
+        if let index, let san = viewModel.san(at: index) {
+            Button {
+                viewModel.jump(to: index)
+            } label: {
+                HStack(spacing: DesignSpacing.xs) {
+                    if let classification = viewModel.classification(at: index) {
+                        classificationMark(classification)
+                    }
+                    Text(san).font(.dsNotation)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DesignSpacing.xs)
+                .padding(.vertical, 3)
+                .background(
+                    index == viewModel.currentIndex
+                        ? DesignColors.accent.opacity(0.18) : Color.clear
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(san)")
+            .contextMenu {
+                Button("Ask the coach about this move") {
+                    guard let ply = viewModel.moveIndices.firstIndex(of: index) else { return }
+                    onAskCoach(ply)
+                }
+            }
+        } else {
+            Spacer().frame(maxWidth: .infinity)
+        }
+    }
+
+    /// A quiet dot for the common cases; a chip only for moments worth a
+    /// second look (inaccuracy and worse, plus brilliancies) - the redesign
+    /// plan's "reduce their footprint" decision for the move-quality scale.
+    @ViewBuilder
+    private func classificationMark(_ classification: MoveClassification) -> some View {
+        switch classification {
+        case .best, .excellent, .good:
+            Circle().fill(classification.color).frame(width: 6, height: 6)
+        case .inaccuracy, .mistake, .blunder, .missedWin, .brilliant:
+            Chip(classification.shortAbbreviation, color: classification.color)
         }
     }
 
     private func variationRow(index: MoveIndex, depth: Int) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignSpacing.xs) {
             Button {
                 viewModel.jump(to: index)
             } label: {
                 Text(viewModel.san(at: index) ?? "")
-                    .font(.callout.italic())
+                    .font(.dsNotation.italic())
+                    .foregroundStyle(DesignColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
-                    .background(index == viewModel.currentIndex ? Color.accentColor.opacity(0.2) : .clear)
+                    .padding(.horizontal, DesignSpacing.xs)
+                    .padding(.vertical, 2)
+                    .background(
+                        index == viewModel.currentIndex
+                            ? DesignColors.accent.opacity(0.18) : Color.clear
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .buttonStyle(.plain)
 
@@ -328,7 +536,7 @@ private struct MoveListView: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignColors.textSecondary)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("delete-variation-\(viewModel.san(at: index) ?? "")")

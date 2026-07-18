@@ -1,10 +1,19 @@
 import SwiftUI
+import AppKit
 
 @main
 struct ChessantoApp: App {
     @StateObject private var library = GameLibrary()
     @StateObject private var engineService = EngineService()
     @StateObject private var coachService = CoachService()
+
+    init() {
+        // Chessanto is white-forward by design (user decision, 2026-07-18) -
+        // it does not follow the system's dark mode setting. Pinning
+        // NSApp's appearance keeps native chrome (sidebar, titlebar,
+        // controls) in lockstep with the light-only DesignColors tokens.
+        NSApplication.shared.appearance = NSAppearance(named: .aqua)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +22,7 @@ struct ChessantoApp: App {
                 .environmentObject(engineService)
                 .environmentObject(coachService)
                 .frame(minWidth: 900, minHeight: 600)
+                .preferredColorScheme(.light)
                 .task {
                     await engineService.start()
                 }

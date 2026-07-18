@@ -12,52 +12,34 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(library.games, selection: $selectedGameID) { game in
-                GameRow(game: game).tag(game.id)
+            VStack(spacing: 0) {
+                List(library.games, selection: $selectedGameID) { game in
+                    GameRow(
+                        game: game,
+                        username: library.chessComUsername,
+                        isAnalyzed: game.id.map { library.analyzedGameIDs.contains($0) } ?? false,
+                        opening: game.id.flatMap { library.openingByGameID[$0] }
+                    ).tag(game.id)
+                }
+                .overlay {
+                    if library.games.isEmpty {
+                        ContentUnavailableView(
+                            "No games yet",
+                            systemImage: "square.stack.3d.up.slash",
+                            description: Text("Import a PGN file or drop one here to get started.")
+                        )
+                    }
+                }
+                sidebarBottomBar
             }
             .navigationTitle("Games")
-            .toolbar {
-                ToolbarItem {
-                    Button {
-                        isShowingDashboard = true
-                    } label: {
-                        Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
-                    }
-                }
-                ToolbarItem {
-                    Button {
-                        isShowingChessComFetch = true
-                    } label: {
-                        Label("Fetch from chess.com", systemImage: "globe")
-                    }
-                }
-                ToolbarItem {
-                    Button {
-                        isShowingImporter = true
-                    } label: {
-                        Label("Import PGN", systemImage: "square.and.arrow.down")
-                    }
-                }
-            }
-            .overlay {
-                if library.games.isEmpty {
-                    ContentUnavailableView(
-                        "No games yet",
-                        systemImage: "square.stack.3d.up.slash",
-                        description: Text("Import a PGN file or drop one here to get started.")
-                    )
-                }
-            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
             if let selectedGameID, let game = library.games.first(where: { $0.id == selectedGameID }) {
                 GameReplayView(game: game, store: library.store)
                     .id(game.id)
             } else {
-                ContentUnavailableView(
-                    "Select a game",
-                    systemImage: "checkerboard.rectangle",
-                    description: Text("Choose a game from the sidebar to replay and analyze it.")
-                )
+                emptySelectionView
             }
         }
         .onDrop(of: [.text, .pgn], isTargeted: $isTargeted) { providers in
@@ -86,6 +68,89 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(library.errorMessage ?? "")
+        }
+    }
+
+    private var emptySelectionView: some View {
+        ZStack {
+            DesignColors.surface0.ignoresSafeArea()
+
+            VStack(spacing: DesignSpacing.lg) {
+                ChessantoEmblem(size: 104)
+
+                VStack(spacing: DesignSpacing.xs) {
+                    Text(library.games.isEmpty ? "Your chess journey starts here" : "Select a game")
+                        .font(.dsTitle)
+                        .foregroundStyle(DesignColors.textPrimary)
+
+                    Text(
+                        library.games.isEmpty
+                            ? "Import a game and Chessanto will turn the engine's numbers into moments you can learn from."
+                            : "Choose a game from the sidebar to replay, analyze, and ask the Coach about any position."
+                    )
+                    .font(.dsBody)
+                    .foregroundStyle(DesignColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 390)
+                }
+
+                HStack(spacing: DesignSpacing.sm) {
+                    Button("Import PGN…") {
+                        isShowingImporter = true
+                    }
+                    .buttonStyle(.dsPrimary)
+
+                    Button("Fetch from chess.com…") {
+                        isShowingChessComFetch = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(DesignSpacing.xl)
+        }
+    }
+
+    /// Sidebar-bottom action bar - Progress and Add-game live here instead of
+    /// the window toolbar. The unified toolbar's native title reserves
+    /// nearly all its width for the window title text, forcing anything
+    /// placed there behind the ">>" overflow chevron at every supported
+    /// width (fact 1 in the redesign plan); the sidebar-bottom bar is the
+    /// plan's own documented fallback for exactly this. Import PGN in
+    /// particular must never be hidden behind an overflow menu again.
+    private var sidebarBottomBar: some View {
+        HStack(spacing: DesignSpacing.sm) {
+            Button {
+                isShowingDashboard = true
+            } label: {
+                Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+                    .labelStyle(.iconOnly)
+            }
+            .help("Progress")
+
+            Spacer()
+
+            Menu {
+                Button {
+                    isShowingImporter = true
+                } label: {
+                    Label("Import PGN…", systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    isShowingChessComFetch = true
+                } label: {
+                    Label("Fetch from chess.com…", systemImage: "globe")
+                }
+            } label: {
+                Label("Add game", systemImage: "plus")
+            }
+            .help("Add a game")
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, DesignSpacing.md)
+        .padding(.vertical, DesignSpacing.sm)
+        .background(DesignColors.surface1)
+        .overlay(alignment: .top) {
+            Rectangle().fill(DesignColors.hairline).frame(height: 1)
         }
     }
 
@@ -150,22 +215,133 @@ extension UTType {
 
 private struct GameRow: View {
     let game: GameRecord
+    let username: String
+    let isAnalyzed: Bool
+    let opening: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(game.white) vs \(game.black)")
-                .font(.headline)
-            HStack(spacing: 6) {
-                if let result = game.result {
-                    Text(result)
+        HStack(alignment: .top, spacing: DesignSpacing.sm) {
+            outcomeIndicator
+                .padding(.top, 3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(game.white).font(.dsBody.weight(.semibold)).lineLimit(1)
+                Text("vs \(game.black)").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary).lineLimit(1)
+
+                HStack(spacing: DesignSpacing.xs) {
+                    if let formattedTimeControl {
+                        Text(formattedTimeControl)
+                    }
+                    if let dateText {
+                        Text("·")
+                        Text(dateText)
+                    }
                 }
-                if let timeControl = game.timeControl {
-                    Text(timeControl)
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
+
+                if let opening {
+                    Text(opening)
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.accent)
+                        .lineLimit(1)
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            if isAnalyzed {
+                Circle()
+                    .fill(DesignColors.accent)
+                    .frame(width: 6, height: 6)
+                    .padding(.top, 5)
+                    .accessibilityLabel("Analyzed")
+            }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
+
+    /// The user's own win/loss/draw perspective when they played this game,
+    /// else the raw result.
+    @ViewBuilder
+    private var outcomeIndicator: some View {
+        let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
+        if !trimmedUsername.isEmpty, let outcome = userOutcome(username: trimmedUsername) {
+            Text(outcome.abbreviation)
+                .font(.dsSecondary.weight(.bold))
+                .frame(width: 16, height: 16)
+                .background(outcome.color.opacity(0.18))
+                .foregroundStyle(outcome.color)
+                .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(DesignColors.hairline)
+                .frame(width: 6, height: 6)
+        }
+    }
+
+    private enum Outcome {
+        case win, loss, draw
+
+        var abbreviation: String {
+            switch self {
+            case .win: return "W"
+            case .loss: return "L"
+            case .draw: return "D"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .win: return .green
+            case .loss: return .red
+            case .draw: return DesignColors.textSecondary
+            }
+        }
+    }
+
+    private func userOutcome(username: String) -> Outcome? {
+        guard let result = game.result else { return nil }
+        let isWhite = game.white.caseInsensitiveCompare(username) == .orderedSame
+        let isBlack = game.black.caseInsensitiveCompare(username) == .orderedSame
+        guard isWhite || isBlack else { return nil }
+        switch result {
+        case "1-0": return isWhite ? .win : .loss
+        case "0-1": return isBlack ? .win : .loss
+        case "1/2-1/2": return .draw
+        default: return nil
+        }
+    }
+
+    /// Turns chess.com's raw `TimeControl` seconds string ("180", "180+2",
+    /// "1/259200") into a human-readable label ("3 min", "Blitz", "Rapid").
+    private var formattedTimeControl: String? {
+        guard let raw = game.timeControl, !raw.isEmpty else { return nil }
+        let baseSeconds: Int?
+        if raw.contains("/") {
+            baseSeconds = nil
+        } else {
+            baseSeconds = Int(raw.split(separator: "+").first ?? "")
+        }
+        guard let seconds = baseSeconds else { return raw }
+        let minutes = seconds / 60
+        switch seconds {
+        case ..<180: return "\(seconds) sec"
+        case 180..<600: return "\(minutes) min · Blitz"
+        case 600..<1800: return "\(minutes) min · Rapid"
+        default: return "\(minutes) min"
+        }
+    }
+
+    private var dateText: String? {
+        guard let date = game.playedAt else { return nil }
+        return Self.dateFormatter.string(from: date)
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
 }

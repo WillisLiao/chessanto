@@ -144,16 +144,20 @@ public enum ReportText {
         return text + "."
     }
 
+    /// "White"/"Black" rather than the player's real name (user decision,
+    /// UI/UX redesign session) - color reads faster on a board-focused
+    /// report than usernames do, and stays legible for fixtures with
+    /// arbitrary online handles. Still says "you" for the user's own game.
     private static func playerLabel(report: GameReport, isWhite: Bool) -> String {
         let name = isWhite ? report.whiteName : report.blackName
         if let username = report.chessComUsername, !username.isEmpty, name.caseInsensitiveCompare(username) == .orderedSame {
             return "you"
         }
-        return name
+        return isWhite ? "White" : "Black"
     }
 
-    /// "you" takes "your"; a name takes "'s" - both grammatically correct,
-    /// a rendering choice only.
+    /// "you" takes "your"; "White"/"Black" takes "'s" - both grammatically
+    /// correct, a rendering choice only.
     private static func possessive(_ label: String) -> String {
         label == "you" ? "your" : "\(label)'s"
     }

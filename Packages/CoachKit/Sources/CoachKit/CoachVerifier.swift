@@ -120,6 +120,12 @@ public enum CoachVerifier {
             if let matchedLine = anchor.lines.first(where: { $0.principalVariationUCI.starts(with: uci) }) {
                 checkSuffixClaim(chain: chain, replay: replay, violations: &violations)
                 appendEvalSource(matchedLine, context: &context)
+                appendContinuationAnchor(
+                    from: matchedLine,
+                    consumedMoveCount: uci.count,
+                    resultingFEN: replay.last?.resultingFEN,
+                    context: &context
+                )
                 return
             }
             // Landing exactly on another known anchor's position (e.g. the
@@ -176,6 +182,27 @@ public enum CoachVerifier {
         if let mate = line.mateInWhitePerspective {
             context.knownMates.append(mate)
         }
+    }
+
+    /// Carries a trusted PV forward after a response cites its prefix.
+    /// This lets a later sentence cite the continuation from the resulting
+    /// position and makes clean re-verification equivalent to chat's
+    /// precheck-assisted verification.
+    private static func appendContinuationAnchor(
+        from line: VerifiedLine,
+        consumedMoveCount: Int,
+        resultingFEN: String?,
+        context: inout Context
+    ) {
+        guard let resultingFEN else { return }
+        context.anchors.append(Anchor(
+            fen: resultingFEN,
+            lines: [VerifiedLine(
+                scoreCentipawnsWhitePerspective: line.scoreCentipawnsWhitePerspective,
+                mateInWhitePerspective: line.mateInWhitePerspective,
+                principalVariationUCI: Array(line.principalVariationUCI.dropFirst(consumedMoveCount))
+            )]
+        ))
     }
 
     private static func checkSuffixClaim(chain: TokenChain, replay: [ReplayedMove], violations: inout [Violation]) {

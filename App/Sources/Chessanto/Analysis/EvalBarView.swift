@@ -14,19 +14,27 @@ struct EvalBarView: View {
                 Color.white
                     .frame(height: proxy.size.height * whiteFraction)
                     .animation(.easeInOut(duration: 0.25), value: whiteFraction)
+                // The advantage cap: a thin brass tick at the black/white
+                // boundary, so the side currently ahead reads at a glance
+                // instead of requiring a careful compare of the two fills.
+                Rectangle()
+                    .fill(DesignColors.accent)
+                    .frame(height: 3)
+                    .offset(y: -proxy.size.height * whiteFraction)
+                    .animation(.easeInOut(duration: 0.25), value: whiteFraction)
             }
             .overlay(alignment: (eval.map { isWhiteBetter($0) } ?? true) ? .bottom : .top) {
                 if let eval {
                     Text(eval.label)
-                        .font(.caption2.monospacedDigit())
+                        .font(.dsNotation)
                         .foregroundStyle(isWhiteBetter(eval) ? .black : .white)
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 3)
                 }
             }
         }
         .frame(width: width)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.secondary.opacity(0.4)))
+        .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+        .overlay(RoundedRectangle(cornerRadius: DesignShape.controlRadius).stroke(DesignColors.hairline, lineWidth: 1))
         .accessibilityLabel(accessibilityLabel)
     }
 
