@@ -6,12 +6,14 @@ It does not require another design interview.
 
 ## Starting point
 
-The expected starting commit is `58c1d24` (`Carry two repository-hygiene follow-ups into the phase 2 plan`).
-At planning time `main` was clean and exactly synchronized with `origin/main`.
-
 The last commit that changed product code is `3e395c1` (`Harden training card reconciliation and review UI`).
-The two commits after it are documentation only and introduced this plan.
-Every baseline measurement quoted in this document, including the test counts, was taken at `3e395c1` and is therefore still accurate.
+That is the baseline every measurement in this document was taken at, including the test counts, so those numbers remain accurate.
+
+Every commit after `3e395c1` is documentation only and exists to introduce and refine this plan.
+Do not expect the tip to be a specific hash, because the planning session committed more than once.
+The correct precondition is that `main` is clean, is exactly synchronized with `origin/main`, and contains `3e395c1` in its history with no product-code commits after it.
+
+Confirm that last part with `git log --oneline 3e395c1..HEAD --stat`, which must show changes only under `handoffs/` and `devlogs/`.
 
 Verify this before changing anything:
 
