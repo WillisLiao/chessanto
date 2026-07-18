@@ -458,9 +458,29 @@ Read this first at session start; update it at session end.
     promotion-picker UI are still absent (out of M8's PLAN.md scope, not
     a regression). Prose quality with small local models remains the
     documented M6/M7 residual risk, not something M8 could or should fix.
-- **v1 is feature-complete per PLAN.md.** Next steps are whatever the
-  user wants to prioritize post-v1 (see "Future directions" below) - not
-  yet decided.
+- **v1 is feature-complete per PLAN.md.**
+- **UI/UX audit + redesign plan complete (2026-07-18, planning only, no
+  code).** Followed `handoffs/NEXT-SESSION-UIUX.md`: built and ran the app,
+  screenshotted every screen/state live, and wrote a signed-off redesign
+  plan at `handoffs/NEXT-SESSION-UIUX-EXECUTE.md` (verified facts, fixed
+  decisions, 12 staged steps each with a gate).
+  12 real problems reproduced live (toolbar overflow hiding Import PGN even
+  at 1400px; single-column move list with a badge on every move; Report's
+  classification-count row wrapping mid-word in the narrow pane; coach
+  markdown rendering literal `**`; chat being a tab that replaces the moves
+  with no way to pin/pick the position; stark eval bar/graph; broken-looking
+  1-point dashboard chart; truncating sidebar rows with raw-seconds time
+  controls). The board artwork/themes/coordinates look good and are
+  explicitly protected.
+  **User design decisions (recorded in the plan):** light / white-forward
+  default appearance (dark still supported); brass/gilt accent (`#A6791F`
+  light / `#C9A24B` dark), **no green** (user: green would be "vandalism"),
+  near-monochrome warm chrome otherwise; the Coach becomes a slide-over
+  panel (dock-as-third-column when wide, slide-over when narrow) that never
+  hides the board/moves, with an explicit position-pin control.
+  **Next:** a Sonnet session executes `handoffs/NEXT-SESSION-UIUX-EXECUTE.md`
+  step by step. This is visual + IA only - no new features, no schema, no
+  behavior change.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 
