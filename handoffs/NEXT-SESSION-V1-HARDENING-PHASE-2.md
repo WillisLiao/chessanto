@@ -6,8 +6,12 @@ It does not require another design interview.
 
 ## Starting point
 
-The expected starting commit is `3e395c1` (`Harden training card reconciliation and review UI`).
+The expected starting commit is `58c1d24` (`Carry two repository-hygiene follow-ups into the phase 2 plan`).
 At planning time `main` was clean and exactly synchronized with `origin/main`.
+
+The last commit that changed product code is `3e395c1` (`Harden training card reconciliation and review UI`).
+The two commits after it are documentation only and introduced this plan.
+Every baseline measurement quoted in this document, including the test counts, was taken at `3e395c1` and is therefore still accurate.
 
 Verify this before changing anything:
 
