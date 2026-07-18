@@ -16,6 +16,8 @@ struct GameReplayView: View {
     @State private var rightPaneTab: RightPaneTab = .moves
     @State private var flipped = false
     @State private var isCoachOpen = false
+    @State private var isPracticeOpen = false
+    @State private var practiceSourcePly: Int?
 
     private enum RightPaneTab: String, CaseIterable {
         case moves = "Moves"
@@ -173,8 +175,19 @@ struct GameReplayView: View {
             case .moves:
                 MoveListView(viewModel: viewModel, onAskCoach: askCoach(aboutPly:))
             case .report:
-                GameReportView(viewModel: viewModel, onAskCoach: askCoach(aboutPly:))
+                GameReportView(
+                    viewModel: viewModel,
+                    onAskCoach: askCoach(aboutPly:),
+                    onPractice: openPractice(sourcePly:)
+                )
             }
+        }
+        .sheet(isPresented: $isPracticeOpen) {
+            PracticeSessionView(viewModel: practiceSessionViewModel()) {
+                rightPaneTab = .report
+            }
+            .environmentObject(library)
+            .environmentObject(engineService)
         }
     }
 
@@ -209,6 +222,25 @@ struct GameReplayView: View {
         guard ply < viewModel.moveIndices.count else { return }
         viewModel.pinChat(to: viewModel.moveIndices[ply])
         isCoachOpen = true
+    }
+
+    private func practiceSessionViewModel() -> PracticeSessionViewModel {
+        PracticeSessionViewModel(
+            store: store,
+            loadCards: {
+                let cards = try await viewModel.trainingCards()
+                guard let practiceSourcePly else { return cards }
+                return cards.filter { $0.sourcePly == practiceSourcePly }
+            },
+            evaluator: DefaultTrainingMoveEvaluator { fen, attemptedUCI in
+                try await engineService.trainingEvaluationAfterMove(fen: fen, attemptedUCI: attemptedUCI)
+            }
+        )
+    }
+
+    private func openPractice(sourcePly: Int?) {
+        practiceSourcePly = sourcePly
+        isPracticeOpen = true
     }
 
     /// The live engine's top line's first move, drawn as a board arrow -

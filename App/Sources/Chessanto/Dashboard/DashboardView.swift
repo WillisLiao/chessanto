@@ -9,6 +9,7 @@ import SwiftUI
 /// prep) - no rollup table, no new persistence.
 struct DashboardView: View {
     @EnvironmentObject private var library: GameLibrary
+    @EnvironmentObject private var engineService: EngineService
     @Environment(\.dismiss) private var dismiss
 
     private struct AccuracyPoint: Identifiable {
@@ -35,6 +36,10 @@ struct DashboardView: View {
     @State private var classificationCounts: [MoveClassificationCount] = []
     @State private var analyzedGameCount = 0
     @State private var userMatchedGameCount = 0
+    @State private var dueTrainingCards: [TrainingCardRecord] = []
+    @State private var fallbackTrainingCards: [TrainingCardRecord] = []
+    @State private var nextTrainingDueDate: Date?
+    @State private var isPracticeOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -80,6 +85,7 @@ struct DashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: DesignSpacing.md) {
                     Card { accuracyTrend }
+                    Card { nextLesson }
                     Card { mistakeThemes }
                     if points.count < 3 {
                         Card { firstTrendMilestone }
@@ -102,6 +108,54 @@ struct DashboardView: View {
             Text("Analyze \(remaining) more of your game\(remaining == 1 ? "" : "s") to reveal the direction of your accuracy.")
                 .font(.dsSecondary)
                 .foregroundStyle(DesignColors.textSecondary)
+        }
+    }
+
+    private var nextLesson: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+            SectionHeader(title: "Next lesson")
+            if dueTrainingCards.isEmpty {
+                Text("No review due right now.")
+                    .font(.dsBody)
+                    .foregroundStyle(DesignColors.textPrimary)
+                if let nextTrainingDueDate {
+                    Text("Next review: \(nextTrainingDueDate.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.textSecondary)
+                } else {
+                    Text("Practice cards appear here after you analyze a game with key moments.")
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.textSecondary)
+                }
+                Button("Practice any position") {
+                    isPracticeOpen = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(fallbackTrainingCards.isEmpty)
+            } else {
+                Text("\(dueTrainingCards.count) card\(dueTrainingCards.count == 1 ? "" : "s") ready")
+                    .font(.dsBody)
+                    .foregroundStyle(DesignColors.textPrimary)
+                Button {
+                    isPracticeOpen = true
+                } label: {
+                    Label("Review next lesson", systemImage: "target")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+        }
+        .sheet(isPresented: $isPracticeOpen) {
+            PracticeSessionView(viewModel: PracticeSessionViewModel(
+                store: library.store,
+                loadCards: { dueTrainingCards.isEmpty ? fallbackTrainingCards : dueTrainingCards },
+                evaluator: DefaultTrainingMoveEvaluator { fen, attemptedUCI in
+                    try await engineService.trainingEvaluationAfterMove(fen: fen, attemptedUCI: attemptedUCI)
+                }
+            ))
+            .environmentObject(library)
+            .environmentObject(engineService)
         }
     }
 
@@ -191,6 +245,9 @@ struct DashboardView: View {
         classificationCounts = result.classificationCounts
         analyzedGameCount = result.analyzedGameCount
         userMatchedGameCount = result.userMatchedGameCount
+        dueTrainingCards = (try? await store.dueTrainingCards()) ?? []
+        fallbackTrainingCards = (try? await store.anyTrainingCards()) ?? []
+        nextTrainingDueDate = try? await store.nextTrainingDueDate()
         isLoading = false
     }
 

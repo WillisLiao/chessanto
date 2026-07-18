@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 import Testing
 @testable import Persistence
@@ -202,6 +203,106 @@ struct PersistenceTests {
         #expect(fetched.isEmpty)
     }
 
+    @Test func trainingCardsDeduplicateBySourceGameAndPly() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+
+        let first = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 3,
+            preMoveFEN: "fen-a",
+            sideToMove: "white",
+            bestMoveUCI: "g1f3",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            explanation: "First explanation"
+        ))
+        let second = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 3,
+            preMoveFEN: "fen-b",
+            sideToMove: "white",
+            bestMoveUCI: "g1f3",
+            rankedLinesJSON: "[]",
+            classification: "blunder",
+            explanation: "Updated explanation"
+        ))
+
+        let fetched = try await store.trainingCards(gameId: gameId)
+        #expect(fetched.count == 1)
+        #expect(second.id == first.id)
+        #expect(fetched[0].preMoveFEN == "fen-b")
+        #expect(fetched[0].classification == "blunder")
+        #expect(fetched[0].explanation == "Updated explanation")
+    }
+
+    @Test func dueTrainingCardsAndAttemptsRoundTrip() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        let now = Date()
+
+        var card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 1,
+            preMoveFEN: "fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            dueAt: now.addingTimeInterval(-60)
+        ))
+        card.masteryState = "review"
+        card.consecutiveSuccesses = 1
+        card.dueAt = now.addingTimeInterval(86_400)
+        let attempt = try await store.saveTrainingAttempt(
+            TrainingAttemptRecord(
+                cardId: card.id!,
+                attemptedUCI: "e2e4",
+                evaluationLossCentipawns: 0,
+                outcome: "strong",
+                hintCount: 1
+            ),
+            updatedCard: card
+        )
+
+        let due = try await store.dueTrainingCards(now: now)
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        let nextDue = try await store.nextTrainingDueDate(after: now)
+        let updated = try await store.trainingCards(gameId: gameId)
+
+        #expect(due.isEmpty)
+        #expect(attempts.map { $0.id } == [attempt.id])
+        #expect(attempts[0].hintCount == 1)
+        #expect(updated[0].masteryState == "review")
+        #expect(updated[0].consecutiveSuccesses == 1)
+        #expect(nextDue != nil)
+    }
+
+    @Test func deletingGameCascadesToTrainingCardsAndAttempts() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 1,
+            preMoveFEN: "fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake"
+        ))
+        _ = try await store.saveTrainingAttempt(
+            TrainingAttemptRecord(cardId: card.id!, attemptedUCI: "e2e4", outcome: "strong", hintCount: 0),
+            updatedCard: card
+        )
+
+        try store.deleteGame(id: gameId)
+
+        let cards = try await store.trainingCards(gameId: gameId)
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(cards.isEmpty)
+        #expect(attempts.isEmpty)
+    }
+
     @Test func userProfileDefaultsOnFirstAccess() throws {
         let store = try GameStore()
         let profile = try store.userProfile()
@@ -263,5 +364,29 @@ struct PersistenceTests {
         #expect(profile?.hasCompletedOnboarding == false)
         #expect(profile?.analysisQuality == "standard")
         #expect(profile?.boardTheme == "classic")
+    }
+
+    @Test func v4MigrationAppliesOnAV3ShapedStoreAndKeepsDataIntact() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v3_m8Settings")
+
+        try queue.write { db in
+            try db.execute(
+                sql: "INSERT INTO game (id, source, pgn, white, black, importedAt) VALUES (10, 'pgnImport', '1. e4 e5', 'Alice', 'Bob', ?)",
+                arguments: [Date()]
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let game = try queue.read { db in
+            try GameRecord.fetchOne(db, key: 10)
+        }
+        let trainingColumns = try queue.read { db in
+            try db.columns(in: "trainingCard").map(\.name)
+        }
+        #expect(game?.white == "Alice")
+        #expect(trainingColumns.contains("sourcePly"))
+        #expect(trainingColumns.contains("masteryState"))
     }
 }

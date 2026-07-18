@@ -13,6 +13,7 @@ struct GameReportView: View {
     /// Opens the Coach panel pinned to a ply - the Report key-moment entry
     /// point (decision A).
     let onAskCoach: (Int) -> Void
+    let onPractice: (Int?) -> Void
 
     var body: some View {
         ScrollView {
@@ -109,6 +110,16 @@ struct GameReportView: View {
                     .font(.dsBody)
                     .foregroundStyle(DesignColors.textSecondary)
             } else {
+                Button {
+                    onPractice(nil)
+                } label: {
+                    Label("Practice key moments", systemImage: "target")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityLabel("Practice key moments from this report")
+
                 VStack(alignment: .leading, spacing: DesignSpacing.sm) {
                     ForEach(Array(report.keyMoments.enumerated()), id: \.element.ply) { offset, moment in
                         if offset > 0 { Divider() }
@@ -197,6 +208,15 @@ struct GameReportView: View {
                     }
                 }
             }
+
+            Button {
+                onPractice(moment.ply)
+            } label: {
+                Label("Practice", systemImage: "target")
+            }
+            .font(.dsSecondary.weight(.semibold))
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Practice this key moment")
         }
     }
 

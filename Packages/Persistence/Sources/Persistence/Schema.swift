@@ -81,6 +81,40 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v4_trainingLoop") { db in
+            try db.create(table: "trainingCard") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("gameId", .integer).notNull()
+                    .references("game", onDelete: .cascade)
+                t.column("sourcePly", .integer).notNull()
+                t.column("preMoveFEN", .text).notNull()
+                t.column("sideToMove", .text).notNull()
+                t.column("bestMoveUCI", .text).notNull()
+                t.column("rankedLinesJSON", .text).notNull()
+                t.column("classification", .text).notNull()
+                t.column("themesJSON", .text).notNull().defaults(to: "[]")
+                t.column("explanation", .text)
+                t.column("dueAt", .datetime).notNull()
+                t.column("consecutiveSuccesses", .integer).notNull().defaults(to: 0)
+                t.column("masteryState", .text).notNull().defaults(to: "new")
+                t.column("lastResult", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.uniqueKey(["gameId", "sourcePly"])
+            }
+
+            try db.create(table: "trainingAttempt") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("cardId", .integer).notNull()
+                    .references("trainingCard", onDelete: .cascade)
+                t.column("attemptedUCI", .text).notNull()
+                t.column("attemptedAt", .datetime).notNull()
+                t.column("evaluationLossCentipawns", .integer)
+                t.column("outcome", .text).notNull()
+                t.column("hintCount", .integer).notNull().defaults(to: 0)
+            }
+        }
+
         return migrator
     }
 }

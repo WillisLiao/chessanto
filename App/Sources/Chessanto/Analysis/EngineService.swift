@@ -380,6 +380,14 @@ public final class EngineService: ObservableObject {
             depth: rank1.depth ?? 0
         )
     }
+
+    func trainingEvaluationAfterMove(fen: String, attemptedUCI: String) async throws -> TrainingEngineEvaluation {
+        let result = try await coachEvaluate(fen: fen, movesUCI: [attemptedUCI])
+        return TrainingEngineEvaluation(
+            scoreCentipawnsWhitePerspective: result.scoreCentipawnsWhitePerspective,
+            mateInWhitePerspective: result.mateInWhitePerspective
+        )
+    }
 }
 
 extension EngineService: EngineToolExecutor {

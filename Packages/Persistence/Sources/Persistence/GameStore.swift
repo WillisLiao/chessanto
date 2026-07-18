@@ -214,6 +214,93 @@ public final class GameStore: Sendable {
         }
     }
 
+    // MARK: - Training
+
+    @discardableResult
+    public func upsertTrainingCard(_ record: TrainingCardRecord) async throws -> TrainingCardRecord {
+        try await dbQueue.write { db in
+            if let existing = try TrainingCardRecord
+                .filter(Column("gameId") == record.gameId && Column("sourcePly") == record.sourcePly)
+                .fetchOne(db)
+            {
+                var updated = record
+                updated.id = existing.id
+                updated.dueAt = existing.dueAt
+                updated.consecutiveSuccesses = existing.consecutiveSuccesses
+                updated.masteryState = existing.masteryState
+                updated.lastResult = existing.lastResult
+                updated.createdAt = existing.createdAt
+                updated.updatedAt = Date()
+                try updated.update(db)
+                return updated
+            }
+
+            var inserted = record
+            try inserted.insert(db)
+            return inserted
+        }
+    }
+
+    public func trainingCards(gameId: Int64) async throws -> [TrainingCardRecord] {
+        try await dbQueue.read { db in
+            try TrainingCardRecord
+                .filter(Column("gameId") == gameId)
+                .order(Column("sourcePly"))
+                .fetchAll(db)
+        }
+    }
+
+    public func dueTrainingCards(now: Date = Date(), limit: Int = 20) async throws -> [TrainingCardRecord] {
+        try await dbQueue.read { db in
+            try TrainingCardRecord
+                .filter(Column("dueAt") <= now)
+                .order(Column("dueAt"), Column("updatedAt"))
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    public func anyTrainingCards(limit: Int = 20) async throws -> [TrainingCardRecord] {
+        try await dbQueue.read { db in
+            try TrainingCardRecord
+                .order(Column("updatedAt").desc)
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    public func nextTrainingDueDate(after now: Date = Date()) async throws -> Date? {
+        try await dbQueue.read { db in
+            try Date.fetchOne(
+                db,
+                sql: "SELECT MIN(dueAt) FROM trainingCard WHERE dueAt > ?",
+                arguments: [now]
+            )
+        }
+    }
+
+    @discardableResult
+    public func saveTrainingAttempt(_ attempt: TrainingAttemptRecord, updatedCard: TrainingCardRecord) async throws -> TrainingAttemptRecord {
+        try await dbQueue.write { db in
+            var card = updatedCard
+            card.updatedAt = Date()
+            try card.update(db)
+
+            var inserted = attempt
+            try inserted.insert(db)
+            return inserted
+        }
+    }
+
+    public func trainingAttempts(cardId: Int64) async throws -> [TrainingAttemptRecord] {
+        try await dbQueue.read { db in
+            try TrainingAttemptRecord
+                .filter(Column("cardId") == cardId)
+                .order(Column("id"))
+                .fetchAll(db)
+        }
+    }
+
     // MARK: - User profile
 
     /// The single user profile row, creating a default one on first access.

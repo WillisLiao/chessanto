@@ -58,6 +58,7 @@ final class GameReplayViewModel: ObservableObject {
     /// can build its payloads from the exact same source values (one
     /// source of truth, no re-derivation).
     private(set) var reportInput: ReportInput?
+    @Published private(set) var trainingCardCount = 0
 
     /// Children of each index that were reached by exploring a variation
     /// (mainline continuations are tracked separately via `moveIndices`).
@@ -300,6 +301,26 @@ final class GameReplayViewModel: ObservableObject {
         let username = (try? store.userProfile())?.chessComUsername
         reportInput = ReportBuilding.buildInput(record: record, analysisRows: analysisRows, chessComUsername: username)
         report = reportInput.flatMap { ReportBuilder.build(input: $0, openingBook: OpeningBook.shared) }
+        if let report, let reportInput, let gameId {
+            Task { await persistTrainingCards(report: report, input: reportInput, gameId: gameId) }
+        }
+    }
+
+    private func persistTrainingCards(report: GameReport, input: ReportInput, gameId: Int64) async {
+        let drafts = TrainingCardFactory.drafts(report: report, input: input)
+        var saved = 0
+        for draft in drafts {
+            guard let record = try? TrainingCardRecord(cardDraft: draft, gameId: gameId) else { continue }
+            if (try? await store.upsertTrainingCard(record)) != nil {
+                saved += 1
+            }
+        }
+        trainingCardCount = saved
+    }
+
+    func trainingCards() async throws -> [TrainingCardRecord] {
+        guard let gameId else { return [] }
+        return try await store.trainingCards(gameId: gameId)
     }
 
     /// The current user profile - read fresh each call since settings can

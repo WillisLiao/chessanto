@@ -252,7 +252,7 @@ Task.detached {
                     )]
                 ))
             }
-            let freshContext = CoachVerifier.Context(
+            var freshContext = CoachVerifier.Context(
                 anchors: freshAnchors,
                 knownWinProbabilities: [
                     chatMoment.evalSwing.moverWinProbabilityBefore.rounded(),
@@ -260,6 +260,8 @@ Task.detached {
                 ],
                 engineExecutor: groundingEngine
             )
+            freshContext.knownEvalsCentipawns = freshAnchors.flatMap { $0.lines.compactMap(\.scoreCentipawnsWhitePerspective) }
+            freshContext.knownMates = freshAnchors.flatMap { $0.lines.compactMap(\.mateInWhitePerspective) }
             let verdict = await CoachVerifier.verify(text: reply.text, context: freshContext)
             if case .violations(let violations) = verdict {
                 chatLeakCount += 1

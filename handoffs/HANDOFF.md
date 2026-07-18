@@ -541,7 +541,75 @@ Read this first at session start; update it at session end.
   dashboard (accuracy trend + mistake themes, M8) round out PLAN.md's v1
   scope. **v1 is now feature-complete.**
 
+## Active Learning Loop completion (2026-07-18)
+
+Implemented the Active Learning Loop vertical slice from `handoffs/NEXT-SESSION-LEARNING-LOOP.md`.
+
+### Product behavior
+
+Analyzed reports now generate persistent practice cards from audited key moments.
+The Report tab has a primary `Practice key moments` action plus a small `Practice` action on each key moment.
+The primary action opens the full game key-moment queue.
+The row action opens that single source ply.
+
+The Progress dashboard now surfaces a `Next lesson` card.
+When due cards exist, its primary action is `Review next lesson`.
+When nothing is due, it shows the next review date when available and offers a secondary `Practice any position` action against existing saved training cards.
+
+The practice sheet reuses the real board, board theme, legal-move selection, and side-to-move orientation.
+It prompts with `Find the move you wish you had played.`
+It supports hint, reveal, try again, next, skip, and completion states without changing the approved warm-neutral and brass design system.
+
+### Domain and persistence
+
+Added a focused training domain under `App/Sources/Chessanto/Training`.
+The core types are `TrainingCard`, `TrainingAttempt`, `TrainingOutcome`, `MasteryState`, `TrainingMoveEvaluator`, and `ReviewScheduling`.
+`DefaultTrainingMoveEvaluator` rejects illegal moves with `ChessCore`, accepts cached ranked-line first moves, evaluates other legal attempts through the engine, compares white-perspective scores from the mover perspective, and keeps mate scores separate from centipawn scores.
+The deterministic scheduler implements the current review policy: incorrect and inaccurate are due now, playable is due tomorrow, one strong recall is due in three days, two strong recalls are due in seven days, and three or more strong recalls become mastered with a fourteen-day review.
+
+Persistence now has forward-only migration `v4_trainingLoop`.
+It adds `trainingCard` and `trainingAttempt`.
+Cards are unique by `gameId` plus `sourcePly`, persist the pre-move FEN and ranked-line facts needed for practice, and cascade with deleted games.
+Attempts cascade with deleted cards.
+`GameStore` exposes card upsert, game-card lookup, due-card lookup, any-card fallback lookup, next-due lookup, attempt save, and attempt history methods.
+
+### Verification
+
+Focused training app tests passed:
+`xcodebuild test -scheme Chessanto -destination 'platform=macOS' -only-testing:ChessantoTests/PracticeSessionViewModelTests -only-testing:ChessantoTests/TrainingDomainTests`.
+
+Full app tests passed:
+`xcodebuild test -scheme Chessanto -destination 'platform=macOS'`.
+That run executed 23 tests in 10 suites.
+
+Persistence package tests passed after the migration and store changes:
+`swift test --package-path Packages/Persistence`.
+
+The existing broader package and release gates also passed during this session before the final row-filter and card-count polish:
+`swift test --package-path Packages/ChessCore`,
+`swift test --package-path Packages/AnalysisKit`,
+`swift test --package-path Packages/CoachKit`,
+`swift test --package-path Packages/EngineKit`,
+`swift test --package-path Packages/ChessComKit`,
+`swift run --package-path Packages/EngineKit engine-smoke`,
+`swift run --package-path Packages/CoachKit coach-grounding`,
+and `scripts/release-build.sh`.
+
+`git diff --check` is clean.
+
+### Notable fix outside the practice feature
+
+The live `coach-grounding` harness initially failed independent chat verification because its fresh audit context rebuilt anchors but did not seed the known eval and mate arrays from those anchors the way production `CoachChat` does.
+`Packages/CoachKit/Sources/coach-grounding/main.swift` now seeds `knownEvalsCentipawns` and `knownMates` from the fresh anchors before the independent verification pass.
+After that fix, `coach-grounding` passed with zero leaks.
+
+### Remaining gap
+
+This session did not capture a fresh native screenshot of the completed practice flow.
+The implementation was verified by focused view-model tests, domain tests, persistence tests, full app compilation and tests, source review, and prior release gates.
+The next visual QA pass should open a generated-card practice session in the Release app and capture the prompt, feedback, reveal, and completion states at normal and narrow widths.
+
 ## Future directions (explicitly out of v1)
 
-Mistake-derived puzzles, spaced repetition, repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960.
+Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.
 Post-v1 priorities not yet decided with the user - ask before starting new work here.

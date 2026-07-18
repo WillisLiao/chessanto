@@ -1,0 +1,136 @@
+import AnalysisKit
+import Foundation
+import Persistence
+import Testing
+@testable import Chessanto
+
+@MainActor
+struct PracticeSessionViewModelTests {
+    @Test
+    func hintStrongMoveAndCompletionUpdateExplicitStates() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake",
+            themesJSON: #"["Center control"]"#,
+            explanation: "Better was e4."
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _, _ in
+                TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 0, mateInWhitePerspective: nil)
+            }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.state == .prompt)
+        #expect(viewModel.cards.count == 1)
+
+        viewModel.hint()
+        #expect(viewModel.hintCount == 1)
+
+        await viewModel.submit(attemptedUCI: "e2e4")
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected feedback state")
+            return
+        }
+        #expect(feedback.outcome == .strong)
+
+        await viewModel.next()
+        guard case .completed(let summary) = viewModel.state else {
+            Issue.record("Expected completed state")
+            return
+        }
+        #expect(summary.cardsCompleted == 1)
+        #expect(summary.firstAttemptSuccesses == 1)
+
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(attempts.count == 1)
+        #expect(attempts[0].outcome == "strong")
+        #expect(attempts[0].hintCount == 1)
+    }
+
+    @Test
+    func revealShowsBestMoveWithoutRecordingAttempt() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _, _ in
+                TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 0, mateInWhitePerspective: nil)
+            }
+        )
+
+        await viewModel.load()
+        viewModel.reveal()
+
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected feedback state")
+            return
+        }
+        #expect(feedback.bestMoveUCI == "e2e4")
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(attempts.isEmpty)
+    }
+
+    @Test
+    func retriesDoNotOvercountCompletedCards() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _, attemptedUCI in
+                TrainingEngineEvaluation(
+                    scoreCentipawnsWhitePerspective: attemptedUCI == "e2e4" ? 40 : -300,
+                    mateInWhitePerspective: nil
+                )
+            }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "g1f3")
+        viewModel.tryAgain()
+        await viewModel.submit(attemptedUCI: "e2e4")
+        await viewModel.next()
+
+        guard case .completed(let summary) = viewModel.state else {
+            Issue.record("Expected completed state")
+            return
+        }
+        #expect(summary.cardsCompleted == 1)
+        #expect(summary.firstAttemptSuccesses == 0)
+    }
+}
