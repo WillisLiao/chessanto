@@ -459,28 +459,13 @@ Read this first at session start; update it at session end.
     a regression). Prose quality with small local models remains the
     documented M6/M7 residual risk, not something M8 could or should fix.
 - **v1 is feature-complete per PLAN.md.**
-- **UI/UX audit + redesign plan complete (2026-07-18, planning only, no
-  code).** Followed `handoffs/NEXT-SESSION-UIUX.md`: built and ran the app,
-  screenshotted every screen/state live, and wrote a signed-off redesign
-  plan at `handoffs/NEXT-SESSION-UIUX-EXECUTE.md` (verified facts, fixed
-  decisions, 12 staged steps each with a gate).
-  12 real problems reproduced live (toolbar overflow hiding Import PGN even
-  at 1400px; single-column move list with a badge on every move; Report's
-  classification-count row wrapping mid-word in the narrow pane; coach
-  markdown rendering literal `**`; chat being a tab that replaces the moves
-  with no way to pin/pick the position; stark eval bar/graph; broken-looking
-  1-point dashboard chart; truncating sidebar rows with raw-seconds time
-  controls). The board artwork/themes/coordinates look good and are
-  explicitly protected.
-  **User design decisions (recorded in the plan):** light / white-forward
-  default appearance (the planned dark support was later superseded by the user's explicit force-light request during execution); brass/gilt accent (`#A6791F`
-  light / `#C9A24B` dark), **no green** (user: green would be "vandalism"),
-  near-monochrome warm chrome otherwise; the Coach becomes a slide-over
-  panel (dock-as-third-column when wide, slide-over when narrow) that never
-  hides the board/moves, with an explicit position-pin control.
-  **Next:** a Sonnet session executes `handoffs/NEXT-SESSION-UIUX-EXECUTE.md`
-  step by step. This is visual + IA only - no new features, no schema, no
-  behavior change.
+- **UI/UX audit + redesign plan complete (2026-07-18, planning only, no code).**
+  The audit followed `handoffs/NEXT-SESSION-UIUX.md`, built and ran the app, screenshotted every screen and state live, and produced the signed-off `handoffs/NEXT-SESSION-UIUX-EXECUTE.md` plan with verified facts, fixed decisions, and 12 staged gates.
+  The audit reproduced 12 real problems, including toolbar overflow hiding Import PGN at 1400px, a single-column move list with a badge on every move, classification labels wrapping mid-word in the narrow Report pane, literal Coach markdown syntax, Chat replacing Moves with no position pin, a stark eval bar and graph, a broken-looking one-point dashboard chart, and sidebar rows with truncated names and raw-seconds time controls.
+  The board artwork, themes, coordinates, last-move treatment, and flip behavior were explicitly protected.
+  The recorded user decisions were a light and white-forward appearance, a brass accent, no green, near-monochrome warm chrome, and a Coach slide-over or wide dock that never hides the board or move context.
+  The user later superseded the planned dark support by explicitly requiring a forced-light palette during execution.
+  The implementation target was visual and information-architecture improvement without a new schema or unrelated feature expansion.
 - **UI/UX redesign execution complete (2026-07-18).**
   The paused Sonnet task was reconstructed from its local session log and continued from Step 11 through acceptance.
   A shared design system now governs warm-neutral surfaces, graphite text, brass accents, spacing, typography, cards, chips, and primary controls.
@@ -499,6 +484,11 @@ Read this first at session start; update it at session end.
   Full package tests, the app tests, a universal Release build, and `coach-grounding` all pass.
   The final product audit and next implementation plan are in `handoffs/NEXT-SESSION-LEARNING-LOOP.md`.
   Large UI audit screenshots remain local and are intentionally ignored because the capture set exceeds 160MB.
+  M3's promote/collapse variation controls remain intentionally deferred because the wrapped move tree exposes no public child reordering, promotion, or deletion mutation API, while the current parent-pointer persistence model has no branch-order semantics.
+  Implementing promotion correctly therefore requires a small domain and persistence design rather than a cosmetic control, and pairing collapse with that work avoids creating a partial editor that suggests unsupported branch management.
+  Engine arrows are an intentional visual-aid extension within the user's request to improve graphics and helpfulness.
+  Report prose continues to use `you`, `White`, and `Black` rather than exposing opponent usernames, which preserves an earlier user decision and keeps fixture reports legible.
+  The grounding-harness change is a release-safety correction that makes independent verification faithfully recreate production's legal-proposal anchors.
 
 ## Real dependencies resolved during M1 (verified against actual source, not guessed)
 

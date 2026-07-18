@@ -15,6 +15,8 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var openingByGameID: [Int64: String] = [:]
 
     let store: GameStore
+    private var enrichmentTask: Task<Void, Never>?
+    private var reloadGeneration = 0
 
     init() {
         do {
@@ -75,6 +77,10 @@ final class GameLibrary: ObservableObject {
     }
 
     func reload() {
+        reloadGeneration += 1
+        let generation = reloadGeneration
+        enrichmentTask?.cancel()
+
         do {
             games = try store.allGames()
         } catch {
@@ -82,13 +88,22 @@ final class GameLibrary: ObservableObject {
         }
         let store = self.store
         let currentGames = games
-        Task {
+        enrichmentTask = Task { [weak self] in
             let ids = (try? await store.analyzedGameIDs()) ?? []
-            let openings = Self.openings(for: currentGames, analyzedGameIDs: ids)
-            await MainActor.run {
-                self.analyzedGameIDs = ids
-                self.openingByGameID = openings
+            guard !Task.isCancelled else { return }
+
+            let parsingTask = Task.detached(priority: .utility) {
+                Self.openings(for: currentGames, analyzedGameIDs: ids)
             }
+            let openings = await withTaskCancellationHandler {
+                await parsingTask.value
+            } onCancel: {
+                parsingTask.cancel()
+            }
+
+            guard let self, !Task.isCancelled, generation == self.reloadGeneration else { return }
+            self.analyzedGameIDs = ids
+            self.openingByGameID = openings
         }
     }
 
@@ -98,6 +113,7 @@ final class GameLibrary: ObservableObject {
     nonisolated private static func openings(for games: [GameRecord], analyzedGameIDs: Set<Int64>) -> [Int64: String] {
         var result: [Int64: String] = [:]
         for game in games {
+            guard !Task.isCancelled else { break }
             guard let id = game.id, analyzedGameIDs.contains(id) else { continue }
             guard let chessGame = try? ChessGame(pgn: game.pgn) else { continue }
             let moveIndices = [chessGame.startIndex] + chessGame.mainlineIndices

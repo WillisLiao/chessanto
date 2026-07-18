@@ -22,6 +22,7 @@ struct ChessantoApp: App {
                 .environmentObject(engineService)
                 .environmentObject(coachService)
                 .frame(minWidth: 900, minHeight: 600)
+                .tint(DesignColors.accent)
                 .preferredColorScheme(.light)
                 .task {
                     await engineService.start()

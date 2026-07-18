@@ -48,6 +48,6 @@ struct CoachSettingsView: View {
     private func updateProfile(_ mutate: (inout UserProfileRecord) -> Void) {
         guard var profile = try? library.store.userProfile() else { return }
         mutate(&profile)
-        try? library.store.saveUserProfile(profile)
+        _ = try? library.store.saveUserProfile(profile)
     }
 }

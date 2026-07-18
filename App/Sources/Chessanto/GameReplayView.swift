@@ -91,7 +91,7 @@ struct GameReplayView: View {
             quality = library.analysisQuality
             showLivePosition()
         }
-        .onChange(of: viewModel.currentIndex) { _ in
+        .onChange(of: viewModel.currentIndex) {
             selectedSquare = nil
             showLivePosition()
         }

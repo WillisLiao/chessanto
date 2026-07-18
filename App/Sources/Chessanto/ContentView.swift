@@ -229,7 +229,7 @@ private struct GameRow: View {
                 Text("vs \(game.black)").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary).lineLimit(1)
 
                 HStack(spacing: DesignSpacing.xs) {
-                    if let formattedTimeControl {
+                    if let formattedTimeControl = GameRowMetadata.formattedTimeControl(game.timeControl) {
                         Text(formattedTimeControl)
                     }
                     if let dateText {
@@ -273,6 +273,15 @@ private struct GameRow: View {
                 .background(outcome.color.opacity(0.18))
                 .foregroundStyle(outcome.color)
                 .clipShape(Circle())
+        } else if let result = game.result, !result.isEmpty {
+            Text(result == "1/2-1/2" ? "½" : result)
+                .font(.dsSecondary.weight(.semibold))
+                .padding(.horizontal, 4)
+                .frame(minWidth: 22, minHeight: 16)
+                .background(DesignColors.surface1)
+                .foregroundStyle(DesignColors.textSecondary)
+                .clipShape(Capsule())
+                .accessibilityLabel("Result \(result)")
         } else {
             Circle()
                 .fill(DesignColors.hairline)
@@ -293,7 +302,7 @@ private struct GameRow: View {
 
         var color: Color {
             switch self {
-            case .win: return .green
+            case .win: return DesignColors.accent
             case .loss: return .red
             case .draw: return DesignColors.textSecondary
             }
@@ -313,26 +322,6 @@ private struct GameRow: View {
         }
     }
 
-    /// Turns chess.com's raw `TimeControl` seconds string ("180", "180+2",
-    /// "1/259200") into a human-readable label ("3 min", "Blitz", "Rapid").
-    private var formattedTimeControl: String? {
-        guard let raw = game.timeControl, !raw.isEmpty else { return nil }
-        let baseSeconds: Int?
-        if raw.contains("/") {
-            baseSeconds = nil
-        } else {
-            baseSeconds = Int(raw.split(separator: "+").first ?? "")
-        }
-        guard let seconds = baseSeconds else { return raw }
-        let minutes = seconds / 60
-        switch seconds {
-        case ..<180: return "\(seconds) sec"
-        case 180..<600: return "\(minutes) min · Blitz"
-        case 600..<1800: return "\(minutes) min · Rapid"
-        default: return "\(minutes) min"
-        }
-    }
-
     private var dateText: String? {
         guard let date = game.playedAt else { return nil }
         return Self.dateFormatter.string(from: date)
@@ -344,4 +333,33 @@ private struct GameRow: View {
         formatter.timeStyle = .none
         return formatter
     }()
+}
+
+enum GameRowMetadata {
+    /// Turns chess.com's raw `TimeControl` seconds string ("180", "180+2",
+    /// "1/259200") into a human-readable label ("3 min", "3+2 · Blitz").
+    static func formattedTimeControl(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let components = raw.split(separator: "+", maxSplits: 1)
+        let baseSeconds: Int?
+        if raw.contains("/") {
+            baseSeconds = nil
+        } else {
+            baseSeconds = components.first.flatMap { Int($0) }
+        }
+        guard let seconds = baseSeconds else { return raw }
+        let increment = components.count == 2 ? Int(components[1]) : nil
+        let minutes = seconds / 60
+        let clock = increment.map { "\(minutes)+\($0)" } ?? "\(minutes) min"
+        switch seconds {
+        case ..<180:
+            return increment.map { "\(seconds)+\($0) sec" } ?? "\(seconds) sec"
+        case 180..<600:
+            return "\(clock) · Blitz"
+        case 600..<1800:
+            return "\(clock) · Rapid"
+        default:
+            return clock
+        }
+    }
 }

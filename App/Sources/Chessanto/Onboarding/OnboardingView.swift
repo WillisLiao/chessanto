@@ -188,7 +188,7 @@ struct OnboardingView: View {
         profile.ratingBand = ratingBand
         profile.coachEnabled = coachEnabled
         profile.coachModel = coachModel.isEmpty ? nil : coachModel
-        try? library.store.saveUserProfile(profile)
+        _ = try? library.store.saveUserProfile(profile)
         library.completeOnboarding()
         dismiss()
     }
