@@ -143,9 +143,9 @@ struct TrainingDomainTests {
     @Test
     func cachedTopLineIsAcceptedWithoutEngineSearch() async throws {
         let probe = SearchProbe()
-        let evaluator = DefaultTrainingMoveEvaluator { _, _ in
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
             await probe.markSearched()
-            return TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 0, mateInWhitePerspective: nil)
+            return .centipawns(0)
         }
 
         let result = try await evaluator.evaluate(card: card(), attemptedUCI: "e2e4")
@@ -157,8 +157,8 @@ struct TrainingDomainTests {
 
     @Test
     func centipawnLossUsesMoverPerspectiveForBlack() async throws {
-        let evaluator = DefaultTrainingMoveEvaluator { _, _ in
-            TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 20, mateInWhitePerspective: nil)
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            .centipawns(20)
         }
         let result = try await evaluator.evaluate(
             card: card(
@@ -178,9 +178,9 @@ struct TrainingDomainTests {
     @Test
     func illegalMoveIsRejectedBeforeEngineSearch() async throws {
         let probe = SearchProbe()
-        let evaluator = DefaultTrainingMoveEvaluator { _, _ in
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
             await probe.markSearched()
-            return TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 0, mateInWhitePerspective: nil)
+            return .centipawns(0)
         }
 
         let result = try await evaluator.evaluate(card: card(), attemptedUCI: "e2e5")
@@ -192,8 +192,8 @@ struct TrainingDomainTests {
 
     @Test
     func mateScoresAreClassifiedWithoutFakeCentipawns() async throws {
-        let evaluator = DefaultTrainingMoveEvaluator { _, _ in
-            TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: nil, mateInWhitePerspective: 3)
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            .mate(3)
         }
         let result = try await evaluator.evaluate(
             card: card(
@@ -205,6 +205,189 @@ struct TrainingDomainTests {
         )
 
         #expect(result.outcome == .playable)
+        #expect(result.lossCentipawns == nil)
+    }
+
+    @Test
+    func cachedLowerRankedLineIsGradedAgainstRankOne() async throws {
+        let probe = SearchProbe()
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            await probe.markSearched()
+            return .centipawns(0)
+        }
+        let result = try await evaluator.evaluate(
+            card: card(rankedLines: [
+                RankedLine(rank: 1, scoreCentipawns: 40, mateIn: nil, principalVariationUCI: ["e2e4"], depth: 12),
+                RankedLine(rank: 2, scoreCentipawns: -260, mateIn: nil, principalVariationUCI: ["d2d4"], depth: 12)
+            ]),
+            attemptedUCI: "d2d4"
+        )
+
+        #expect(result.outcome == .incorrect)
+        #expect(result.lossCentipawns == 300)
+        #expect(await probe.wasSearched == false)
+    }
+
+    @Test
+    func cachedRankOneRemainsStrongWithoutEngineSearch() async throws {
+        let probe = SearchProbe()
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            await probe.markSearched()
+            return .centipawns(-9999)
+        }
+        let result = try await evaluator.evaluate(
+            card: card(rankedLines: [
+                RankedLine(rank: 1, scoreCentipawns: 40, mateIn: nil, principalVariationUCI: ["e2e4"], depth: 12),
+                RankedLine(rank: 2, scoreCentipawns: -260, mateIn: nil, principalVariationUCI: ["d2d4"], depth: 12)
+            ]),
+            attemptedUCI: "e2e4"
+        )
+
+        #expect(result.outcome == .strong)
+        #expect(result.lossCentipawns == 0)
+        #expect(await probe.wasSearched == false)
+    }
+
+    @Test
+    func deliveringMateIsStrongEvenWhenCachedBestIsCentipawns() async throws {
+        let probe = SearchProbe()
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            await probe.markSearched()
+            return .centipawns(0)
+        }
+        // 6k1/5ppp/8/8/8/8/8/R6K w - - 0 1, Ra1-a8 is a real back-rank mate:
+        // the king on g8 is boxed in by its own pawns, and the open a8-h8
+        // rank leaves no escape square.
+        let result = try await evaluator.evaluate(
+            card: card(
+                fen: "6k1/5ppp/8/8/8/8/8/R6K w - - 0 1",
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: 500, mateIn: nil, principalVariationUCI: ["h1g2"], depth: 12)
+                ]
+            ),
+            attemptedUCI: "a1a8"
+        )
+
+        #expect(result.outcome == .strong)
+        #expect(result.lossCentipawns == nil)
+        #expect(await probe.wasSearched == false)
+    }
+
+    @Test
+    func slowerWinningMateIsStillCredited() async throws {
+        let evaluator = DefaultTrainingMoveEvaluator { _ in .mate(4) }
+        let result = try await evaluator.evaluate(
+            card: card(rankedLines: [
+                RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 2, principalVariationUCI: ["e2e4"], depth: 12)
+            ]),
+            attemptedUCI: "d2d4"
+        )
+
+        #expect(result.outcome == .playable)
+        #expect(result.lossCentipawns == nil)
+    }
+
+    @Test
+    func losingAForcedMateIsNotStrong() async throws {
+        let evaluator = DefaultTrainingMoveEvaluator { _ in .centipawns(500) }
+        let result = try await evaluator.evaluate(
+            card: card(rankedLines: [
+                RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 2, principalVariationUCI: ["e2e4"], depth: 12)
+            ]),
+            attemptedUCI: "d2d4"
+        )
+
+        #expect(result.outcome != .strong)
+        #expect(result.outcome == .inaccurate)
+    }
+
+    @Test
+    func walkingIntoMateIsIncorrect() async throws {
+        let evaluator = DefaultTrainingMoveEvaluator { _ in .mate(-1) }
+        let result = try await evaluator.evaluate(
+            card: card(rankedLines: [
+                RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 3, principalVariationUCI: ["e2e4"], depth: 12)
+            ]),
+            attemptedUCI: "d2d4"
+        )
+
+        #expect(result.outcome == .incorrect)
+    }
+
+    @Test
+    func stalematingMoveIsGradedWithoutEngineSearch() async throws {
+        let probe = SearchProbe()
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            await probe.markSearched()
+            return .centipawns(500)
+        }
+        // 7k/8/6K1/8/8/8/5Q2/8 w - - 0 1, Qf2-f7 stalemates the king on h8:
+        // g8/g7/h7 are all covered by the queen and king, with no check.
+        let result = try await evaluator.evaluate(
+            card: card(
+                fen: "7k/8/6K1/8/8/8/5Q2/8 w - - 0 1",
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: 900, mateIn: nil, principalVariationUCI: ["g6g5"], depth: 12)
+                ]
+            ),
+            attemptedUCI: "f2f7"
+        )
+
+        #expect(result.outcome == .incorrect)
+        #expect(await probe.wasSearched == false)
+    }
+
+    @Test
+    func terminalPositionsNeverCallTheEngine() async throws {
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            Issue.record("evaluateAttemptedMove must not be called for a terminal position")
+            return .centipawns(0)
+        }
+        // Same back-rank mate as deliveringMateIsStrongEvenWhenCachedBestIsCentipawns.
+        _ = try await evaluator.evaluate(
+            card: card(
+                fen: "6k1/5ppp/8/8/8/8/8/R6K w - - 0 1",
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: 500, mateIn: nil, principalVariationUCI: ["h1g2"], depth: 12)
+                ]
+            ),
+            attemptedUCI: "a1a8"
+        )
+    }
+
+    @Test
+    func blackToMoveMateOrientationIsCorrect() async throws {
+        // White-perspective: best is mate(-3) (Black forces mate in 3),
+        // attempted is mate(-2) (Black forces mate in 2, i.e. faster).
+        let evaluator = DefaultTrainingMoveEvaluator { _ in .mate(-2) }
+        let result = try await evaluator.evaluate(
+            card: card(
+                fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                side: .black,
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: nil, mateIn: -3, principalVariationUCI: ["b8c6"], depth: 12)
+                ]
+            ),
+            attemptedUCI: "g8f6"
+        )
+
+        #expect(result.outcome == .strong)
+    }
+
+    @Test
+    func unavailableCachedScoreDoesNotCrashGrading() async throws {
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            Issue.record("evaluateAttemptedMove must not be called when the cached best score is unavailable")
+            return .centipawns(0)
+        }
+        let result = try await evaluator.evaluate(
+            card: card(rankedLines: [
+                RankedLine(rank: 1, scoreCentipawns: nil, mateIn: nil, principalVariationUCI: ["e2e4"], depth: 12)
+            ]),
+            attemptedUCI: "d2d4"
+        )
+
+        #expect(result.outcome == .incorrect)
         #expect(result.lossCentipawns == nil)
     }
 

@@ -172,8 +172,8 @@ struct DashboardView: View {
                         ? queue.fallbackCards
                         : queue.dueCards
                 },
-                evaluator: DefaultTrainingMoveEvaluator { fen, attemptedUCI in
-                    try await engineService.trainingEvaluationAfterMove(fen: fen, attemptedUCI: attemptedUCI)
+                evaluator: DefaultTrainingMoveEvaluator { request in
+                    try await engineService.evaluateTrainingPosition(request)
                 }
             ))
             .environmentObject(library)

@@ -122,14 +122,21 @@ struct PracticeSessionView: View {
     }
 
     private var promptControls: some View {
-        HStack(spacing: DesignSpacing.sm) {
-            Button("Hint") { viewModel.hint() }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.hintCount >= 2)
-                .accessibilityLabel("Show hint")
-            Button("Reveal") { viewModel.reveal() }
-                .buttonStyle(.bordered)
-                .accessibilityLabel("Reveal best move")
+        VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+            if let promptError = viewModel.promptError {
+                Text(promptError)
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.error)
+            }
+            HStack(spacing: DesignSpacing.sm) {
+                Button("Hint") { viewModel.hint() }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.hintCount >= 2)
+                    .accessibilityLabel("Show hint")
+                Button("Reveal") { viewModel.reveal() }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Reveal best move")
+            }
         }
     }
 

@@ -232,8 +232,8 @@ struct GameReplayView: View {
                 guard let practiceSourcePly else { return cards }
                 return cards.filter { $0.sourcePly == practiceSourcePly }
             },
-            evaluator: DefaultTrainingMoveEvaluator { fen, attemptedUCI in
-                try await engineService.trainingEvaluationAfterMove(fen: fen, attemptedUCI: attemptedUCI)
+            evaluator: DefaultTrainingMoveEvaluator { request in
+                try await engineService.evaluateTrainingPosition(request)
             }
         )
     }

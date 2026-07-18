@@ -151,6 +151,69 @@ Task.detached {
     }
     log("go(movetime: 300ms): cp \(movetimeInfo?.scoreCentipawns.map(String.init) ?? "nil"), bestmove \(movetimeBestMove!)")
 
+    // 5. Generation isolation under rapid position switching: run a normal
+    //    midgame search immediately followed by a bounded search on a
+    //    stalemate position with no legal moves. F2 diagnosis: the listener
+    //    task stamps updates with the generation current at *delivery* time,
+    //    not the generation the search *started* under, so a trailing info
+    //    from the midgame search can arrive after `setPosition` has already
+    //    bumped the generation for the stalemate search and get misattributed
+    //    to it. Repeated because this is timing-dependent (the diagnosis
+    //    session saw contamination in two of three runs).
+    let midgame = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
+    let stalemate = "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"
+
+    for iteration in 1...5 {
+        let midGeneration = await engine.setPosition(fen: midgame)
+        await engine.go(movetimeMilliseconds: 500)
+        var midDone = false
+        while !midDone {
+            guard let update = await iterator.next() else {
+                fail("iteration \(iteration): updates stream ended during midgame search")
+            }
+            if case let .bestMove(gen, _) = update, gen == midGeneration {
+                midDone = true
+            }
+        }
+
+        let stalemateGeneration = await engine.setPosition(fen: stalemate)
+        await engine.go(movetimeMilliseconds: 500)
+        var stalemateBestMove: String?
+        var contaminated: AnalysisEngine.EngineInfo?
+        while stalemateBestMove == nil {
+            guard let update = await iterator.next() else {
+                fail("iteration \(iteration): updates stream ended during stalemate search")
+            }
+            switch update {
+            case let .info(info):
+                guard info.generation == stalemateGeneration else { continue }
+                // A position with no legal moves can legitimately produce a
+                // terminal "score cp 0, empty PV" summary line from Stockfish
+                // itself (verified live in isolation, no preceding search).
+                // Real contamination carries an actual PV or a mate score,
+                // neither of which this position can produce.
+                if info.mateIn != nil || !info.principalVariation.isEmpty {
+                    contaminated = info
+                }
+            case let .bestMove(gen, move):
+                guard gen == stalemateGeneration else { continue }
+                stalemateBestMove = move
+            }
+        }
+
+        if let bad = contaminated {
+            fail(
+                "iteration \(iteration): stalemate search (no legal moves) received a scored info "
+                    + "cp=\(bad.scoreCentipawns.map(String.init) ?? "nil") mate=\(bad.mateIn.map(String.init) ?? "nil") "
+                    + "pv=\(bad.principalVariation.prefix(4).joined(separator: " ")) - cross-position contamination (F2)"
+            )
+        }
+        guard stalemateBestMove == "(none)" else {
+            fail("iteration \(iteration): stalemate bestmove was \(stalemateBestMove ?? "nil"), expected (none)")
+        }
+        log("iteration \(iteration): stalemate search clean, bestmove (none), no scored info leaked")
+    }
+
     await engine.shutdown()
     log("OK: live Stockfish verified - real evals, side-to-move sign convention, mate scores, generation tags")
     exit(0)

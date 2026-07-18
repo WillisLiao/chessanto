@@ -649,6 +649,50 @@ The final Persistence suite passed 29 tests.
 The next planning task for Claude Opus is described in `handoffs/NEXT-CLAUDE-OPUS-PLANNING.md`.
 That planning task should produce one bounded implementation plan for a Claude Sonnet medium session and must treat the remaining engine, grading, practice-state, presentation, responsive, accessibility, and release gates in `handoffs/NEXT-SESSION-V1-HARDENING.md` as still open.
 
+## V1 hardening phase 2 complete (2026-07-19)
+
+Followed `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-2.md` step by step; all six steps landed and every gate passed.
+Full detail, including the live diagnosis evidence and the native E2E acceptance record, is in the `V1 hardening phase 2` section of `devlogs/2026-07-19.md`.
+This checkout still has no physical `AGENTS.md`; the session prompt's repository rules remained authoritative.
+
+### What changed
+
+`AnalysisEngine` now stamps engine updates with the generation the search actually started under (`searchGeneration`) rather than the generation current at delivery time, closing the bulk of F2's cross-position score contamination.
+That fix alone was insufficient in live testing: chesskit-engine dispatches each raw response through its own unstructured `Task` with no ordering guarantee, so `setPosition` now also waits for a UCI `isready`/`readyok` round trip plus a 30ms settle window before bumping the generation, unconditionally (not just when a search was in flight, since the reproduced race had `isSearching` already false at the point of entry).
+This is documented in code as an empirically-verified mitigation, not a proof; 14 consecutive `engine-smoke` runs (70 repeated iterations of a new live generation-isolation assertion) passed clean after the fix.
+
+A new `BoundedSearchSession` (`App/Sources/Chessanto/Analysis/BoundedSearch.swift`) is a `@MainActor`, engine-free coordinator that latches a search's outcome exactly once, closing F1 (a terminating bestmove arriving before anything was waiting for it, which previously hung forever).
+`EngineService.searchOneShot` installs the session before sending `go`, races it against a deadline (`movetimeMilliseconds * 4 + 3000`), and both the timeout and cancellation paths now resolve with typed `EngineSearchError`s and tell the engine to stop.
+`coachEvaluate`'s FIFO chokepoint (`coachEvaluateTail`) got a real cancellation-propagation fix (F4): a cancelled caller now actually cancels the queued work via a shared `runOnFIFOTail` helper, instead of the work running to completion unobserved.
+`evaluateTrainingPosition` replaces `trainingEvaluationAfterMove`, sharing the same FIFO chokepoint without coupling the training domain to the Coach tool's `EngineToolResult` shape.
+
+`WhitePerspectiveScore` (`App/Sources/Chessanto/Training/WhitePerspectiveScore.swift`) replaces the old `TrainingEngineEvaluation` two-optional pair throughout the training domain and both production call sites.
+It cannot represent "both centipawns and mate" or "neither" at once, which is what let a forced mate compare against a `nil` best value and fall through to `.incorrect` (F7).
+
+`DefaultTrainingMoveEvaluator` now short-circuits terminal positions (checkmate, stalemate) via `ChessCore` alone before any engine call (F3), grades a cached lower-ranked line against the cached rank-one score instead of blanket-accepting any cached line as strong with zero loss (F6), and implements a total mate-vs-centipawns comparison with no unrepresentable case (F7).
+Two thresholds in that comparison are this evaluator's own judgement calls, not values the plan fixed: the mate-distance playable/inaccurate tiering beyond "shorter or equal is strong," and 200 centipawns as "clearly winning" when a forced mate was lost for a merely-good move.
+Both are commented inline as deliberate choices.
+
+A bounded-search failure during grading (`EngineSearchError`) is now recoverable: `PracticeSessionViewModel.submit` returns to `.prompt` with the card and board intact, records no attempt, advances no scheduler state, and surfaces a short retryable message via a new `promptError` field, rendered in `DesignColors.error`.
+`.failed` stays reserved for a failure to load the lesson at all.
+
+### Verification
+
+The final app suite passed 55 tests across 15 suites (up from the phase-1 baseline of 31/13).
+All package suites, `engine-smoke`, `coach-grounding`, and `scripts/release-build.sh` passed.
+`git diff --check` was clean.
+`mattpocock-skills:code-review` ran against `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-2.md` as the spec axis before the final commit; both real Standards findings (an unnamed magic-number deadline formula, an uncalled-out mate-threshold behavior change) were fixed, and the Spec axis's three "under-specified" findings were confirmed as deliberate judgement calls and documented inline rather than changed.
+
+Native E2E acceptance used a disposable database copy under the sandbox container and the freshly built universal Release app; the live sandbox database was confirmed byte-identical (via `md5`) to the pre-session backup both mid-session and at the end.
+Live-verified: F6's fix (a cached rank-3 line grades `Inaccurate`/`Engine loss: 99 centipawns`, not a blanket-accepted strong move), F1's fix (a real, non-cached move reaches the engine and returns bounded feedback, `Inaccurate`/`Engine loss: 217 centipawns`, with no hang), a genuine fresh `Analyze` pass (222 plies persisted in ~28s on a previously-unanalyzed game, after an initial false-positive test against an already-analyzed game that the skip-logic made a no-op), and Coach chat continuing to work through the shared FIFO after training evaluations had already run in the same process.
+F7 (the mate-grading fix) was not exercised through native play, exactly as the plan anticipated, since it needs a cached card whose position admits a mate that is not the rank-one move; it is covered by the Step 5 tests only.
+One unrelated, pre-existing bug was found along the way and not fixed (out of scope): the `Hikaru vs Casablanca` chess.com import (gameId 2 in the QA snapshot) fails to parse with `ChessKit.PGNParser.Error error 2`, matching the parser edge case already logged in the 2026-07-17 M4 devlog section.
+
+### What's still open
+
+The next planning task is described in `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md`.
+It carries forward the full practice render-state machine, non-disclosing incorrect feedback and the distinct Reveal state, duplicate-submit rejection, review decisions for Reveal and Skip, Dashboard/practice presentation ownership, the 900-point replay and practice layout, accessibility coverage, promotion moves in practice, README/version alignment, a project-level `CLAUDE.md` (Follow-up A), and a root `CONTEXT.md` (Follow-up B) - all of which were out of scope for phase 2 and remain not started.
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.

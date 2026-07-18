@@ -26,8 +26,8 @@ struct PracticeSessionViewModelTests {
         let viewModel = PracticeSessionViewModel(
             store: store,
             loadCards: { [card] },
-            evaluator: DefaultTrainingMoveEvaluator { _, _ in
-                TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 0, mateInWhitePerspective: nil)
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                .centipawns(0)
             }
         )
 
@@ -77,8 +77,8 @@ struct PracticeSessionViewModelTests {
         let viewModel = PracticeSessionViewModel(
             store: store,
             loadCards: { [card] },
-            evaluator: DefaultTrainingMoveEvaluator { _, _ in
-                TrainingEngineEvaluation(scoreCentipawnsWhitePerspective: 0, mateInWhitePerspective: nil)
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                .centipawns(0)
             }
         )
 
@@ -112,11 +112,8 @@ struct PracticeSessionViewModelTests {
         let viewModel = PracticeSessionViewModel(
             store: store,
             loadCards: { [card] },
-            evaluator: DefaultTrainingMoveEvaluator { _, attemptedUCI in
-                TrainingEngineEvaluation(
-                    scoreCentipawnsWhitePerspective: attemptedUCI == "e2e4" ? 40 : -300,
-                    mateInWhitePerspective: nil
-                )
+            evaluator: DefaultTrainingMoveEvaluator { request in
+                .centipawns(request.attemptedMoveUCI == "e2e4" ? 40 : -300)
             }
         )
 
@@ -132,5 +129,113 @@ struct PracticeSessionViewModelTests {
         }
         #expect(summary.cardsCompleted == 1)
         #expect(summary.firstAttemptSuccesses == 0)
+    }
+
+    @Test
+    func engineTimeoutReturnsToPromptWithRetryableMessage() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                throw EngineSearchError.timedOut(milliseconds: 4400)
+            }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "g1f3")
+
+        #expect(viewModel.state == .prompt)
+        #expect(viewModel.promptError != nil)
+    }
+
+    @Test
+    func engineTimeoutDoesNotRecordAnAttemptOrAdvanceScheduling() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                throw EngineSearchError.timedOut(milliseconds: 4400)
+            }
+        )
+
+        await viewModel.load()
+        let dueBefore = try await store.trainingCards(gameId: game.id!).first
+        await viewModel.submit(attemptedUCI: "g1f3")
+
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(attempts.isEmpty)
+        let dueAfter = try await store.trainingCards(gameId: game.id!).first
+        #expect(dueBefore?.dueAt == dueAfter?.dueAt)
+        #expect(dueBefore?.consecutiveSuccesses == dueAfter?.consecutiveSuccesses)
+    }
+
+    @Test
+    func retryAfterEngineTimeoutCanStillGradeTheSameCard() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        var shouldTimeout = true
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                if shouldTimeout {
+                    throw EngineSearchError.timedOut(milliseconds: 4400)
+                }
+                return .centipawns(40)
+            }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "g1f3")
+        #expect(viewModel.state == .prompt)
+
+        shouldTimeout = false
+        await viewModel.submit(attemptedUCI: "g1f3")
+
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected feedback state")
+            return
+        }
+        #expect(feedback.outcome == .strong)
+
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(attempts.count == 1)
     }
 }

@@ -61,18 +61,20 @@ public final class EngineService: ObservableObject {
     private var lastLivePublish: Date = .distantPast
     private var pendingLiveFEN: String?
 
-    private var batchCollector: BatchCollector?
-    private var batchGeneration: Int?
-    private var batchContinuation: CheckedContinuation<Void, Never>?
+    /// The one bounded search currently in flight, if any. Routing dispatches
+    /// to it while it exists; `nil` means no batch/one-shot search is
+    /// running and updates route to the live-analysis path instead.
+    private var activeSearch: BoundedSearchSession?
 
     /// FIFO chokepoint for `coachEvaluate` (M7 fact 3): `searchOneShot`'s
-    /// `batchCollector`/`batchGeneration` are single fields, so two
-    /// interleaved `coachEvaluate` calls (a narration tool call and a chat
-    /// tool call, both legal once chat exists) would clobber each other
-    /// across suspension points. Holds a task that completes only once the
-    /// *previous* call's actual engine work (not just its own wait) has
-    /// finished, so each call truly waits its turn rather than racing on a
-    /// chain of instantly-resolving placeholders.
+    /// `activeSearch` is a single field, so two interleaved `coachEvaluate`
+    /// calls (a narration tool call and a chat tool call, both legal once
+    /// chat exists) would clobber each other across suspension points. Holds
+    /// a task that completes only once the *previous* call's actual engine
+    /// work (not just its own wait) has finished, so each call truly waits
+    /// its turn rather than racing on a chain of instantly-resolving
+    /// placeholders. Shared by `coachEvaluate` and `evaluateTrainingPosition`
+    /// so both kinds of one-shot search serialize against each other too.
     private var coachEvaluateTail: Task<Void, Never>?
 
     public init() {}
@@ -108,23 +110,19 @@ public final class EngineService: ObservableObject {
     // MARK: - Routing
 
     private func route(_ update: AnalysisEngine.EngineUpdate) {
-        if batchCollector != nil {
-            routeBatch(update)
+        if let session = activeSearch {
+            routeToActiveSearch(update, session: session)
         } else {
             routeLive(update)
         }
     }
 
-    private func routeBatch(_ update: AnalysisEngine.EngineUpdate) {
-        guard let generation = batchGeneration else { return }
+    private func routeToActiveSearch(_ update: AnalysisEngine.EngineUpdate, session: BoundedSearchSession) {
         switch update {
         case .info(let info):
-            guard info.generation == generation else { return }
-            batchCollector?.record(info)
+            session.record(info)
         case .bestMove(let gen, _):
-            guard gen == generation else { return }
-            batchContinuation?.resume()
-            batchContinuation = nil
+            session.complete(generation: gen)
         }
     }
 
@@ -282,43 +280,75 @@ public final class EngineService: ObservableObject {
     /// The shared one-shot batch-search core: set position, search for a
     /// fixed movetime, await the terminating bestmove, return the ranked
     /// MultiPV infos (side-to-move perspective, un-normalized). Used by
-    /// `searchPly` (game analysis) and `coachEvaluate` (the coach's engine
-    /// tool) alike - both are sequential one-shot searches, safe by
-    /// construction per `AnalysisEngine.setPosition`'s generation-counter
-    /// fix (M2).
+    /// `searchPly` (game analysis), `coachEvaluate` (the coach's engine
+    /// tool), and `evaluateTrainingPosition` alike - all are sequential
+    /// one-shot searches, safe by construction per `AnalysisEngine
+    /// .setPosition`'s generation-counter fix (M2) and this method's own
+    /// `BoundedSearchSession` (installed before `go` is ever sent, so F1's
+    /// hang - a terminating bestmove arriving before anything was waiting
+    /// for it - cannot happen: the session latches completion regardless of
+    /// arrival order).
+    ///
+    /// Every search carries a deadline derived from its movetime:
+    /// `deadlineMultiplier` absorbs a loaded machine, `deadlineFloorMilliseconds`
+    /// absorbs process scheduling. Yields 3400/4400/11000ms for
+    /// `.fast`/`.standard`/`.deep` and 5000ms for the 500ms coach/training
+    /// search. On timeout or cancellation the session is failed with a typed
+    /// error, the engine is told to stop, and the active session is cleared
+    /// so any later, now-irrelevant update is dropped by `route`.
+    private static let deadlineMultiplier = 4
+    private static let deadlineFloorMilliseconds = 3000
+
     func searchOneShot(fen: String, movetimeMilliseconds: Int) async throws -> [AnalysisEngine.EngineInfo] {
-        batchCollector = BatchCollector()
         let generation = await engine.setPosition(fen: fen)
-        batchGeneration = generation
+        let session = BoundedSearchSession(generation: generation)
+        activeSearch = session
         await engine.go(movetimeMilliseconds: movetimeMilliseconds)
 
+        let deadlineMilliseconds = movetimeMilliseconds * Self.deadlineMultiplier + Self.deadlineFloorMilliseconds
+        let deadlineTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(deadlineMilliseconds) * 1_000_000)
+            session.fail(.timedOut(milliseconds: deadlineMilliseconds))
+        }
+
         do {
-            try await awaitBatchSearch()
+            let infos = try await withTaskCancellationHandler {
+                try await session.value()
+            } onCancel: {
+                Task { @MainActor in session.fail(.cancelled) }
+            }
+            deadlineTask.cancel()
+            clearActiveSearch(session)
+            return infos
         } catch {
-            batchCollector = nil
-            batchGeneration = nil
+            deadlineTask.cancel()
+            clearActiveSearch(session)
+            let engineRef = engine
+            Task { await engineRef.stop() }
             throw error
         }
-
-        let infos = batchCollector?.rankedInfos ?? []
-        batchCollector = nil
-        batchGeneration = nil
-        return infos
     }
 
-    /// Waits for the current batch search's terminating bestmove. If the
-    /// enclosing task is cancelled, stops the engine and lets that
-    /// terminating bestmove resume this continuation before rethrowing.
-    private func awaitBatchSearch() async throws {
-        let engine = engine
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                self.batchContinuation = continuation
-            }
-        } onCancel: {
-            Task { await engine.stop() }
+    private func clearActiveSearch(_ session: BoundedSearchSession) {
+        if activeSearch === session {
+            activeSearch = nil
         }
-        try Task.checkCancellation()
+    }
+
+    /// Runs a one-shot search and normalizes its rank-one line to
+    /// white-perspective, shared by `coachEvaluate` and
+    /// `evaluateTrainingPosition`.
+    private func searchRankOne(
+        resultingFEN: String,
+        movetimeMilliseconds: Int
+    ) async throws -> (info: AnalysisEngine.EngineInfo, scoreCentipawns: Int?, mateIn: Int?) {
+        let infos = try await searchOneShot(fen: resultingFEN, movetimeMilliseconds: movetimeMilliseconds)
+        guard let rank1 = infos.first(where: { ($0.multiPVRank ?? 1) == 1 }) ?? infos.first else {
+            throw EngineToolArgumentError("engine returned no analysis for \(resultingFEN)")
+        }
+        let scoreCentipawns = EngineScoreNormalizer.whitePerspectiveScore(rank1.scoreCentipawns, fen: resultingFEN)
+        let mateIn = EngineScoreNormalizer.whitePerspectiveMate(rank1.mateIn, fen: resultingFEN)
+        return (rank1, scoreCentipawns, mateIn)
     }
 
     // MARK: - EngineToolExecutor (the coach's `evaluate` tool, Layer 3)
@@ -350,26 +380,47 @@ public final class EngineService: ObservableObject {
             throw EngineToolArgumentError("a batch analysis is already running")
         }
 
+        return try await runOnFIFOTail {
+            try await self.runCoachEvaluateSearch(resultingFEN: resultingFEN)
+        }
+    }
+
+    /// Chains `work` onto `coachEvaluateTail` (M7's FIFO guarantee) and
+    /// propagates the caller's cancellation into `work` (the F4 fix): the
+    /// unstructured task backing the FIFO slot is cancelled explicitly,
+    /// which - because `work` calls directly into `searchOneShot` rather
+    /// than spawning its own further unstructured task - reaches
+    /// `BoundedSearchSession` and resolves it with `.cancelled` instead of
+    /// leaving it to run to completion unobserved. `coachEvaluateTail` is
+    /// reassigned to a task that awaits the work task's outcome regardless
+    /// of success, failure, or cancellation, so the FIFO always advances and
+    /// can never wedge behind a call the caller gave up on.
+    private func runOnFIFOTail<Result: Sendable>(
+        _ work: @escaping @Sendable () async throws -> Result
+    ) async throws -> Result {
         let previousTail = coachEvaluateTail
-        let workTask = Task<EngineToolResult, Error> { [weak self] in
+        let workTask = Task<Result, Error> {
             await previousTail?.value
-            guard let self else { throw EngineToolArgumentError("engine service was deallocated") }
-            return try await self.runCoachEvaluateSearch(resultingFEN: resultingFEN)
+            try Task.checkCancellation()
+            return try await work()
         }
         coachEvaluateTail = Task { _ = try? await workTask.value }
-        return try await workTask.value
+
+        return try await withTaskCancellationHandler {
+            try await workTask.value
+        } onCancel: {
+            workTask.cancel()
+        }
     }
 
     private func runCoachEvaluateSearch(resultingFEN: String) async throws -> EngineToolResult {
         stopLive()
         defer { resumeLiveIfPending() }
 
-        let infos = try await searchOneShot(fen: resultingFEN, movetimeMilliseconds: 500)
-        guard let rank1 = infos.first(where: { ($0.multiPVRank ?? 1) == 1 }) ?? infos.first else {
-            throw EngineToolArgumentError("engine returned no analysis for \(resultingFEN)")
-        }
-        let scoreCentipawns = EngineScoreNormalizer.whitePerspectiveScore(rank1.scoreCentipawns, fen: resultingFEN)
-        let mateIn = EngineScoreNormalizer.whitePerspectiveMate(rank1.mateIn, fen: resultingFEN)
+        let (rank1, scoreCentipawns, mateIn) = try await searchRankOne(
+            resultingFEN: resultingFEN,
+            movetimeMilliseconds: 500
+        )
         return EngineToolResult(
             resultingFEN: resultingFEN,
             scoreCentipawnsWhitePerspective: scoreCentipawns,
@@ -381,12 +432,50 @@ public final class EngineService: ObservableObject {
         )
     }
 
-    func trainingEvaluationAfterMove(fen: String, attemptedUCI: String) async throws -> TrainingEngineEvaluation {
-        let result = try await coachEvaluate(fen: fen, movesUCI: [attemptedUCI])
-        return TrainingEngineEvaluation(
-            scoreCentipawnsWhitePerspective: result.scoreCentipawnsWhitePerspective,
-            mateInWhitePerspective: result.mateInWhitePerspective
+    // MARK: - Training evaluation
+
+    /// The training domain's engine boundary (fact 2's typed-score plan):
+    /// validates the attempted move by `ChessCore` replay, then searches the
+    /// resulting position. Deliberately does not route through
+    /// `coachEvaluate` - the training domain should not be coupled to the
+    /// Coach tool's `EngineToolResult` shape - but shares `coachEvaluateTail`
+    /// so a narration/chat evaluation and a training evaluation still
+    /// serialize against each other on the single shared engine.
+    func evaluateTrainingPosition(_ request: TrainingPositionRequest) async throws -> WhitePerspectiveScore {
+        guard isStarted else {
+            throw EngineToolArgumentError("engine is not running")
+        }
+        guard ChessGame.isValidFEN(request.preMoveFEN) else {
+            throw EngineToolArgumentError("'\(request.preMoveFEN)' is not a valid FEN")
+        }
+        let replay = ChessGame.replayLine(fromUCI: [request.attemptedMoveUCI], startingFEN: request.preMoveFEN)
+        guard replay.count == 1 else {
+            throw EngineToolArgumentError(
+                "illegal move \(request.attemptedMoveUCI) from position \(request.preMoveFEN)"
+            )
+        }
+        let resultingFEN = replay[0].resultingFEN
+        guard !isAnalyzing else {
+            throw EngineToolArgumentError("a batch analysis is already running")
+        }
+
+        return try await runOnFIFOTail {
+            try await self.runTrainingEvaluationSearch(resultingFEN: resultingFEN)
+        }
+    }
+
+    private func runTrainingEvaluationSearch(resultingFEN: String) async throws -> WhitePerspectiveScore {
+        stopLive()
+        defer { resumeLiveIfPending() }
+
+        let (_, scoreCentipawns, mateIn) = try await searchRankOne(
+            resultingFEN: resultingFEN,
+            movetimeMilliseconds: 500
         )
+        guard let score = WhitePerspectiveScore(scoreCentipawns: scoreCentipawns, mateIn: mateIn) else {
+            throw EngineSearchError.noAnalysis
+        }
+        return score
     }
 }
 

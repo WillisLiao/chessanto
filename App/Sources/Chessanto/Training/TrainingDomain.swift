@@ -255,19 +255,19 @@ struct TrainingEvaluation: Equatable, Sendable {
     let explanation: String
 }
 
-struct TrainingEngineEvaluation: Equatable, Sendable {
-    let scoreCentipawnsWhitePerspective: Int?
-    let mateInWhitePerspective: Int?
-}
+/// The training domain's engine seam: given the pre-move position and an
+/// attempted move, produce a White-perspective evaluation of the resulting
+/// position.
+typealias EvaluatePosition = @Sendable (TrainingPositionRequest) async throws -> WhitePerspectiveScore
 
 protocol TrainingMoveEvaluator: Sendable {
     func evaluate(card: TrainingCard, attemptedUCI: String) async throws -> TrainingEvaluation
 }
 
 struct DefaultTrainingMoveEvaluator: TrainingMoveEvaluator {
-    var evaluateAttemptedMove: @Sendable (String, String) async throws -> TrainingEngineEvaluation
+    var evaluateAttemptedMove: EvaluatePosition
 
-    init(evaluateAttemptedMove: @escaping @Sendable (String, String) async throws -> TrainingEngineEvaluation) {
+    init(evaluateAttemptedMove: @escaping EvaluatePosition) {
         self.evaluateAttemptedMove = evaluateAttemptedMove
     }
 
@@ -277,23 +277,14 @@ struct DefaultTrainingMoveEvaluator: TrainingMoveEvaluator {
             return feedback(card: card, attemptedUCI: attemptedUCI, attemptedSAN: nil, outcome: .incorrect, loss: nil)
         }
 
-        if card.rankedLines.contains(where: { $0.principalVariationUCI.first == attemptedUCI }) {
-            return feedback(card: card, attemptedUCI: attemptedUCI, attemptedSAN: attempted.san, outcome: .strong, loss: 0)
-        }
-
-        guard let best = card.rankedLines.sorted(by: { $0.rank < $1.rank }).first else {
+        guard let best = card.rankedLines.sorted(by: { $0.rank < $1.rank }).first,
+            let bestScore = WhitePerspectiveScore(scoreCentipawns: best.scoreCentipawns, mateIn: best.mateIn)
+        else {
             return feedback(card: card, attemptedUCI: attemptedUCI, attemptedSAN: attempted.san, outcome: .incorrect, loss: nil)
         }
 
-        let attemptedEvaluation = try await evaluateAttemptedMove(card.preMoveFEN, attemptedUCI)
-        let outcomeAndLoss = classify(
-            best: TrainingEngineEvaluation(
-                scoreCentipawnsWhitePerspective: best.scoreCentipawns,
-                mateInWhitePerspective: best.mateIn
-            ),
-            attempted: attemptedEvaluation,
-            mover: card.sideToMove
-        )
+        let attemptedScore = try await scoreAttemptedMove(attempted, card: card, attemptedUCI: attemptedUCI)
+        let outcomeAndLoss = classify(best: bestScore, attempted: attemptedScore, mover: card.sideToMove)
         return feedback(
             card: card,
             attemptedUCI: attemptedUCI,
@@ -301,6 +292,75 @@ struct DefaultTrainingMoveEvaluator: TrainingMoveEvaluator {
             outcome: outcomeAndLoss.outcome,
             loss: outcomeAndLoss.loss
         )
+    }
+
+    /// Scores the attempted move without ever reaching the engine when the
+    /// position after it is provably terminal or already cached.
+    ///
+    /// Terminal positions (F3) are resolved by `ChessCore` alone: a
+    /// checkmating move is `mate(1)` (mover perspective, converted to
+    /// white-perspective below) with no search, and a stalemating move is a
+    /// dead draw (`.centipawns(0)`).
+    ///
+    /// A move matching any cached ranked line's first move (F6) is graded
+    /// against that line's own cached score rather than accepted outright -
+    /// rank one matching itself still yields a loss of 0 and grades
+    /// `.strong`, but a rank-two or rank-three line grades on its own merit.
+    private func scoreAttemptedMove(
+        _ attempted: ReplayedMove,
+        card: TrainingCard,
+        attemptedUCI: String
+    ) async throws -> WhitePerspectiveScore {
+        if attempted.isCheckmate {
+            return .mate(card.sideToMove == .white ? 1 : -1)
+        }
+        if !attempted.isCheck, Self.hasNoLegalMoves(fen: attempted.resultingFEN, sideToMove: card.sideToMove.opposite) {
+            return .centipawns(0)
+        }
+        if let cached = card.rankedLines.first(where: { $0.principalVariationUCI.first == attemptedUCI }),
+            let cachedScore = WhitePerspectiveScore(scoreCentipawns: cached.scoreCentipawns, mateIn: cached.mateIn)
+        {
+            return cachedScore
+        }
+        return try await evaluateAttemptedMove(
+            TrainingPositionRequest(preMoveFEN: card.preMoveFEN, attemptedMoveUCI: attemptedUCI)
+        )
+    }
+
+    /// Whether the side to move in `fen` has no legal move anywhere on the
+    /// board - used to detect stalemate (paired with the caller's own check
+    /// that the side to move is not in check).
+    private static func hasNoLegalMoves(fen: String, sideToMove: ChessCore.PieceColor) -> Bool {
+        let game = ChessGame(startingFEN: fen)
+        let index = game.startIndex
+        return occupiedSquares(ofColor: sideToMove, fen: fen).allSatisfy {
+            game.legalMoves(from: SquareCoordinate(notation: $0), at: index).isEmpty
+        }
+    }
+
+    /// Parses a FEN's piece-placement field for the square notations
+    /// occupied by `color`, without depending on any engine-side board type.
+    private static func occupiedSquares(ofColor color: ChessCore.PieceColor, fen: String) -> [String] {
+        guard let placement = fen.split(separator: " ").first else { return [] }
+        var squares: [String] = []
+        var rank = 8
+        for row in placement.split(separator: "/") {
+            var file = 1
+            for character in row {
+                if let emptySquares = character.wholeNumberValue {
+                    file += emptySquares
+                } else {
+                    let pieceIsWhite = character.isUppercase
+                    if (pieceIsWhite && color == .white) || (!pieceIsWhite && color == .black) {
+                        let fileLetter = Character(UnicodeScalar(96 + file)!)
+                        squares.append("\(fileLetter)\(rank)")
+                    }
+                    file += 1
+                }
+            }
+            rank -= 1
+        }
+        return squares
     }
 
     private func feedback(
@@ -333,42 +393,66 @@ struct DefaultTrainingMoveEvaluator: TrainingMoveEvaluator {
         )
     }
 
+    /// A total comparison over `WhitePerspectiveScore`, oriented once to the
+    /// mover's own perspective (the one place the Black-to-move sign
+    /// convention is applied). Every combination of mate/centipawns on
+    /// either side is handled explicitly - the old two-optional
+    /// representation let a forced mate compare against a `nil` best
+    /// centipawn value and fall through to `.incorrect` (F7); this cannot,
+    /// because `WhitePerspectiveScore` has no representable "neither" case.
     private func classify(
-        best: TrainingEngineEvaluation,
-        attempted: TrainingEngineEvaluation,
+        best: WhitePerspectiveScore,
+        attempted: WhitePerspectiveScore,
         mover: ChessCore.PieceColor
     ) -> (outcome: TrainingOutcome, loss: Int?) {
-        if best.mateInWhitePerspective != nil || attempted.mateInWhitePerspective != nil {
-            return classifyMate(best: best.mateInWhitePerspective, attempted: attempted.mateInWhitePerspective, mover: mover)
-        }
-        guard let bestCP = best.scoreCentipawnsWhitePerspective,
-            let attemptedCP = attempted.scoreCentipawnsWhitePerspective
-        else {
+        let orientedBest = best.oriented(forMover: mover)
+        let orientedAttempted = attempted.oriented(forMover: mover)
+
+        if case .mate(let attemptedDistance) = orientedAttempted, attemptedDistance <= 0 {
+            // The mover is being mated - always incorrect, whatever the
+            // cached best line was.
             return (.incorrect, nil)
         }
-        let orientedBest = mover == .white ? bestCP : -bestCP
-        let orientedAttempt = mover == .white ? attemptedCP : -attemptedCP
-        let loss = max(0, orientedBest - orientedAttempt)
-        switch loss {
-        case 0...30: return (.strong, loss)
-        case 31...90: return (.playable, loss)
-        case 91...220: return (.inaccurate, loss)
-        default: return (.incorrect, loss)
-        }
-    }
 
-    private func classifyMate(best: Int?, attempted: Int?, mover: ChessCore.PieceColor) -> (TrainingOutcome, Int?) {
-        guard let best else { return (.incorrect, nil) }
-        let orientedBest = mover == .white ? best : -best
-        guard orientedBest > 0 else { return (.incorrect, nil) }
-        guard let attempted else { return (.incorrect, nil) }
-        let orientedAttempt = mover == .white ? attempted : -attempted
-        guard orientedAttempt > 0 else { return (.incorrect, nil) }
-        let extraMoves = max(0, abs(orientedAttempt) - abs(orientedBest))
-        switch extraMoves {
-        case 0...1: return (.strong, nil)
-        case 2...3: return (.playable, nil)
-        default: return (.inaccurate, nil)
+        switch orientedAttempted {
+        case .mate(let attemptedDistance):
+            // attemptedDistance > 0 guaranteed above: the mover forces mate.
+            guard case .mate(let bestDistance) = orientedBest else {
+                // A forced mate is never worse than any centipawn evaluation.
+                return (.strong, nil)
+            }
+            // The plan specifies only that "a shorter or equal distance is
+            // .strong" for mate vs. mate; the playable/inaccurate split
+            // below for a *slower* mate is this evaluator's own judgement
+            // call (mirroring the old classifyMate's tiering, shifted so
+            // only extraMoves == 0 is strong), not a value the plan itself
+            // fixes.
+            let extraMoves = max(0, attemptedDistance - bestDistance)
+            switch extraMoves {
+            case 0: return (.strong, nil)
+            case 1...3: return (.playable, nil)
+            default: return (.inaccurate, nil)
+            }
+
+        case .centipawns(let attemptedCP):
+            if case .mate = orientedBest {
+                // The forced win was lost. Still credit a clearly winning
+                // position rather than grading it as flatly wrong. 200cp is
+                // this evaluator's own judgement call for "clearly winning"
+                // - the plan asks for the distinction but does not fix a
+                // number.
+                return attemptedCP >= 200 ? (.inaccurate, nil) : (.incorrect, nil)
+            }
+            guard case .centipawns(let bestCP) = orientedBest else {
+                return (.incorrect, nil)
+            }
+            let loss = max(0, bestCP - attemptedCP)
+            switch loss {
+            case 0...30: return (.strong, loss)
+            case 31...90: return (.playable, loss)
+            case 91...220: return (.inaccurate, loss)
+            default: return (.incorrect, loss)
+            }
         }
     }
 }

@@ -28,6 +28,11 @@ final class PracticeSessionViewModel: ObservableObject {
     @Published private(set) var selectedSquare: BoardSquare?
     @Published private(set) var completedEvaluations: [TrainingEvaluation] = []
     @Published private(set) var firstAttemptSuccesses = 0
+    /// A non-blocking message for a recoverable engine failure during
+    /// `submit`, shown alongside the prompt controls. `.failed` stays
+    /// reserved for a failure to load the lesson at all (see `load()`); a
+    /// bounded-search error mid-grading must not destroy the whole session.
+    @Published private(set) var promptError: String?
 
     private var cardRecords: [TrainingCardRecord] = []
     private let store: GameStore
@@ -169,6 +174,7 @@ final class PracticeSessionViewModel: ObservableObject {
         guard let card = currentCard, currentIndex < cardRecords.count else { return }
         attemptsOnCurrentCard += 1
         state = .evaluating
+        promptError = nil
         do {
             let result = try await evaluator.evaluate(card: card, attemptedUCI: attemptedUCI)
             completedEvaluations.append(result)
@@ -192,8 +198,25 @@ final class PracticeSessionViewModel: ObservableObject {
                 cards[currentIndex] = card
             }
             state = .feedback(result)
+        } catch let error as EngineSearchError {
+            // Recoverable: the card, board, and attempt count are untouched
+            // so the learner can simply try the same card again.
+            attemptsOnCurrentCard -= 1
+            promptError = retryableMessage(for: error)
+            state = .prompt
         } catch {
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func retryableMessage(for error: EngineSearchError) -> String {
+        switch error {
+        case .timedOut:
+            return "The engine took too long to respond. Try again."
+        case .cancelled:
+            return "The evaluation was cancelled. Try again."
+        case .noAnalysis, .engineUnavailable:
+            return "The engine couldn't evaluate that move. Try again."
         }
     }
 
