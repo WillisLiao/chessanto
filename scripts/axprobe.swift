@@ -57,6 +57,14 @@ func valueAttribute(_ element: AXUIElement) -> String? {
     return nil
 }
 
+func sizeAttribute(_ element: AXUIElement) -> CGSize? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &value) == .success else { return nil }
+    var size = CGSize.zero
+    guard AXValueGetType(value as! AXValue) == .cgSize, AXValueGetValue(value as! AXValue, .cgSize, &size) else { return nil }
+    return size
+}
+
 func walk(_ element: AXUIElement, depth: Int, filter: String?) {
     let role = attribute(element, kAXRoleAttribute as String) ?? ""
     let identifier = attribute(element, "AXIdentifier") ?? ""
@@ -66,8 +74,9 @@ func walk(_ element: AXUIElement, depth: Int, filter: String?) {
     var enabledValue: CFTypeRef?
     AXUIElementCopyAttributeValue(element, kAXEnabledAttribute as CFString, &enabledValue)
     let enabled = (enabledValue as? Bool).map(String.init) ?? "?"
+    let size = sizeAttribute(element).map { "\(Int($0.width))x\(Int($0.height))" } ?? "?"
 
-    let line = "\(String(repeating: "  ", count: depth))[\(role)] id=\(identifier) title=\(title) desc=\(description) value=\(value) enabled=\(enabled)"
+    let line = "\(String(repeating: "  ", count: depth))[\(role)] id=\(identifier) title=\(title) desc=\(description) value=\(value) enabled=\(enabled) size=\(size)"
     if let filter, !identifier.contains(filter), !description.contains(filter), !title.contains(filter), !value.contains(filter) {
         // still recurse into children, just don't print this node
     } else {

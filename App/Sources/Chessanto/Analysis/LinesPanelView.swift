@@ -10,12 +10,23 @@ struct LinesPanelView: View {
     let fen: String
     var onAdopt: ([String]) -> Void = { _ in }
 
+    /// Reserves space for a fixed 3 rows regardless of how many lines are
+    /// actually live right now - the engine clears and repopulates `lines`
+    /// on every position change (debounced ~200ms per M2), and without a
+    /// stable height here the surrounding column reflows on every move,
+    /// visibly resizing the board (it sizes itself from whatever space is
+    /// left via `GeometryReader` + `.aspectRatio(fit)`).
+    private static let rowHeight: CGFloat = 16
+    private static let rowSpacing: CGFloat = 4
+    private static let reservedHeight = rowHeight * 3 + rowSpacing * 2
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Self.rowSpacing) {
             if lines.isEmpty {
                 Text("No live lines yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .frame(height: Self.rowHeight, alignment: .top)
             } else {
                 ForEach(Array(lines.prefix(3).enumerated()), id: \.offset) { _, line in
                     Button {
@@ -33,9 +44,11 @@ struct LinesPanelView: View {
                         .accessibilityElement(children: .combine)
                     }
                     .buttonStyle(.plain)
+                    .frame(height: Self.rowHeight, alignment: .top)
                 }
             }
         }
+        .frame(height: Self.reservedHeight, alignment: .top)
     }
 
     private func evalLabel(_ line: AnalysisEngine.EngineInfo) -> String {
