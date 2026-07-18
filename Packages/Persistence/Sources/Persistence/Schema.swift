@@ -115,6 +115,19 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v5_trainingIndexes") { db in
+            try db.create(
+                index: "trainingCard_dueAt_updatedAt",
+                on: "trainingCard",
+                columns: ["dueAt", "updatedAt"]
+            )
+            try db.create(
+                index: "trainingAttempt_cardId_attemptedAt",
+                on: "trainingAttempt",
+                columns: ["cardId", "attemptedAt"]
+            )
+        }
+
         return migrator
     }
 }

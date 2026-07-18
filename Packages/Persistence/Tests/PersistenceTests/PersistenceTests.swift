@@ -4,8 +4,39 @@ import Testing
 @testable import Persistence
 
 struct PersistenceTests {
-    @Test func placeholder() {
-        #expect(true)
+    @Test func defaultStoreUsesLaunchDatabaseOverride() throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chessanto-default-store-\(UUID().uuidString).sqlite")
+        defer {
+            try? FileManager.default.removeItem(at: databaseURL)
+            try? FileManager.default.removeItem(atPath: databaseURL.path + "-shm")
+            try? FileManager.default.removeItem(atPath: databaseURL.path + "-wal")
+        }
+
+        let store = try GameStore.defaultStore(environment: [
+            "CHESSANTO_ENABLE_QA_DATABASE_OVERRIDE": "1",
+            "CHESSANTO_DATABASE_PATH": databaseURL.path
+        ])
+        _ = try store.save(GameRecord(
+            source: .pgnImport,
+            pgn: "1. e4 e5",
+            white: "QA",
+            black: "Fixture"
+        ))
+
+        #expect(FileManager.default.fileExists(atPath: databaseURL.path))
+        #expect(try store.allGames().map(\.white) == ["QA"])
+    }
+
+    @Test func trainingReconciliationErrorsExplainTheInvalidPracticeData() {
+        #expect(
+            TrainingCardReconciliationError.invalidFEN.localizedDescription
+                == "A practice card contained an invalid chess position."
+        )
+        #expect(
+            TrainingCardReconciliationError.invalidBestMove.localizedDescription
+                == "A practice card's best move was not legal in its chess position."
+        )
     }
 
     private func makeGame(_ store: GameStore) throws -> Int64 {
@@ -16,6 +47,26 @@ struct PersistenceTests {
             black: "Bob"
         ))
         return saved.id!
+    }
+
+    private func validTrainingCard(
+        gameId: Int64,
+        sourcePly: Int,
+        bestMoveUCI: String = "e2e4",
+        dueAt: Date = Date()
+    ) -> TrainingCardRecord {
+        TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: sourcePly,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: bestMoveUCI,
+            rankedLinesJSON: """
+                [{"rank":1,"scoreCentipawns":0,"mateIn":null,"principalVariationUCI":["\(bestMoveUCI)"],"depth":10}]
+                """,
+            classification: "mistake",
+            dueAt: dueAt
+        )
     }
 
     @Test func analysisRoundTrips() async throws {
@@ -236,6 +287,130 @@ struct PersistenceTests {
         #expect(fetched[0].explanation == "Updated explanation")
     }
 
+    @Test func reconcilingTrainingCardsRemovesObsoleteSourcePlies() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        _ = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 1,
+            preMoveFEN: "obsolete-fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake"
+        ))
+        _ = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 18,
+            preMoveFEN: "current-fen",
+            sideToMove: "black",
+            bestMoveUCI: "d8e7",
+            rankedLinesJSON: "[]",
+            classification: "inaccuracy"
+        ))
+
+        _ = try await store.reconcileTrainingCards(
+            gameId: gameId,
+            candidates: [
+                validTrainingCard(gameId: gameId, sourcePly: 18)
+            ]
+        )
+
+        let fetched = try await store.trainingCards(gameId: gameId)
+        #expect(fetched.map(\.sourcePly) == [18])
+    }
+
+    @Test func reconcilingChangedTrainingAnswerResetsProgressAndAttempts() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        let original = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: gameId,
+            sourcePly: 18,
+            preMoveFEN: "old-fen",
+            sideToMove: "black",
+            bestMoveUCI: "d8e7",
+            rankedLinesJSON: "[]",
+            classification: "inaccuracy"
+        ))
+        var learned = original
+        learned.dueAt = Date(timeIntervalSince1970: 50_000)
+        learned.consecutiveSuccesses = 2
+        learned.masteryState = "review"
+        learned.lastResult = "strong"
+        _ = try await store.saveTrainingAttempt(
+            TrainingAttemptRecord(
+                cardId: original.id!,
+                attemptedUCI: "d8e7",
+                evaluationLossCentipawns: 0,
+                outcome: "strong",
+                hintCount: 0
+            ),
+            updatedCard: learned
+        )
+        let resetDueAt = Date(timeIntervalSince1970: 2_000)
+
+        let reconciled = try await store.reconcileTrainingCards(
+            gameId: gameId,
+            candidates: [
+                validTrainingCard(
+                    gameId: gameId,
+                    sourcePly: 18,
+                    bestMoveUCI: "d2d4",
+                    dueAt: resetDueAt
+                )
+            ]
+        )
+
+        #expect(reconciled[0].id == original.id)
+        #expect(reconciled[0].dueAt == resetDueAt)
+        #expect(reconciled[0].consecutiveSuccesses == 0)
+        #expect(reconciled[0].masteryState == "new")
+        #expect(reconciled[0].lastResult == nil)
+        #expect(try await store.trainingAttempts(cardId: original.id!).isEmpty)
+    }
+
+    @Test func invalidTrainingCandidateRollsBackWholeReconciliation() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        _ = try await store.upsertTrainingCard(
+            validTrainingCard(gameId: gameId, sourcePly: 1)
+        )
+        var invalid = validTrainingCard(gameId: gameId, sourcePly: 3)
+        invalid.rankedLinesJSON = """
+            [{"rank":1,"principalVariationUCI":["e2e4"]}]
+            """
+
+        await #expect(throws: TrainingCardReconciliationError.self) {
+            _ = try await store.reconcileTrainingCards(
+                gameId: gameId,
+                candidates: [
+                    validTrainingCard(gameId: gameId, sourcePly: 2),
+                    invalid
+                ]
+            )
+        }
+
+        #expect(try await store.trainingCards(gameId: gameId).map(\.sourcePly) == [1])
+    }
+
+    @Test func unchangedTrainingReconciliationIsIdempotent() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        let first = try await store.reconcileTrainingCards(
+            gameId: gameId,
+            candidates: [validTrainingCard(gameId: gameId, sourcePly: 2)]
+        )
+        let firstPersisted = try await store.trainingCards(gameId: gameId)
+
+        let second = try await store.reconcileTrainingCards(
+            gameId: gameId,
+            candidates: [validTrainingCard(gameId: gameId, sourcePly: 2)]
+        )
+
+        #expect(second[0].id == first[0].id)
+        #expect(second[0].updatedAt == firstPersisted[0].updatedAt)
+    }
+
     @Test func dueTrainingCardsAndAttemptsRoundTrip() async throws {
         let store = try GameStore()
         let gameId = try makeGame(store)
@@ -276,6 +451,49 @@ struct PersistenceTests {
         #expect(updated[0].masteryState == "review")
         #expect(updated[0].consecutiveSuccesses == 1)
         #expect(nextDue != nil)
+    }
+
+    @Test func trainingQueueSnapshotExcludesGamesThatDoNotMatchTheUsername() async throws {
+        let store = try GameStore()
+        let matchingGameId = try makeGame(store)
+        let unmatchedGameId = try #require(try store.save(GameRecord(
+            source: .pgnImport,
+            pgn: "1. d4 d5",
+            white: "Carol",
+            black: "Dave"
+        )).id)
+        let now = Date(timeIntervalSince1970: 10_000)
+        _ = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: matchingGameId,
+            sourcePly: 2,
+            preMoveFEN: "matching",
+            sideToMove: "black",
+            bestMoveUCI: "e7e5",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            dueAt: now.addingTimeInterval(-10)
+        ))
+        _ = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: unmatchedGameId,
+            sourcePly: 2,
+            preMoveFEN: "unmatched",
+            sideToMove: "black",
+            bestMoveUCI: "d7d5",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            dueAt: now.addingTimeInterval(-10)
+        ))
+
+        let snapshot = try await store.trainingQueueSnapshot(
+            username: "aLiCe",
+            now: now,
+            limit: 20
+        )
+
+        #expect(snapshot.dueCards.map(\.gameId) == [matchingGameId])
+        #expect(snapshot.dueCount == 1)
+        #expect(snapshot.fallbackCards.map(\.gameId) == [matchingGameId])
+        #expect(snapshot.nextDueDate == nil)
     }
 
     @Test func deletingGameCascadesToTrainingCardsAndAttempts() async throws {
@@ -388,5 +606,120 @@ struct PersistenceTests {
         #expect(game?.white == "Alice")
         #expect(trainingColumns.contains("sourcePly"))
         #expect(trainingColumns.contains("masteryState"))
+    }
+
+    @Test func v5AddsTrainingQueueIndexes() throws {
+        let store = try GameStore()
+        let indexNames = try store.dbQueue.read { db in
+            try String.fetchAll(
+                db,
+                sql: """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index'
+                    ORDER BY name
+                    """
+            )
+        }
+
+        #expect(indexNames.contains("trainingCard_dueAt_updatedAt"))
+        #expect(indexNames.contains("trainingAttempt_cardId_attemptedAt"))
+    }
+
+    @Test func v5MigrationPreservesExistingV4TrainingDataAndForeignKeys() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v4_trainingLoop")
+        let timestamp = Date(timeIntervalSince1970: 20_000)
+
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO game (
+                        id, source, pgn, white, black, importedAt
+                    ) VALUES (
+                        41, 'pgnImport', '1. e4 e5', 'Learner', 'Opponent', ?
+                    )
+                    """,
+                arguments: [timestamp]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO trainingCard (
+                        id, gameId, sourcePly, preMoveFEN, sideToMove,
+                        bestMoveUCI, rankedLinesJSON, classification,
+                        themesJSON, explanation, dueAt,
+                        consecutiveSuccesses, masteryState, lastResult,
+                        createdAt, updatedAt
+                    ) VALUES (
+                        51, 41, 1, ?, 'white',
+                        'e2e4', ?, 'mistake',
+                        '["Opening"]', 'Claim the center.', ?,
+                        2, 'review', 'strong',
+                        ?, ?
+                    )
+                    """,
+                arguments: [
+                    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    """
+                    [{"rank":1,"scoreCentipawns":20,"mateIn":null,"principalVariationUCI":["e2e4"],"depth":16}]
+                    """,
+                    timestamp,
+                    timestamp,
+                    timestamp
+                ]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO trainingAttempt (
+                        id, cardId, attemptedUCI, attemptedAt,
+                        evaluationLossCentipawns, outcome, hintCount
+                    ) VALUES (
+                        61, 51, 'e2e4', ?, 0, 'strong', 1
+                    )
+                    """,
+                arguments: [timestamp]
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let result = try queue.read { db in
+            let card = try TrainingCardRecord.fetchOne(db, key: 51)
+            let attempt = try TrainingAttemptRecord.fetchOne(db, key: 61)
+            let indexNames = try String.fetchAll(
+                db,
+                sql: """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'index'
+                    ORDER BY name
+                    """
+            )
+            let migrations = try String.fetchAll(
+                db,
+                sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid"
+            )
+            let foreignKeyViolations = try Row.fetchAll(
+                db,
+                sql: "PRAGMA foreign_key_check"
+            )
+            return (
+                card,
+                attempt,
+                indexNames,
+                migrations,
+                foreignKeyViolations
+            )
+        }
+
+        #expect(result.0?.gameId == 41)
+        #expect(result.0?.consecutiveSuccesses == 2)
+        #expect(result.0?.masteryState == "review")
+        #expect(result.1?.cardId == 51)
+        #expect(result.1?.hintCount == 1)
+        #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
+        #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
+        #expect(result.3.last == "v5_trainingIndexes")
+        #expect(result.4.isEmpty)
     }
 }

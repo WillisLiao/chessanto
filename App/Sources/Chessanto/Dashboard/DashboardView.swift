@@ -37,9 +37,12 @@ struct DashboardView: View {
     @State private var analyzedGameCount = 0
     @State private var userMatchedGameCount = 0
     @State private var dueTrainingCards: [TrainingCardRecord] = []
+    @State private var dueTrainingCardCount = 0
     @State private var fallbackTrainingCards: [TrainingCardRecord] = []
     @State private var nextTrainingDueDate: Date?
     @State private var isPracticeOpen = false
+    @State private var trainingQueueError: String?
+    @State private var loadGeneration = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -62,7 +65,7 @@ struct DashboardView: View {
         }
         .frame(width: 620, height: 470)
         .background(DesignColors.surface0)
-        .task { await load() }
+        .task(id: loadGeneration) { await load() }
     }
 
     @ViewBuilder
@@ -114,7 +117,15 @@ struct DashboardView: View {
     private var nextLesson: some View {
         VStack(alignment: .leading, spacing: DesignSpacing.sm) {
             SectionHeader(title: "Next lesson")
-            if dueTrainingCards.isEmpty {
+            if let trainingQueueError {
+                Label(trainingQueueError, systemImage: "exclamationmark.triangle")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.error)
+                Button("Retry practice preparation") {
+                    loadGeneration += 1
+                }
+                .buttonStyle(.bordered)
+            } else if dueTrainingCards.isEmpty {
                 Text("No review due right now.")
                     .font(.dsBody)
                     .foregroundStyle(DesignColors.textPrimary)
@@ -133,7 +144,7 @@ struct DashboardView: View {
                 .buttonStyle(.bordered)
                 .disabled(fallbackTrainingCards.isEmpty)
             } else {
-                Text("\(dueTrainingCards.count) card\(dueTrainingCards.count == 1 ? "" : "s") ready")
+                Text("\(dueTrainingCardCount) card\(dueTrainingCardCount == 1 ? "" : "s") ready")
                     .font(.dsBody)
                     .foregroundStyle(DesignColors.textPrimary)
                 Button {
@@ -146,10 +157,21 @@ struct DashboardView: View {
                 .controlSize(.large)
             }
         }
-        .sheet(isPresented: $isPracticeOpen) {
+        .sheet(isPresented: $isPracticeOpen, onDismiss: {
+            loadGeneration += 1
+        }) {
             PracticeSessionView(viewModel: PracticeSessionViewModel(
                 store: library.store,
-                loadCards: { dueTrainingCards.isEmpty ? fallbackTrainingCards : dueTrainingCards },
+                loadCards: {
+                    let username = library.chessComUsername
+                        .trimmingCharacters(in: .whitespaces)
+                    let queue = try await library.store.trainingQueueSnapshot(
+                        username: username.isEmpty ? nil : username
+                    )
+                    return queue.dueCards.isEmpty
+                        ? queue.fallbackCards
+                        : queue.dueCards
+                },
                 evaluator: DefaultTrainingMoveEvaluator { fen, attemptedUCI in
                     try await engineService.trainingEvaluationAfterMove(fen: fen, attemptedUCI: attemptedUCI)
                 }
@@ -222,7 +244,7 @@ struct DashboardView: View {
         Divider()
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: DesignSpacing.xs)], alignment: .leading, spacing: DesignSpacing.xs) {
             ForEach(classificationCounts.filter { $0.count > 0 }) { count in
-                Chip("\(count.classification.shortAbbreviation) \(count.count)", color: count.classification.color)
+                ClassificationChip(classification: count.classification, count: count.count)
             }
         }
     }
@@ -236,18 +258,67 @@ struct DashboardView: View {
         let games = library.games
         let store = library.store
 
-        let result = await Task.detached(priority: .userInitiated) {
-            await Self.computeDashboard(games: games, username: username, store: store)
-        }.value
+        isLoading = true
+        trainingQueueError = nil
+        let backfillTask = Task.detached(priority: .utility) {
+            try await Self.backfillTrainingCards(
+                games: games,
+                username: username,
+                store: store
+            )
+        }
+        do {
+            try await withTaskCancellationHandler {
+                try await backfillTask.value
+            } onCancel: {
+                backfillTask.cancel()
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            trainingQueueError = "Practice preparation failed: \(error.localizedDescription)"
+        }
 
+        let dashboardTask = Task.detached(priority: .userInitiated) {
+            await Self.computeDashboard(games: games, username: username, store: store)
+        }
+        let result = await withTaskCancellationHandler {
+            await dashboardTask.value
+        } onCancel: {
+            dashboardTask.cancel()
+        }
+
+        guard !Task.isCancelled else { return }
         points = result.points
         themeCounts = result.themeCounts
         classificationCounts = result.classificationCounts
         analyzedGameCount = result.analyzedGameCount
         userMatchedGameCount = result.userMatchedGameCount
-        dueTrainingCards = (try? await store.dueTrainingCards()) ?? []
-        fallbackTrainingCards = (try? await store.anyTrainingCards()) ?? []
-        nextTrainingDueDate = try? await store.nextTrainingDueDate()
+
+        if trainingQueueError == nil {
+            do {
+                let queue = try await store.trainingQueueSnapshot(
+                    username: username.isEmpty ? nil : username
+                )
+                dueTrainingCards = queue.dueCards
+                dueTrainingCardCount = queue.dueCount
+                fallbackTrainingCards = queue.fallbackCards
+                nextTrainingDueDate = queue.nextDueDate
+            } catch is CancellationError {
+                return
+            } catch {
+                trainingQueueError = "Practice queue failed: \(error.localizedDescription)"
+                dueTrainingCards = []
+                dueTrainingCardCount = 0
+                fallbackTrainingCards = []
+                nextTrainingDueDate = nil
+            }
+        } else {
+            dueTrainingCards = []
+            dueTrainingCardCount = 0
+            fallbackTrainingCards = []
+            nextTrainingDueDate = nil
+        }
         isLoading = false
     }
 
@@ -257,6 +328,42 @@ struct DashboardView: View {
         let classificationCounts: [MoveClassificationCount]
         let analyzedGameCount: Int
         let userMatchedGameCount: Int
+    }
+
+    private static func backfillTrainingCards(
+        games: [GameRecord],
+        username: String,
+        store: GameStore
+    ) async throws {
+        for game in games {
+            try Task.checkCancellation()
+            guard let gameId = game.id else { continue }
+            let usernameIsConfigured = !username.isEmpty
+            let userMatchesGame =
+                game.white.caseInsensitiveCompare(username) == .orderedSame
+                || game.black.caseInsensitiveCompare(username) == .orderedSame
+            guard !usernameIsConfigured || userMatchesGame else { continue }
+            let analysisRows = try await store.analysis(gameId: gameId)
+            guard !analysisRows.isEmpty,
+                let input = ReportBuilding.buildInput(
+                    record: game,
+                    analysisRows: analysisRows,
+                    chessComUsername: username.isEmpty ? nil : username
+                ),
+                let report = ReportBuilder.build(
+                    input: input,
+                    openingBook: OpeningBook.shared
+                )
+            else {
+                continue
+            }
+            _ = try await TrainingCardReconciler.reconcile(
+                report: report,
+                input: input,
+                gameId: gameId,
+                store: store
+            )
+        }
     }
 
     /// Off the main actor: for every game, fetch its analysis rows and build
@@ -274,6 +381,7 @@ struct DashboardView: View {
         var userMatchedGameCount = 0
 
         for game in games {
+            guard !Task.isCancelled else { break }
             guard let gameId = game.id else { continue }
             let isWhite = game.white.caseInsensitiveCompare(username) == .orderedSame
             let isBlack = game.black.caseInsensitiveCompare(username) == .orderedSame
@@ -282,7 +390,11 @@ struct DashboardView: View {
             guard let analysisRows = try? await store.analysis(gameId: gameId), !analysisRows.isEmpty else { continue }
             analyzedGameCount += 1
 
-            guard let report = ReportBuilding.buildReport(record: game, analysisRows: analysisRows, chessComUsername: username) else {
+            guard let report = ReportBuilding.buildReport(
+                record: game,
+                analysisRows: analysisRows,
+                chessComUsername: username
+            ) else {
                 continue
             }
             userMatchedGameCount += 1

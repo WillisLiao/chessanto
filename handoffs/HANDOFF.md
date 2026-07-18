@@ -609,6 +609,46 @@ This session did not capture a fresh native screenshot of the completed practice
 The implementation was verified by focused view-model tests, domain tests, persistence tests, full app compilation and tests, source review, and prior release gates.
 The next visual QA pass should open a generated-card practice session in the Release app and capture the prompt, feedback, reveal, and completion states at normal and narrow widths.
 
+## V1 hardening slice complete (2026-07-18)
+
+The first execution slice from `handoffs/NEXT-SESSION-V1-HARDENING.md` is complete.
+The exact implementation and native QA record is in the `V1 hardening execution` section of `devlogs/2026-07-18.md`.
+
+Move-quality abbreviations were replaced with familiar chess-review marks.
+Best uses a green star, Excellent uses a green thumbs-up, Good uses a neutral check, and the remaining classifications use familiar punctuation or symbols in their reserved semantic colors.
+Every compact mark exposes the full classification through accessibility.
+
+Training-card generation now uses the exact position immediately before the audited missed move.
+When the configured username identifies White or Black, report and Dashboard generation keep only that learner's key moments.
+Neutral game-scoped Report practice remains available for explicitly opened unmatched study games.
+
+Persistence now performs transactional per-game reconciliation.
+It validates candidate ownership, source-ply uniqueness, FEN, mover, legal best move, the complete persisted ranked-line shape, rank-one consistency, themes, classifications, and progress enums before writing.
+It inserts new cards, updates retained cards, deletes obsolete cards, preserves scheduling when the answer is unchanged, and resets progress plus attempts when the position, mover, or answer changes.
+Unchanged reconciliation is idempotent and preserves `updatedAt`.
+
+The forward-only `v5_trainingIndexes` migration adds queue and attempt-history indexes without modifying the shipped v4 migration.
+The upgrade tests preserve seeded v4 training progress, verify both indexes and the latest migration identifier, and require an empty `PRAGMA foreign_key_check`.
+
+Report readiness is now a generation-safe state owned by `TrainingCardSynchronizer`.
+Practice stays in a preparing state until reconciliation succeeds, exposes Retry after a real failure, shows a non-action state when the learner has no owned cards, and enables per-moment Practice only for reconciled source plies.
+Tests cover readiness, cancellation, stale-generation rejection, failure, retry, and a real analyzed-report path that creates the exact learner-owned pre-move card without seeded SQL.
+
+Dashboard performs a cancellable historic-game backfill before reading one consistent personalized queue snapshot.
+It reports the exact due count, reloads after practice dismissal, loads fresh cards when a session opens, excludes unmatched games when a username is configured, and withholds stale actions when preparation or queue loading fails.
+Dashboard failure chrome uses a dedicated error token rather than a reserved move-classification color.
+
+Native QA used disposable copies under the sandbox container and never mutated the live database.
+The live sandbox database backup path and disposable QA paths are recorded in the devlog.
+The repaired Report opened a real middlegame at move 9 instead of the starting position.
+The repaired Dashboard opened a developed position at move 4 and excluded the deliberately seeded unmatched move-1 card.
+Valid local evidence remains at `/tmp/chessanto-v1-practice-insight-after.png`, `/tmp/chessanto-v1-classification-marks-wide-after.png`, and `/tmp/chessanto-v1-dashboard-practice-final.png`.
+
+The final app suite passed 31 tests across 13 suites.
+The final Persistence suite passed 29 tests.
+The next planning task for Claude Opus is described in `handoffs/NEXT-CLAUDE-OPUS-PLANNING.md`.
+That planning task should produce one bounded implementation plan for a Claude Sonnet medium session and must treat the remaining engine, grading, practice-state, presentation, responsive, accessibility, and release gates in `handoffs/NEXT-SESSION-V1-HARDENING.md` as still open.
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.

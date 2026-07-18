@@ -17,6 +17,7 @@ guard CommandLine.arguments.count >= 3 else {
 
 let target = CommandLine.arguments[1]
 let match = CommandLine.arguments[2]
+let preferLastMatch = CommandLine.arguments.dropFirst(3).contains("--last")
 
 func findPID(_ target: String) -> pid_t? {
     if let pid = pid_t(target) { return pid }
@@ -39,11 +40,20 @@ func children(_ element: AXUIElement) -> [AXUIElement] {
     return array
 }
 
+func parent(_ element: AXUIElement) -> AXUIElement? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &value) == .success else {
+        return nil
+    }
+    return (value as! AXUIElement)
+}
+
 func find(_ element: AXUIElement, match: String) -> AXUIElement? {
     let identifier = attribute(element, "AXIdentifier") ?? ""
     let description = attribute(element, kAXDescriptionAttribute as String) ?? ""
     let title = attribute(element, kAXTitleAttribute as String) ?? ""
-    if identifier.contains(match) || description.contains(match) || title.contains(match) {
+    let value = attribute(element, kAXValueAttribute as String) ?? ""
+    if identifier.contains(match) || description.contains(match) || title.contains(match) || value.contains(match) {
         return element
     }
     for child in children(element) {
@@ -52,6 +62,21 @@ func find(_ element: AXUIElement, match: String) -> AXUIElement? {
         }
     }
     return nil
+}
+
+func findAll(_ element: AXUIElement, match: String) -> [AXUIElement] {
+    let identifier = attribute(element, "AXIdentifier") ?? ""
+    let description = attribute(element, kAXDescriptionAttribute as String) ?? ""
+    let title = attribute(element, kAXTitleAttribute as String) ?? ""
+    let value = attribute(element, kAXValueAttribute as String) ?? ""
+    var matches: [AXUIElement] = []
+    if identifier.contains(match) || description.contains(match) || title.contains(match) || value.contains(match) {
+        matches.append(element)
+    }
+    for child in children(element) {
+        matches.append(contentsOf: findAll(child, match: match))
+    }
+    return matches
 }
 
 guard let pid = findPID(target) else {
@@ -68,16 +93,42 @@ else {
     exit(2)
 }
 
-for window in windows {
-    if let found = find(window, match: match) {
-        let result = AXUIElementPerformAction(found, kAXPressAction as CFString)
-        if result == .success {
-            print("pressed element matching '\(match)'")
-            exit(0)
+let orderedWindows = preferLastMatch ? Array(windows.reversed()) : windows
+for window in orderedWindows {
+    let found = if preferLastMatch {
+        findAll(window, match: match).last
+    } else {
+        find(window, match: match)
+    }
+    if let found {
+        let foundRole = attribute(found, kAXRoleAttribute as String)
+        var candidate: AXUIElement? = if foundRole == (kAXStaticTextRole as String) || foundRole == (kAXUnknownRole as String) {
+            parent(found)
         } else {
-            FileHandle.standardError.write("found element but press failed: \(result.rawValue)\n".data(using: .utf8)!)
-            exit(3)
+            found
         }
+        while let current = candidate {
+            let role = attribute(current, kAXRoleAttribute as String)
+            if role == (kAXRowRole as String) || role == (kAXCellRole as String) {
+                let result = AXUIElementSetAttributeValue(
+                    current,
+                    kAXSelectedAttribute as CFString,
+                    true as CFTypeRef
+                )
+                if result == .success {
+                    print("selected row containing '\(match)'")
+                    exit(0)
+                }
+            }
+            let result = AXUIElementPerformAction(current, kAXPressAction as CFString)
+            if result == .success {
+                print("pressed element matching '\(match)'")
+                exit(0)
+            }
+            candidate = parent(current)
+        }
+        FileHandle.standardError.write("found element but neither it nor its ancestors support press\n".data(using: .utf8)!)
+        exit(3)
     }
 }
 FileHandle.standardError.write("no element matching '\(match)' found\n".data(using: .utf8)!)

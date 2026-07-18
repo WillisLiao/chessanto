@@ -16,6 +16,7 @@ enum DesignColors {
     static let textPrimary = Color(NSColor(hex: "#26231F"))
     static let textSecondary = textPrimary.opacity(0.6)
     static let accent = Color(NSColor(hex: "#A6791F"))
+    static let error = Color(NSColor(hex: "#B42318"))
 }
 
 extension NSColor {

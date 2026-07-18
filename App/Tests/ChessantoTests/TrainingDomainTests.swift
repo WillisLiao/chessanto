@@ -7,6 +7,140 @@ import Testing
 
 struct TrainingDomainTests {
     @Test
+    func cardFactoryCanRepresentAnAuditedFirstMove() throws {
+        let input = ReportInput(
+            plies: [
+                PlyRecord(
+                    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    lines: [
+                        RankedLine(
+                            rank: 1,
+                            scoreCentipawns: 0,
+                            mateIn: nil,
+                            principalVariationUCI: ["e2e4"],
+                            depth: 16
+                        )
+                    ],
+                    playedUCI: nil
+                ),
+                PlyRecord(
+                    fen: "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+                    lines: [
+                        RankedLine(
+                            rank: 1,
+                            scoreCentipawns: -500,
+                            mateIn: nil,
+                            principalVariationUCI: ["e7e5"],
+                            depth: 16
+                        )
+                    ],
+                    playedUCI: "f2f3"
+                )
+            ],
+            whiteName: "White",
+            blackName: "Black",
+            result: "*",
+            chessComUsername: nil
+        )
+        let report = try #require(
+            ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        )
+        #expect(report.keyMoments.map(\.ply) == [1])
+
+        let drafts = TrainingCardFactory.drafts(report: report, input: input)
+
+        #expect(drafts.count == 1)
+        #expect(drafts[0].sourcePly == 1)
+        #expect(drafts[0].preMoveFEN == input.plies[0].fen)
+    }
+
+    @Test
+    func cardFactoryUsesThePositionImmediatelyBeforeTheMissedMove() throws {
+        let preMoveFEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        let input = ReportInput(
+            plies: [
+                PlyRecord(
+                    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    lines: [
+                        RankedLine(
+                            rank: 1,
+                            scoreCentipawns: 0,
+                            mateIn: nil,
+                            principalVariationUCI: ["e2e4"],
+                            depth: 16
+                        )
+                    ],
+                    playedUCI: nil
+                ),
+                PlyRecord(
+                    fen: preMoveFEN,
+                    lines: [
+                        RankedLine(
+                            rank: 1,
+                            scoreCentipawns: 0,
+                            mateIn: nil,
+                            principalVariationUCI: ["e7e5"],
+                            depth: 16
+                        )
+                    ],
+                    playedUCI: "e2e4"
+                ),
+                PlyRecord(
+                    fen: "rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                    lines: [
+                        RankedLine(
+                            rank: 1,
+                            scoreCentipawns: 500,
+                            mateIn: nil,
+                            principalVariationUCI: ["d2d4"],
+                            depth: 16
+                        )
+                    ],
+                    playedUCI: "f7f6"
+                )
+            ],
+            whiteName: "White",
+            blackName: "Black",
+            result: "*",
+            chessComUsername: nil
+        )
+        let report = try #require(
+            ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        )
+        #expect(report.keyMoments.map(\.ply) == [2])
+
+        let draft = try #require(
+            TrainingCardFactory.drafts(report: report, input: input).first
+        )
+
+        #expect(draft.sourcePly == 2)
+        #expect(draft.preMoveFEN == preMoveFEN)
+        #expect(draft.sideToMove == .black)
+        #expect(draft.rankedLines.first?.principalVariationUCI.first == "e7e5")
+
+        let whitePlayerInput = ReportInput(
+            plies: input.plies,
+            whiteName: input.whiteName,
+            blackName: input.blackName,
+            result: input.result,
+            chessComUsername: "WHITE"
+        )
+        let whitePlayerReport = try #require(
+            ReportBuilder.build(
+                input: whitePlayerInput,
+                openingBook: OpeningBook.shared
+            )
+        )
+
+        #expect(
+            TrainingCardFactory.drafts(
+                report: whitePlayerReport,
+                input: whitePlayerInput
+            ).isEmpty
+        )
+    }
+
+    @Test
     func cachedTopLineIsAcceptedWithoutEngineSearch() async throws {
         let probe = SearchProbe()
         let evaluator = DefaultTrainingMoveEvaluator { _, _ in

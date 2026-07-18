@@ -519,7 +519,11 @@ private struct MoveListView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(san)")
+            .accessibilityLabel(
+                viewModel.classification(at: index).map {
+                    "\(san), \($0.abbreviation)"
+                } ?? san
+            )
             .contextMenu {
                 Button("Ask the coach about this move") {
                     guard let ply = viewModel.moveIndices.firstIndex(of: index) else { return }
@@ -531,17 +535,9 @@ private struct MoveListView: View {
         }
     }
 
-    /// A quiet dot for the common cases; a chip only for moments worth a
-    /// second look (inaccuracy and worse, plus brilliancies) - the redesign
-    /// plan's "reduce their footprint" decision for the move-quality scale.
     @ViewBuilder
     private func classificationMark(_ classification: MoveClassification) -> some View {
-        switch classification {
-        case .best, .excellent, .good:
-            Circle().fill(classification.color).frame(width: 6, height: 6)
-        case .inaccuracy, .mistake, .blunder, .missedWin, .brilliant:
-            Chip(classification.shortAbbreviation, color: classification.color)
-        }
+        ClassificationChip(classification: classification)
     }
 
     private func variationRow(index: MoveIndex, depth: Int) -> some View {

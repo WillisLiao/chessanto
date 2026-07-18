@@ -92,7 +92,7 @@ struct PracticeSessionView: View {
                 .foregroundStyle(DesignColors.textPrimary)
 
             if let card = viewModel.currentCard {
-                Chip(card.classification.shortAbbreviation, color: card.classification.color)
+                ClassificationChip(classification: card.classification)
                 if viewModel.hintCount >= 1 {
                     Text(card.themes.first ?? "Look for the forcing idea.")
                         .font(.dsBody)

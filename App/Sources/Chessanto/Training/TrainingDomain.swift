@@ -120,8 +120,18 @@ struct TrainingCardDraft: Equatable, Sendable {
 enum TrainingCardFactory {
     static func drafts(report: GameReport, input: ReportInput) -> [TrainingCardDraft] {
         var drafts: [TrainingCardDraft] = []
+        let userIsWhite: Bool? = if input.isUser(isWhite: true) {
+            true
+        } else if input.isUser(isWhite: false) {
+            false
+        } else {
+            nil
+        }
         for moment in report.keyMoments {
             guard moment.ply > 0, moment.ply - 1 < input.plies.count else { continue }
+            if let userIsWhite, moment.evalSwing.moverIsWhite != userIsWhite {
+                continue
+            }
             let preMove = input.plies[moment.ply - 1]
             let rankedLines = preMove.lines.sorted { $0.rank < $1.rank }
             guard rankedLines.contains(where: { !$0.principalVariationUCI.isEmpty }) else { continue }
@@ -145,6 +155,93 @@ enum TrainingCardFactory {
         if moment.missedMate != nil { result.append("Missed forced mate") }
         if moment.allowedMate != nil { result.append("Allowed forced mate") }
         return result
+    }
+}
+
+enum TrainingCardReconciler {
+    static func reconcile(
+        report: GameReport,
+        input: ReportInput,
+        gameId: Int64,
+        store: GameStore
+    ) async throws -> [TrainingCardRecord] {
+        let candidates = try TrainingCardFactory.drafts(report: report, input: input).map {
+            try TrainingCardRecord(cardDraft: $0, gameId: gameId)
+        }
+        try Task.checkCancellation()
+        return try await store.reconcileTrainingCards(
+            gameId: gameId,
+            candidates: candidates
+        )
+    }
+}
+
+enum TrainingCardSynchronizationState: Equatable {
+    case idle
+    case preparing
+    case ready(cardCount: Int, sourcePlies: Set<Int>)
+    case failed(String)
+}
+
+@MainActor
+final class TrainingCardSynchronizer {
+    typealias Operation = @Sendable () async throws -> [TrainingCardRecord]
+
+    private(set) var state: TrainingCardSynchronizationState = .idle {
+        didSet { onStateChange?(state) }
+    }
+    var onStateChange: ((TrainingCardSynchronizationState) -> Void)?
+
+    private var task: Task<[TrainingCardRecord], Error>?
+    private var generation = 0
+    private var latestRecords: [TrainingCardRecord] = []
+
+    func start(operation: @escaping Operation) {
+        task?.cancel()
+        generation += 1
+        let runGeneration = generation
+        latestRecords = []
+        state = .preparing
+
+        task = Task { [weak self] in
+            do {
+                let records = try await operation()
+                try Task.checkCancellation()
+                guard let self, self.generation == runGeneration else {
+                    throw CancellationError()
+                }
+                self.latestRecords = records
+                self.state = .ready(
+                    cardCount: records.count,
+                    sourcePlies: Set(records.map(\.sourcePly))
+                )
+                return records
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard let self, self.generation == runGeneration else {
+                    throw CancellationError()
+                }
+                self.latestRecords = []
+                self.state = .failed(error.localizedDescription)
+                throw error
+            }
+        }
+    }
+
+    func cancel() {
+        task?.cancel()
+        task = nil
+        generation += 1
+        latestRecords = []
+        state = .idle
+    }
+
+    func records() async throws -> [TrainingCardRecord] {
+        if let task {
+            return try await task.value
+        }
+        return latestRecords
     }
 }
 

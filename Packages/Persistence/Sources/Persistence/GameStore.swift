@@ -39,6 +39,22 @@ public final class GameStore: Sendable {
     }
 
     public static func defaultStore() throws -> GameStore {
+        try defaultStore(environment: ProcessInfo.processInfo.environment)
+    }
+
+    static func defaultStore(environment: [String: String]) throws -> GameStore {
+        if environment["CHESSANTO_ENABLE_QA_DATABASE_OVERRIDE"] == "1",
+            let overridePath = environment["CHESSANTO_DATABASE_PATH"],
+            !overridePath.isEmpty
+        {
+            let databaseURL = URL(fileURLWithPath: overridePath)
+            try FileManager.default.createDirectory(
+                at: databaseURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            return try GameStore(path: databaseURL.path)
+        }
+
         let appSupport = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -250,6 +266,86 @@ public final class GameStore: Sendable {
         }
     }
 
+    /// Replaces one game's generated card set in a single database write.
+    /// Existing scheduling progress is retained for matching source plies;
+    /// cards no longer produced by the audited report are removed.
+    @discardableResult
+    public func reconcileTrainingCards(
+        gameId: Int64,
+        candidates: [TrainingCardRecord]
+    ) async throws -> [TrainingCardRecord] {
+        try Task.checkCancellation()
+        guard candidates.allSatisfy({ $0.gameId == gameId }) else {
+            throw TrainingCardReconciliationError.mismatchedGame
+        }
+        guard Set(candidates.map(\.sourcePly)).count == candidates.count else {
+            throw TrainingCardReconciliationError.duplicateSourcePly
+        }
+        try candidates.forEach { try $0.validateForReconciliation() }
+
+        return try await dbQueue.write { db in
+            try Task.checkCancellation()
+            let existingCards = try TrainingCardRecord
+                .filter(Column("gameId") == gameId)
+                .fetchAll(db)
+            let existingByPly = Dictionary(
+                uniqueKeysWithValues: existingCards.map { ($0.sourcePly, $0) }
+            )
+            let candidatePlies = Set(candidates.map(\.sourcePly))
+
+            for existing in existingCards where !candidatePlies.contains(existing.sourcePly) {
+                _ = try existing.delete(db)
+            }
+
+            var reconciled: [TrainingCardRecord] = []
+            for candidate in candidates.sorted(by: { $0.sourcePly < $1.sourcePly }) {
+                if let existing = existingByPly[candidate.sourcePly] {
+                    let answerIsUnchanged =
+                        candidate.preMoveFEN == existing.preMoveFEN
+                        && candidate.sideToMove == existing.sideToMove
+                        && candidate.bestMoveUCI == existing.bestMoveUCI
+                    let contentIsUnchanged =
+                        answerIsUnchanged
+                        && candidate.rankedLinesJSON == existing.rankedLinesJSON
+                        && candidate.classification == existing.classification
+                        && candidate.themesJSON == existing.themesJSON
+                        && candidate.explanation == existing.explanation
+                    if contentIsUnchanged {
+                        reconciled.append(existing)
+                        continue
+                    }
+
+                    var updated = candidate
+                    updated.id = existing.id
+                    updated.createdAt = existing.createdAt
+                    updated.updatedAt = Date()
+                    if answerIsUnchanged {
+                        updated.dueAt = existing.dueAt
+                        updated.consecutiveSuccesses = existing.consecutiveSuccesses
+                        updated.masteryState = existing.masteryState
+                        updated.lastResult = existing.lastResult
+                    } else {
+                        updated.consecutiveSuccesses = 0
+                        updated.masteryState = "new"
+                        updated.lastResult = nil
+                        if let cardId = existing.id {
+                            _ = try TrainingAttemptRecord
+                                .filter(Column("cardId") == cardId)
+                                .deleteAll(db)
+                        }
+                    }
+                    try updated.update(db)
+                    reconciled.append(updated)
+                } else {
+                    var inserted = candidate
+                    try inserted.insert(db)
+                    reconciled.append(inserted)
+                }
+            }
+            return reconciled
+        }
+    }
+
     public func dueTrainingCards(now: Date = Date(), limit: Int = 20) async throws -> [TrainingCardRecord] {
         try await dbQueue.read { db in
             try TrainingCardRecord
@@ -275,6 +371,115 @@ public final class GameStore: Sendable {
                 db,
                 sql: "SELECT MIN(dueAt) FROM trainingCard WHERE dueAt > ?",
                 arguments: [now]
+            )
+        }
+    }
+
+    /// A consistent lesson-queue read for Dashboard. When a username is
+    /// configured, only games where that player appears are included.
+    public func trainingQueueSnapshot(
+        username: String?,
+        now: Date = Date(),
+        limit: Int = 20
+    ) async throws -> TrainingQueueSnapshot {
+        let trimmedUsername = username?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await dbQueue.read { db in
+            if let trimmedUsername, !trimmedUsername.isEmpty {
+                let playerArguments: StatementArguments = [
+                    trimmedUsername,
+                    trimmedUsername
+                ]
+                let dueCards = try TrainingCardRecord.fetchAll(
+                    db,
+                    sql: """
+                        SELECT tc.*
+                        FROM trainingCard tc
+                        JOIN game g ON g.id = tc.gameId
+                        WHERE (g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?)
+                          AND tc.dueAt <= ?
+                        ORDER BY tc.dueAt, tc.updatedAt
+                        LIMIT ?
+                        """,
+                    arguments: playerArguments + [now, limit]
+                )
+                let dueCount = try Int.fetchOne(
+                    db,
+                    sql: """
+                        SELECT COUNT(*)
+                        FROM trainingCard tc
+                        JOIN game g ON g.id = tc.gameId
+                        WHERE (g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?)
+                          AND tc.dueAt <= ?
+                        """,
+                    arguments: playerArguments + [now]
+                ) ?? 0
+                let fallbackCards = try TrainingCardRecord.fetchAll(
+                    db,
+                    sql: """
+                        SELECT tc.*
+                        FROM trainingCard tc
+                        JOIN game g ON g.id = tc.gameId
+                        WHERE g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?
+                        ORDER BY tc.updatedAt DESC
+                        LIMIT ?
+                        """,
+                    arguments: playerArguments + [limit]
+                )
+                let nextDueDate = try Date.fetchOne(
+                    db,
+                    sql: """
+                        SELECT MIN(tc.dueAt)
+                        FROM trainingCard tc
+                        JOIN game g ON g.id = tc.gameId
+                        WHERE (g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?)
+                          AND tc.dueAt > ?
+                        """,
+                    arguments: playerArguments + [now]
+                )
+                return TrainingQueueSnapshot(
+                    dueCards: dueCards,
+                    dueCount: dueCount,
+                    fallbackCards: fallbackCards,
+                    nextDueDate: nextDueDate
+                )
+            }
+
+            let dueCards = try TrainingCardRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT *
+                    FROM trainingCard
+                    WHERE dueAt <= ?
+                    ORDER BY dueAt, updatedAt
+                    LIMIT ?
+                    """,
+                arguments: [now, limit]
+            )
+            let dueCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM trainingCard WHERE dueAt <= ?",
+                arguments: [now]
+            ) ?? 0
+            let fallbackCards = try TrainingCardRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT *
+                    FROM trainingCard
+                    ORDER BY updatedAt DESC
+                    LIMIT ?
+                    """,
+                arguments: [limit]
+            )
+            let nextDueDate = try Date.fetchOne(
+                db,
+                sql: "SELECT MIN(dueAt) FROM trainingCard WHERE dueAt > ?",
+                arguments: [now]
+            )
+            return TrainingQueueSnapshot(
+                dueCards: dueCards,
+                dueCount: dueCount,
+                fallbackCards: fallbackCards,
+                nextDueDate: nextDueDate
             )
         }
     }

@@ -58,7 +58,14 @@ final class GameReplayViewModel: ObservableObject {
     /// can build its payloads from the exact same source values (one
     /// source of truth, no re-derivation).
     private(set) var reportInput: ReportInput?
-    @Published private(set) var trainingCardCount = 0
+    @Published private(set) var trainingSynchronizationState: TrainingCardSynchronizationState = .idle
+    private lazy var trainingCardSynchronizer: TrainingCardSynchronizer = {
+        let synchronizer = TrainingCardSynchronizer()
+        synchronizer.onStateChange = { [weak self] state in
+            self?.trainingSynchronizationState = state
+        }
+        return synchronizer
+    }()
 
     /// Children of each index that were reached by exploring a variation
     /// (mainline continuations are tracked separately via `moveIndices`).
@@ -293,6 +300,7 @@ final class GameReplayViewModel: ObservableObject {
     /// DB-free; `nil` while unanalyzed.
     private func buildReport() {
         guard isAnalyzed, moveIndices.count > 1 else {
+            trainingCardSynchronizer.cancel()
             report = nil
             reportInput = nil
             return
@@ -302,25 +310,83 @@ final class GameReplayViewModel: ObservableObject {
         reportInput = ReportBuilding.buildInput(record: record, analysisRows: analysisRows, chessComUsername: username)
         report = reportInput.flatMap { ReportBuilder.build(input: $0, openingBook: OpeningBook.shared) }
         if let report, let reportInput, let gameId {
-            Task { await persistTrainingCards(report: report, input: reportInput, gameId: gameId) }
+            startTrainingCardReconciliation(
+                report: report,
+                input: reportInput,
+                gameId: gameId
+            )
+        } else {
+            trainingCardSynchronizer.cancel()
         }
     }
 
-    private func persistTrainingCards(report: GameReport, input: ReportInput, gameId: Int64) async {
-        let drafts = TrainingCardFactory.drafts(report: report, input: input)
-        var saved = 0
-        for draft in drafts {
-            guard let record = try? TrainingCardRecord(cardDraft: draft, gameId: gameId) else { continue }
-            if (try? await store.upsertTrainingCard(record)) != nil {
-                saved += 1
-            }
+    private func startTrainingCardReconciliation(
+        report: GameReport,
+        input: ReportInput,
+        gameId: Int64
+    ) {
+        trainingCardSynchronizer.start {
+            try Task.checkCancellation()
+            return try await TrainingCardReconciler.reconcile(
+                report: report,
+                input: input,
+                gameId: gameId,
+                store: self.store
+            )
         }
-        trainingCardCount = saved
+    }
+
+    func retryTrainingCardReconciliation() {
+        guard let report, let reportInput, let gameId else { return }
+        startTrainingCardReconciliation(
+            report: report,
+            input: reportInput,
+            gameId: gameId
+        )
     }
 
     func trainingCards() async throws -> [TrainingCardRecord] {
         guard let gameId else { return [] }
+        if trainingSynchronizationState != .idle {
+            return try await trainingCardSynchronizer.records()
+        }
+        if let report, let reportInput {
+            startTrainingCardReconciliation(
+                report: report,
+                input: reportInput,
+                gameId: gameId
+            )
+            return try await trainingCardSynchronizer.records()
+        }
         return try await store.trainingCards(gameId: gameId)
+    }
+
+    var trainingCardCount: Int {
+        guard case .ready(let cardCount, _) = trainingSynchronizationState else {
+            return 0
+        }
+        return cardCount
+    }
+
+    var trainingCardSourcePlies: Set<Int> {
+        guard case .ready(_, let sourcePlies) = trainingSynchronizationState else {
+            return []
+        }
+        return sourcePlies
+    }
+
+    var isTrainingReady: Bool {
+        if case .ready = trainingSynchronizationState {
+            return true
+        }
+        return false
+    }
+
+    var trainingCardError: String? {
+        guard case .failed(let message) = trainingSynchronizationState else {
+            return nil
+        }
+        return message
     }
 
     /// The current user profile - read fresh each call since settings can

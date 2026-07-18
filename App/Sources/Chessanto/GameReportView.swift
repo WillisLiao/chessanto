@@ -110,15 +110,46 @@ struct GameReportView: View {
                     .font(.dsBody)
                     .foregroundStyle(DesignColors.textSecondary)
             } else {
-                Button {
-                    onPractice(nil)
-                } label: {
-                    Label("Practice key moments", systemImage: "target")
+                if viewModel.isTrainingReady, viewModel.trainingCardCount == 0 {
+                    Label(
+                        "No practice moments for your side in this report.",
+                        systemImage: "checkmark.circle"
+                    )
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                } else {
+                    Button {
+                        if viewModel.isTrainingReady {
+                            onPractice(nil)
+                        } else if viewModel.trainingCardError != nil {
+                            viewModel.retryTrainingCardReconciliation()
+                        }
+                    } label: {
+                        Group {
+                            if viewModel.isTrainingReady {
+                                Label("Practice key moments", systemImage: "target")
+                            } else if viewModel.trainingCardError != nil {
+                                Label("Retry practice preparation", systemImage: "arrow.clockwise")
+                            } else {
+                                HStack {
+                                    ProgressView().controlSize(.small)
+                                    Text("Preparing practice...")
+                                }
+                            }
+                        }
                         .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!viewModel.isTrainingReady && viewModel.trainingCardError == nil)
+                    .accessibilityLabel(
+                        viewModel.isTrainingReady
+                            ? "Practice key moments from this report"
+                            : viewModel.trainingCardError == nil
+                                ? "Preparing practice key moments"
+                                : "Retry preparing practice key moments"
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityLabel("Practice key moments from this report")
 
                 VStack(alignment: .leading, spacing: DesignSpacing.sm) {
                     ForEach(Array(report.keyMoments.enumerated()), id: \.element.ply) { offset, moment in
@@ -162,7 +193,7 @@ struct GameReportView: View {
             Text(name).font(.dsBody.weight(.semibold))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 58), spacing: DesignSpacing.xs)], alignment: .leading, spacing: DesignSpacing.xs) {
                 ForEach(counts, id: \.classification) { count in
-                    Chip("\(count.classification.shortAbbreviation) \(count.count)", color: count.classification.color)
+                    ClassificationChip(classification: count.classification, count: count.count)
                 }
             }
         }
@@ -181,7 +212,7 @@ struct GameReportView: View {
                         .foregroundStyle(DesignColors.textSecondary)
                     Text(moment.evalSwing.playedSAN)
                         .font(.dsNotation.weight(.semibold))
-                    Chip(moment.evalSwing.classification.shortAbbreviation, color: moment.evalSwing.classification.color)
+                    ClassificationChip(classification: moment.evalSwing.classification)
                     Spacer()
                 }
                 .contentShape(Rectangle())
@@ -209,14 +240,16 @@ struct GameReportView: View {
                 }
             }
 
-            Button {
-                onPractice(moment.ply)
-            } label: {
-                Label("Practice", systemImage: "target")
+            if viewModel.trainingCardSourcePlies.contains(moment.ply) {
+                Button {
+                    onPractice(moment.ply)
+                } label: {
+                    Label("Practice", systemImage: "target")
+                }
+                .font(.dsSecondary.weight(.semibold))
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Practice this key moment")
             }
-            .font(.dsSecondary.weight(.semibold))
-            .buttonStyle(.bordered)
-            .accessibilityLabel("Practice this key moment")
         }
     }
 

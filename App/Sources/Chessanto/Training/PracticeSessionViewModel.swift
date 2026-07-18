@@ -176,7 +176,7 @@ final class PracticeSessionViewModel: ObservableObject {
                 firstAttemptSuccesses += 1
             }
 
-            var updatedCard = scheduler.next(card: cardRecords[currentIndex], outcome: result.outcome, now: Date())
+            let updatedCard = scheduler.next(card: cardRecords[currentIndex], outcome: result.outcome, now: Date())
             try await store.saveTrainingAttempt(
                 TrainingAttemptRecord(
                     cardId: card.id,
