@@ -15,6 +15,7 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
     public var hasCompletedOnboarding: Bool
     public var analysisQuality: String
     public var boardTheme: String
+    public var moveNotationStyle: String
 
     public init(
         id: Int64 = 1,
@@ -25,7 +26,8 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
         coachEnabled: Bool = false,
         hasCompletedOnboarding: Bool = false,
         analysisQuality: String = "standard",
-        boardTheme: String = "classic"
+        boardTheme: String = "classic",
+        moveNotationStyle: String = "standard"
     ) {
         self.id = id
         self.chessComUsername = chessComUsername
@@ -36,5 +38,6 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.analysisQuality = analysisQuality
         self.boardTheme = boardTheme
+        self.moveNotationStyle = moveNotationStyle
     }
 }

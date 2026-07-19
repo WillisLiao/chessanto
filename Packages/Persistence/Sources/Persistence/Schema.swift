@@ -149,6 +149,14 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v8_moveNotationStyle") { db in
+            try db.alter(table: "userProfile") { t in
+                t.add(column: "moveNotationStyle", .text)
+                    .notNull()
+                    .defaults(to: "standard")
+            }
+        }
+
         return migrator
     }
 }

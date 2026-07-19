@@ -13,6 +13,7 @@ struct ChatView: View {
     @ObservedObject var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
     @EnvironmentObject private var coachService: CoachService
+    @Environment(\.moveNotation) private var moveNotation
     let store: GameStore
     var onClose: (() -> Void)?
 
@@ -74,8 +75,8 @@ struct ChatView: View {
                     .foregroundStyle(viewModel.isChatPinned ? DesignColors.accent : DesignColors.textSecondary)
                 Text(
                     viewModel.isChatPinned
-                        ? "Pinned to \(viewModel.chatPositionLabel)"
-                        : "Following board · \(viewModel.chatPositionLabel)"
+                        ? "Pinned to \(moveNotation.text(viewModel.chatPositionLabel))"
+                        : "Following board · \(moveNotation.text(viewModel.chatPositionLabel))"
                 )
                     .font(.dsSecondary)
                     .foregroundStyle(DesignColors.textSecondary)
@@ -161,7 +162,9 @@ struct ChatView: View {
     private func messageRow(_ message: ChatMessageRecord) -> some View {
         let isUser = message.role == "user"
         VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
-            markdownText(message.content)
+            markdownText(
+                isUser ? message.content : moveNotation.text(message.content)
+            )
                 .font(.dsBody)
                 .padding(isUser ? DesignSpacing.sm : 0)
                 .background(isUser ? DesignColors.selection : Color.clear)
@@ -183,7 +186,9 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(isUser ? "You" : "Coach"): \(message.content)")
+        .accessibilityLabel(
+            "\(isUser ? "You" : "Coach"): \(isUser ? message.content : moveNotation.accessibilityText(message.content))"
+        )
     }
 
     /// Renders `**bold**`/lists rather than showing literal asterisks
@@ -226,7 +231,7 @@ struct ChatView: View {
             HStack {
                 Menu("Suggested questions") {
                     ForEach(chips, id: \.self) { chip in
-                        Button(chip) { send(chip) }
+                        Button(moveNotation.text(chip)) { send(chip) }
                     }
                 }
                 .font(.dsSecondary)

@@ -639,6 +639,7 @@ struct PersistenceTests {
         #expect(profile.hasCompletedOnboarding == false)
         #expect(profile.analysisQuality == "standard")
         #expect(profile.boardTheme == "classic")
+        #expect(profile.moveNotationStyle == "standard")
     }
 
     @Test func m8ColumnsRoundTrip() throws {
@@ -647,12 +648,14 @@ struct PersistenceTests {
         profile.hasCompletedOnboarding = true
         profile.analysisQuality = "deep"
         profile.boardTheme = "green"
+        profile.moveNotationStyle = "pieceNames"
         try store.saveUserProfile(profile)
 
         let refetched = try store.userProfile()
         #expect(refetched.hasCompletedOnboarding == true)
         #expect(refetched.analysisQuality == "deep")
         #expect(refetched.boardTheme == "green")
+        #expect(refetched.moveNotationStyle == "pieceNames")
     }
 
     @Test func v3MigrationAppliesOnAV2ShapedStoreWithDefaultsAndDataIntact() throws {
@@ -812,7 +815,7 @@ struct PersistenceTests {
         #expect(result.1?.hintCount == 1)
         #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
         #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
-        #expect(result.3.last == "v7_confirmedChessComIdentity")
+        #expect(result.3.last == "v8_moveNotationStyle")
         #expect(result.4.isEmpty)
     }
 
@@ -881,5 +884,37 @@ struct PersistenceTests {
 
         #expect(profile?.chessComUsername == "legacy-name")
         #expect(profile?.isChessComAccountConfirmed == false)
+    }
+
+    @Test func v8MigrationDefaultsExistingProfilesToStandardMoveNotation() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v7_confirmedChessComIdentity")
+
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO userProfile (
+                        id, chessComUsername, isChessComAccountConfirmed,
+                        ratingBand, coachEnabled, hasCompletedOnboarding,
+                        analysisQuality, boardTheme
+                    ) VALUES (
+                        1, 'learner', 1, 'adaptive', 0, 1,
+                        'standard', 'classic'
+                    )
+                    """
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let profile = try queue.read { db in
+            try UserProfileRecord.fetchOne(db, key: 1)
+        }
+        let migrations = try queue.read { db in
+            try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid")
+        }
+
+        #expect(profile?.moveNotationStyle == "standard")
+        #expect(migrations.last == "v8_moveNotationStyle")
     }
 }

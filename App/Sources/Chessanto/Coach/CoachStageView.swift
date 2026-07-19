@@ -48,6 +48,7 @@ enum CoachStageText {
 }
 
 struct CoachStageView: View {
+    @Environment(\.moveNotation) private var moveNotation
     let content: CoachStageContent
     var primaryActionTitle: String?
     var onPrimaryAction: (() -> Void)?
@@ -73,18 +74,27 @@ struct CoachStageView: View {
 
     private var speechBubble: some View {
         VStack(alignment: .leading, spacing: DesignSpacing.xs) {
-            Text(content.eyebrow.uppercased())
+            Text(moveNotation.text(content.eyebrow).uppercased())
                 .font(.dsSecondary.weight(.bold))
                 .foregroundStyle(DesignColors.accentText)
                 .tracking(0.8)
-            Text(content.headline)
+                .accessibilityLabel(
+                    moveNotation.accessibilityText(content.eyebrow)
+                )
+            Text(moveNotation.text(content.headline))
                 .font(.dsTitle)
                 .foregroundStyle(DesignColors.textPrimary)
-            Text(content.message)
+                .accessibilityLabel(
+                    moveNotation.accessibilityText(content.headline)
+                )
+            Text(moveNotation.text(content.message))
                 .font(.dsBody)
                 .foregroundStyle(DesignColors.textSecondary)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(
+                    moveNotation.accessibilityText(content.message)
+                )
 
             HStack(spacing: DesignSpacing.sm) {
                 if let primaryActionTitle, let onPrimaryAction {

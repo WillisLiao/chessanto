@@ -3,7 +3,7 @@
 This document began as a scoping stub for library management, Player Brief, and chess.com identity confirmation.
 The phase 3 implementation session re-verified those inputs, locked the decisions below, executed the test-first build sequence, and completed the native acceptance scenarios on 2026-07-19.
 
-Phase 2 remains fully planned but not implemented.
+Phase 2 and phase 3 are now implemented, tested, committed, and pushed.
 Nothing in this document authorizes or claims the playable-line-preview or Coach-density work specified in `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md`.
 
 ## Product direction

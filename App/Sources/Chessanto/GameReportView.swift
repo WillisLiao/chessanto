@@ -8,6 +8,7 @@ import SwiftUI
 struct GameReportView: View {
     @ObservedObject var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
+    @Environment(\.moveNotation) private var moveNotation
     /// Opens the Coach panel pinned to a ply - the Report key-moment entry
     /// point (decision A).
     let onAskCoach: (Int) -> Void
@@ -68,7 +69,7 @@ struct GameReportView: View {
                 Text("\(opening.name) (\(opening.eco))")
                     .font(.dsBody)
                 if let deviationSAN = opening.deviationSAN, let deviationPly = opening.deviationPly {
-                    Text("Left book on move \(bareMoveNumber(ply: deviationPly)) with \(deviationSAN).")
+                    Text("Left book on move \(bareMoveNumber(ply: deviationPly)) with \(moveNotation.move(deviationSAN).visual).")
                         .font(.dsSecondary)
                         .foregroundStyle(DesignColors.textSecondary)
                 }
@@ -134,7 +135,7 @@ struct GameReportView: View {
             SectionHeader(title: "Review notes")
             VStack(alignment: .leading, spacing: DesignSpacing.xs) {
                 ForEach(report.takeaways, id: \.self) { takeaway in
-                    Text("- \(takeaway)").font(.dsBody)
+                    Text("- \(moveNotation.text(takeaway))").font(.dsBody)
                 }
             }
         }
@@ -167,13 +168,13 @@ struct GameReportView: View {
                         Text(moveNumberLabel(ply: moment.ply))
                             .font(.dsNotation)
                             .foregroundStyle(DesignColors.textSecondary)
-                        Text(moment.evalSwing.playedSAN)
+                        Text(moveNotation.move(moment.evalSwing.playedSAN).visual)
                             .font(.dsNotation.weight(.semibold))
                         ClassificationChip(classification: moment.evalSwing.classification)
                         Spacer()
                     }
 
-                    Text(momentSummary(moment))
+                    Text(moveNotation.text(momentSummary(moment)))
                         .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
 
@@ -182,7 +183,9 @@ struct GameReportView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(KeyMomentRowButtonStyle())
-            .accessibilityLabel("Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moment.evalSwing.playedSAN). \(momentSummary(moment))")
+            .accessibilityLabel(
+                "Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moveNotation.move(moment.evalSwing.playedSAN).spoken). \(moveNotation.accessibilityText(momentSummary(moment)))"
+            )
             .contextMenu {
                 Button("Ask the coach about this moment") {
                     onAskCoach(moment.ply)

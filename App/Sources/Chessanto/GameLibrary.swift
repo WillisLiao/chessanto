@@ -12,6 +12,7 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var isChessComAccountConfirmed: Bool
     @Published var analysisQuality: AnalysisQuality
     @Published var boardTheme: BoardTheme
+    @Published var moveNotationStyle: MoveNotationStyle
     @Published private(set) var hasCompletedOnboarding: Bool
     @Published private(set) var analyzedGameIDs: Set<Int64> = []
     @Published private(set) var openingByGameID: [Int64: String] = [:]
@@ -31,6 +32,7 @@ final class GameLibrary: ObservableObject {
         self.isChessComAccountConfirmed = profile?.isChessComAccountConfirmed ?? false
         self.analysisQuality = profile.flatMap { AnalysisQuality(rawValue: $0.analysisQuality) } ?? .standard
         self.boardTheme = profile.flatMap { BoardTheme(rawValue: $0.boardTheme) } ?? .classic
+        self.moveNotationStyle = profile.flatMap { MoveNotationStyle(rawValue: $0.moveNotationStyle) } ?? .standard
         self.hasCompletedOnboarding = profile?.hasCompletedOnboarding ?? false
         reload()
     }
@@ -64,6 +66,17 @@ final class GameLibrary: ObservableObject {
         do {
             var profile = try store.userProfile()
             profile.boardTheme = theme.rawValue
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveMoveNotationStyle(_ style: MoveNotationStyle) {
+        moveNotationStyle = style
+        do {
+            var profile = try store.userProfile()
+            profile.moveNotationStyle = style.rawValue
             try store.saveUserProfile(profile)
         } catch {
             errorMessage = error.localizedDescription

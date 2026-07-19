@@ -5,6 +5,17 @@ Read this first at session start; update it at session end.
 
 ## Current state (2026-07-19)
 
+- **User-selectable move notation complete (2026-07-19).**
+  - General Settings now lets the user choose standard SAN such as `Nf3` or full piece names such as `Knight f3`.
+  - The choice is persisted by the append-only `v8_moveNotationStyle` migration and is applied consistently to the move ledger, Report, Practice, engine lines, line playback, the comic Coach, and Coach responses.
+  - Full-name mode uses a one-move-per-row ledger so expanded moves remain readable, while standard mode keeps the compact two-column scoresheet.
+  - This is a presentation-only boundary.
+    Canonical SAN in PGNs, analysis, variations, engine input, Coach grounding, and user-authored chat is never rewritten.
+  - VoiceOver receives semantic move names in both visual modes.
+  - The complete app suite passes with 98 tests across 23 suites, the persistence migration and round-trip tests pass, the universal Release build passes, and native QA covered both notation modes plus automatic better-line playback.
+  - Native QA used the isolated database at `~/Library/Containers/com.chessanto.app/Data/tmp/notation-choice-final-20260719-1752/chessanto.sqlite`.
+    The live database was restored from its preserved backup, passed `PRAGMA integrity_check`, and matches that backup at SHA-256 `5112ee500dd1c249bad5ccca9ea61e2681176141572c9051dd765457c0bc976e`.
+
 - **UI/UX clarity phase 2 complete (2026-07-19): synchronized Coach stage and playable analysis.**
   - `LinePreviewController` is a small, DB-free replay module built on `ChessGame.replayLine`.
     It cannot access `GameStore`, the variation tree, or `adoptLine`.
@@ -19,7 +30,7 @@ Read this first at session start; update it at session end.
   - The original phase 2 plan's manual-only and sentence-fragment presentation decisions were superseded by the user's explicit autoplay and comic-stage direction.
   - App coverage increased from 75 tests across 19 suites to 91 tests across 22 suites.
   - Native Release QA exercised better-line autoplay in Review and Practice plus the real played continuation.
-    The QA database had one variation row before and after, and the live database checksum remains `1d218f0371a61f85bc682cc43acb9af5`.
+    The QA database had one variation row before and after, and the protected live database was restored byte-for-byte from its preserved backup after QA.
 
 - **M1 complete.** App builds, all tests pass, and the acceptance criteria in
   `PLAN.md` are met: a real chess.com PGN (fetched live from the public API,

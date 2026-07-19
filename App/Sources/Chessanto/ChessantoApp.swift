@@ -21,9 +21,13 @@ struct ChessantoApp: App {
                 .environmentObject(library)
                 .environmentObject(engineService)
                 .environmentObject(coachService)
+                .environment(
+                    \.moveNotation,
+                    MoveNotationFormatter(style: library.moveNotationStyle)
+                )
                 .frame(
-                    minWidth: 1040,
-                    idealWidth: 1120,
+                    minWidth: 1200,
+                    idealWidth: 1360,
                     minHeight: 680,
                     idealHeight: 720
                 )

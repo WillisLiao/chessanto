@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LinePreviewControlsView: View {
+    @Environment(\.moveNotation) private var moveNotation
     @ObservedObject var controller: LinePreviewController
     let onDone: () -> Void
 
@@ -81,14 +82,28 @@ struct LinePreviewControlsView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(controller.label), \(stepDescription)")
+        .accessibilityLabel(
+            "\(controller.label), \(stepAccessibilityDescription)"
+        )
     }
 
     private var stepDescription: String {
         if controller.stepIndex == 0 {
             return "Starting position"
         }
-        return controller.current.san.map { "Move \(controller.stepIndex): \($0)" }
+        return controller.current.san.map {
+            "Move \(controller.stepIndex): \(moveNotation.move($0).visual)"
+        }
+            ?? "Move \(controller.stepIndex)"
+    }
+
+    private var stepAccessibilityDescription: String {
+        if controller.stepIndex == 0 {
+            return "Starting position"
+        }
+        return controller.current.san.map {
+            "Move \(controller.stepIndex): \(moveNotation.move($0).spoken)"
+        }
             ?? "Move \(controller.stepIndex)"
     }
 

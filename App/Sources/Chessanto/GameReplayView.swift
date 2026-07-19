@@ -704,6 +704,7 @@ struct GameReplayView: View {
 /// a 55-ply game); it's a quiet colored dot inline, with a chip reserved for
 /// anything worth a second look (inaccuracy and worse, plus brilliancies).
 private struct MoveListView: View {
+    @Environment(\.moveNotation) private var moveNotation
     @ObservedObject var viewModel: GameReplayViewModel
     /// Opens the Coach panel pinned to a ply - the move-row entry point
     /// (decision A), wired from a right-click/hover context menu.
@@ -719,26 +720,7 @@ private struct MoveListView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
-                ForEach(pairs, id: \.number) { pair in
-                    HStack(spacing: 0) {
-                        Text("\(pair.number).")
-                            .font(.dsNotation)
-                            .foregroundStyle(DesignColors.textSecondary)
-                            .frame(width: 28, alignment: .leading)
-                        moveCell(pair.white)
-                        moveCell(pair.black)
-                    }
-
-                    // Variations exploring off either move of this pair -
-                    // rendered as a full-width row under the pair.
-                    ForEach([pair.white, pair.black].compactMap { $0 }, id: \.self) { index in
-                        ForEach(viewModel.exploredChildren(of: index), id: \.self) { branchRoot in
-                            ForEach(viewModel.variationRows(startingAt: branchRoot, depth: 1), id: \.index) { row in
-                                variationRow(index: row.index, depth: row.depth)
-                            }
-                        }
-                    }
-                }
+                moveRows
 
                 // Variations exploring off the start position.
                 if let start = viewModel.moveIndices.first {
@@ -754,6 +736,56 @@ private struct MoveListView: View {
     }
 
     @ViewBuilder
+    private var moveRows: some View {
+        if moveNotation.style == .pieceNames {
+            ForEach(
+                Array(viewModel.moveIndices.dropFirst().enumerated()),
+                id: \.element
+            ) { offset, index in
+                HStack(spacing: 0) {
+                    Text(
+                        offset.isMultiple(of: 2)
+                            ? "\(offset / 2 + 1)."
+                            : "\(offset / 2 + 1)..."
+                    )
+                    .font(.dsNotation)
+                    .foregroundStyle(DesignColors.textSecondary)
+                    .frame(width: 40, alignment: .leading)
+                    moveCell(index)
+                }
+                variations(after: index)
+            }
+        } else {
+            ForEach(pairs, id: \.number) { pair in
+                HStack(spacing: 0) {
+                    Text("\(pair.number).")
+                        .font(.dsNotation)
+                        .foregroundStyle(DesignColors.textSecondary)
+                        .frame(width: 28, alignment: .leading)
+                    moveCell(pair.white)
+                    moveCell(pair.black)
+                }
+
+                ForEach([pair.white, pair.black].compactMap { $0 }, id: \.self) { index in
+                    variations(after: index)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func variations(after index: MoveIndex) -> some View {
+        ForEach(viewModel.exploredChildren(of: index), id: \.self) { branchRoot in
+            ForEach(
+                viewModel.variationRows(startingAt: branchRoot, depth: 1),
+                id: \.index
+            ) { row in
+                variationRow(index: row.index, depth: row.depth)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func moveCell(_ index: MoveIndex?) -> some View {
         if let index, let san = viewModel.san(at: index) {
             Button {
@@ -763,7 +795,10 @@ private struct MoveListView: View {
                     if let classification = viewModel.classification(at: index) {
                         classificationMark(classification)
                     }
-                    Text(san).font(.dsNotation)
+                    Text(moveNotation.move(san).visual)
+                        .font(.dsNotation)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, DesignSpacing.xs)
@@ -781,8 +816,8 @@ private struct MoveListView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(
                 viewModel.classification(at: index).map {
-                    "\(san), \($0.abbreviation)"
-                } ?? san
+                    "\(moveNotation.move(san).spoken), \($0.abbreviation)"
+                } ?? moveNotation.move(san).spoken
             )
             .contextMenu {
                 Button("Ask the coach about this move") {
@@ -818,8 +853,13 @@ private struct MoveListView: View {
             Button {
                 viewModel.jump(to: index)
             } label: {
-                Text(viewModel.san(at: index) ?? "")
+                Text(
+                    viewModel.san(at: index)
+                        .map { moveNotation.move($0).visual } ?? ""
+                )
                     .font(.dsNotation.italic())
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .foregroundStyle(DesignColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, DesignSpacing.xs)
@@ -835,6 +875,10 @@ private struct MoveListView: View {
                     }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(
+                viewModel.san(at: index)
+                    .map { moveNotation.move($0).spoken } ?? ""
+            )
 
             Button {
                 Task { await viewModel.deleteVariation(at: index) }

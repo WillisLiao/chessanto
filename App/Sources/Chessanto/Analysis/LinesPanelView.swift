@@ -6,6 +6,7 @@ import ChessCore
 /// the currently displayed position. Clicking a line adopts it as a new
 /// variation branch (`onAdopt` receives the line's raw UCI moves).
 struct LinesPanelView: View {
+    @Environment(\.moveNotation) private var moveNotation
     let lines: [AnalysisEngine.EngineInfo]
     let fen: String
     var onAdopt: ([String]) -> Void = { _ in }
@@ -45,6 +46,9 @@ struct LinesPanelView: View {
                     }
                     .buttonStyle(.plain)
                     .frame(height: Self.rowHeight, alignment: .top)
+                    .accessibilityLabel(
+                        "\(evalLabel(line)), \(spokenSANLine(line))"
+                    )
                 }
             }
         }
@@ -65,6 +69,16 @@ struct LinesPanelView: View {
 
     private func sanLine(_ line: AnalysisEngine.EngineInfo) -> String {
         let sans = ChessGame.sanLine(fromUCI: Array(line.principalVariation.prefix(6)), startingFEN: fen)
-        return sans.isEmpty ? "-" : sans.joined(separator: " ")
+        return sans.isEmpty ? "-" : moveNotation.line(sans)
+    }
+
+    private func spokenSANLine(_ line: AnalysisEngine.EngineInfo) -> String {
+        let sans = ChessGame.sanLine(
+            fromUCI: Array(line.principalVariation.prefix(6)),
+            startingFEN: fen
+        )
+        return sans.isEmpty
+            ? "No moves"
+            : sans.map { moveNotation.move($0).spoken }.joined(separator: ", ")
     }
 }

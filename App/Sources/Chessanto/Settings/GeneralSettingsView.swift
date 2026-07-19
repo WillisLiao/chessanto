@@ -7,6 +7,7 @@ struct GeneralSettingsView: View {
 
     @State private var quality: AnalysisQuality = .standard
     @State private var theme: BoardTheme = .classic
+    @State private var notationStyle: MoveNotationStyle = .standard
     @State private var username: String = ""
 
     var body: some View {
@@ -36,6 +37,27 @@ struct GeneralSettingsView: View {
                 .padding(.vertical, DesignSpacing.xs)
             }
 
+            Section("Move notation") {
+                Picker("Show moves as", selection: $notationStyle) {
+                    ForEach(MoveNotationStyle.allCases) { style in
+                        Text(style.settingsExample)
+                            .accessibilityLabel(
+                                "\(style.settingsLabel), \(style.settingsExample)"
+                            )
+                        .tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: notationStyle) { _, newValue in
+                    library.saveMoveNotationStyle(newValue)
+                }
+
+                Text("Nf3 uses standard chess notation. Knight f3 spells out piece names. Imported games and analysis remain unchanged.")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("chess.com account") {
                 ChessComUsernameField(
                     username: $username,
@@ -55,10 +77,11 @@ struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .background(DesignColors.surface0)
-        .frame(minWidth: 460, minHeight: 320)
+        .frame(minWidth: 640, minHeight: 560)
         .onAppear {
             quality = library.analysisQuality
             theme = library.boardTheme
+            notationStyle = library.moveNotationStyle
             username = library.chessComUsername
         }
     }
