@@ -919,8 +919,8 @@ The companion implementation has been fully audited, finalized, committed, and p
 - **Selected Voice:** George (`bm_george` preset), British male (deeper, measured).
 - **Server:** A local lightweight HTTP server (`server.py` in `.voice-demo/`) exposes `/tts` (and `/v1/audio/speech`) running on port `8888` using the Kokoro-82M ONNX model.
 - **Client:** `DesktopCoachSpeechController.swift` (macOS) and `OfflineReportReader.swift` (iOS) check if `http://127.0.0.1:8888/tts` is active. If so, they send a POST request with text, stream audio via `AVAudioPlayer`, and support standard speech controls.
-- **Fallback:** If the server is offline or fails to respond within 1.2s, the app falls back seamlessly to the native Apple `AVSpeechSynthesizer` voices.
-- Committed under hash `dc52df8076935cae2030ee28929e00db7583641b` and pushed to remote `main`.
+- **Fallback:** If the local server is completely offline/unreachable, the app falls back to Apple's native `AVSpeechSynthesizer` voices. However, if the server is healthy/online, the app **always** uses George's voice and waits up to **60.0s** for the synthesis to complete, completely bypassing the native system voice fallback even in the event of timeouts or failures.
+- Committed under hash `9ddb070997ce06253c651f4c7590823522f778ea` and pushed to remote `main`.
 - Physical CloudKit pairing remains blocked on Apple Developer team and container setup.
 - The latest compiled Release app is located at:
   `/Users/willis/Library/Developer/Xcode/DerivedData/Chessanto-dvybgihmaxaffpbutfmycvjeqlkn/Build/Products/Release/Chessanto.app`
