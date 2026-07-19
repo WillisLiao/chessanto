@@ -512,6 +512,11 @@ final class CoachSpeechController: NSObject, ObservableObject, AVSpeechSynthesiz
                     guard !Task.isCancelled else { return }
                     playAudioData(audioData)
                     return
+                } else {
+                    guard !Task.isCancelled else { return }
+                    phase = .idle
+                    activeText = nil
+                    return
                 }
             }
 
@@ -543,7 +548,7 @@ final class CoachSpeechController: NSObject, ObservableObject, AVSpeechSynthesiz
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 20.0
+        request.timeoutInterval = 60.0
 
         let payload: [String: Any] = [
             "text": text,
@@ -573,9 +578,9 @@ final class CoachSpeechController: NSObject, ObservableObject, AVSpeechSynthesiz
             player.play()
             self.audioPlayer = player
         } catch {
-            if let activeText {
-                speakFallback(activeText)
-            }
+            print("Audio playback failed: \(error)")
+            phase = .idle
+            activeText = nil
         }
     }
 

@@ -39,11 +39,17 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
                     guard !Task.isCancelled else { return }
                     playAudioData(audioData)
                     return
+                } else {
+                    // Do not fall back to the slop system voice if server is healthy but request failed
+                    guard !Task.isCancelled else { return }
+                    phase = .idle
+                    activeText = nil
+                    return
                 }
             }
 
             guard !Task.isCancelled else { return }
-            // Fallback to system synthesizer
+            // Fallback to system synthesizer ONLY if local server is completely offline
             speakFallback(normalized)
         }
     }
@@ -71,7 +77,7 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 20.0 // Allow ample time for local synthesis
+        request.timeoutInterval = 60.0 // Allow ample time for local synthesis
 
         let payload: [String: Any] = [
             "text": text,
@@ -101,10 +107,9 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
             player.play()
             self.audioPlayer = player
         } catch {
-            // If audio player initialization/playback fails, fallback
-            if let activeText {
-                speakFallback(activeText)
-            }
+            print("Audio playback failed: \(error)")
+            phase = .idle
+            activeText = nil
         }
     }
 
