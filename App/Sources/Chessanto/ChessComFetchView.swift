@@ -105,7 +105,7 @@ struct ChessComFetchView: View {
                     Text("·")
                     Text(game.endTime, style: .date)
                     if imported {
-                        Chip("Imported", color: DesignColors.accent)
+                        Chip("Imported", color: DesignColors.accentText)
                     }
                 }
                 .font(.dsSecondary)
@@ -171,7 +171,6 @@ struct ChessComFetchView: View {
             let urls = Set(fetched.map(\.url))
             alreadyImportedURLs = library.alreadyImported(sourceURLs: urls)
             selection = []
-            library.saveChessComUsername(trimmed)
             didFetch = true
         } catch {
             games = []

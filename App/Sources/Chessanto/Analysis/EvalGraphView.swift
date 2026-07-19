@@ -20,7 +20,7 @@ struct EvalGraphView: View {
             let count = max(series.count - 1, 1)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: DesignShape.controlRadius)
+                Rectangle()
                     .fill(DesignColors.surface1)
 
                 Path { path in
@@ -64,7 +64,7 @@ struct EvalGraphView: View {
                     hoverReadout(ply: hoverPly, width: width)
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: DesignShape.controlRadius).stroke(DesignColors.hairline, lineWidth: 1))
+            .overlay(Rectangle().stroke(DesignColors.hairline, lineWidth: 1))
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -84,7 +84,6 @@ struct EvalGraphView: View {
             }
         }
         .frame(height: 60)
-        .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
     }
 
     private func hoverReadout(ply: Int, width: CGFloat) -> some View {

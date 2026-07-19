@@ -163,9 +163,9 @@ struct ChatView: View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
             markdownText(message.content)
                 .font(.dsBody)
-                .padding(DesignSpacing.sm)
-                .background(isUser ? DesignColors.accent.opacity(0.16) : DesignColors.surface1)
-                .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+                .padding(isUser ? DesignSpacing.sm : 0)
+                .background(isUser ? DesignColors.selection : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: isUser ? DesignShape.controlRadius : 0))
             HStack(spacing: DesignSpacing.xs) {
                 if let source = message.source {
                     Text(sourceCaption(source))
@@ -177,7 +177,7 @@ struct ChatView: View {
                 }
                 .font(.dsSecondary)
                 .buttonStyle(.plain)
-                .foregroundStyle(DesignColors.accent)
+                .foregroundStyle(DesignColors.accentText)
                 .accessibilityIdentifier("chat-jump-\(message.id ?? 0)")
             }
         }
@@ -223,16 +223,16 @@ struct ChatView: View {
     private var starterChips: some View {
         let chips = starterQuestions()
         if !chips.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: DesignSpacing.xs) {
+            HStack {
+                Menu("Suggested questions") {
                     ForEach(chips, id: \.self) { chip in
                         Button(chip) { send(chip) }
-                            .font(.dsSecondary)
-                            .buttonStyle(.bordered)
                     }
                 }
-                .padding(.horizontal, DesignSpacing.sm)
+                .font(.dsSecondary)
+                Spacer()
             }
+            .padding(.horizontal, DesignSpacing.sm)
             .padding(.vertical, DesignSpacing.xs)
         }
     }

@@ -10,6 +10,6 @@ enum DesignSpacing {
 }
 
 enum DesignShape {
-    static let cardRadius: CGFloat = 10
-    static let controlRadius: CGFloat = 7
+    static let cardRadius: CGFloat = 5
+    static let controlRadius: CGFloat = 5
 }

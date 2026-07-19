@@ -10,44 +10,50 @@ struct GeneralSettingsView: View {
     @State private var username: String = ""
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DesignSpacing.md) {
-                Card {
-                    SectionHeader(title: "Analysis")
-                    Picker("Default quality", selection: $quality) {
-                        ForEach(AnalysisQuality.allCases) { quality in
-                            Text(quality.label).tag(quality)
-                        }
-                    }
-                    .onChange(of: quality) { _, newValue in library.saveAnalysisQuality(newValue) }
-                }
-
-                Card {
-                    SectionHeader(title: "Board")
-                    Picker("Theme", selection: $theme) {
-                        ForEach(BoardTheme.allCases) { theme in
-                            Text(theme.label).tag(theme)
-                        }
-                    }
-                    .onChange(of: theme) { _, newValue in library.saveBoardTheme(newValue) }
-
-                    HStack(spacing: DesignSpacing.md) {
-                        ForEach(BoardTheme.allCases) { candidate in
-                            themeSwatch(candidate)
-                        }
-                    }
-                    .padding(.top, DesignSpacing.xs)
-                }
-
-                Card {
-                    SectionHeader(title: "chess.com")
-                    ChessComUsernameField(username: $username) { validated in
-                        library.saveChessComUsername(validated)
+        Form {
+            Section("Analysis") {
+                Picker("Default quality", selection: $quality) {
+                    ForEach(AnalysisQuality.allCases) { quality in
+                        Text(quality.label).tag(quality)
                     }
                 }
+                .onChange(of: quality) { _, newValue in library.saveAnalysisQuality(newValue) }
             }
-            .padding()
+
+            Section("Board") {
+                Picker("Theme", selection: $theme) {
+                    ForEach(BoardTheme.allCases) { theme in
+                        Text(theme.label).tag(theme)
+                    }
+                }
+                .onChange(of: theme) { _, newValue in library.saveBoardTheme(newValue) }
+
+                HStack(spacing: DesignSpacing.md) {
+                    ForEach(BoardTheme.allCases) { candidate in
+                        themeSwatch(candidate)
+                    }
+                }
+                .padding(.vertical, DesignSpacing.xs)
+            }
+
+            Section("chess.com account") {
+                ChessComUsernameField(
+                    username: $username,
+                    savedUsername: library.isChessComAccountConfirmed
+                        ? library.chessComUsername
+                        : nil,
+                    onConfirmed: { account in
+                        username = account.username
+                        library.saveChessComUsername(account.username, confirmed: true)
+                    },
+                    onDisconnect: {
+                        username = ""
+                        library.saveChessComUsername("")
+                    }
+                )
+            }
         }
+        .formStyle(.grouped)
         .background(DesignColors.surface0)
         .frame(minWidth: 460, minHeight: 320)
         .onAppear {

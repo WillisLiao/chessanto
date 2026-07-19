@@ -62,14 +62,12 @@ struct ClassificationChip: View {
             if let count {
                 Text(count, format: .number)
                     .monospacedDigit()
+            } else {
+                Text(classification.abbreviation)
             }
         }
         .font(.dsSecondary.weight(.semibold))
-        .padding(.horizontal, DesignSpacing.sm)
-        .padding(.vertical, 3)
-        .background(classification.color.opacity(0.16))
         .foregroundStyle(classification.color)
-        .clipShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -98,11 +96,7 @@ struct ClassificationBadge: View {
     var body: some View {
         Text(classification.abbreviation)
             .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(classification.color.opacity(0.25))
             .foregroundStyle(classification.color)
-            .clipShape(Capsule())
             .accessibilityLabel(classification.abbreviation)
     }
 }

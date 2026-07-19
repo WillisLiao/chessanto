@@ -148,10 +148,98 @@ struct PersistenceTests {
             gameId: gameId, plyIndex: 0
         )
 
-        try store.deleteGame(id: gameId)
+        _ = try store.perform(.moveToRecentlyDeleted([gameId]))
+        _ = try store.perform(.deletePermanently([gameId]))
 
         let fetched = try await store.analysis(gameId: gameId)
         #expect(fetched.isEmpty)
+    }
+
+    @Test func recentlyDeletedGamesCanBeRestoredWithTheirAnalysis() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        try await store.saveAnalysis(
+            [AnalysisRecord(gameId: gameId, plyIndex: 0, fen: "f0", depth: 10, principalVariation: "", multiPVRank: 1)],
+            gameId: gameId,
+            plyIndex: 0
+        )
+
+        let deletion = try store.perform(.moveToRecentlyDeleted([gameId]))
+
+        #expect(deletion.affectedIDs == [gameId])
+        #expect(try store.allGames().isEmpty)
+        #expect(try store.recentlyDeletedGames().map(\.id) == [gameId])
+        #expect(try await store.analysis(gameId: gameId).count == 1)
+
+        _ = try store.perform(.restore([gameId]))
+
+        #expect(try store.allGames().map(\.id) == [gameId])
+        #expect(try store.recentlyDeletedGames().isEmpty)
+        #expect(try await store.analysis(gameId: gameId).count == 1)
+    }
+
+    @Test func pinAndFavoriteAreIndependentBulkOrganizationStates() throws {
+        let store = try GameStore()
+        let firstID = try makeGame(store)
+        let secondID = try makeGame(store)
+
+        _ = try store.perform(.setPinned([firstID], true))
+        _ = try store.perform(.setFavorite([firstID, secondID], true))
+
+        let games = try store.allGames()
+        #expect(games.first?.id == firstID)
+        #expect(games.first?.pinnedAt != nil)
+        #expect(games.map(\.isFavorite) == [true, true])
+
+        _ = try store.perform(.setPinned([firstID], false))
+
+        let updatedFirst = try store.game(id: firstID)
+        #expect(updatedFirst?.pinnedAt == nil)
+        #expect(updatedFirst?.isFavorite == true)
+    }
+
+    @Test func permanentDeletionOnlyRemovesGamesAlreadyInRecentlyDeleted() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        try await store.saveAnalysis(
+            [AnalysisRecord(gameId: gameId, plyIndex: 0, fen: "f0", depth: 10, principalVariation: "", multiPVRank: 1)],
+            gameId: gameId,
+            plyIndex: 0
+        )
+
+        let refused = try store.perform(.deletePermanently([gameId]))
+
+        #expect(refused.affectedIDs.isEmpty)
+        #expect(refused.staleIDs == [gameId])
+        #expect(try store.game(id: gameId) != nil)
+
+        _ = try store.perform(.moveToRecentlyDeleted([gameId]))
+        let deleted = try store.perform(.deletePermanently([gameId]))
+
+        #expect(deleted.affectedIDs == [gameId])
+        #expect(try store.game(id: gameId) == nil)
+        #expect(try await store.analysis(gameId: gameId).isEmpty)
+    }
+
+    @Test func recentlyDeletedGamesAreExcludedFromThePracticeQueue() async throws {
+        let store = try GameStore()
+        let gameId = try makeGame(store)
+        _ = try await store.upsertTrainingCard(
+            validTrainingCard(
+                gameId: gameId,
+                sourcePly: 1,
+                dueAt: Date(timeIntervalSince1970: 1)
+            )
+        )
+
+        #expect(try await store.trainingQueueSnapshot(username: nil).dueCount == 1)
+
+        _ = try store.perform(.moveToRecentlyDeleted([gameId]))
+
+        let queue = try await store.trainingQueueSnapshot(username: nil)
+        #expect(queue.dueCount == 0)
+        #expect(queue.dueCards.isEmpty)
+        #expect(queue.fallbackCards.isEmpty)
     }
 
     @Test func variationMovesRoundTripInInsertionOrder() async throws {
@@ -248,7 +336,8 @@ struct PersistenceTests {
             ChatMessageRecord(gameId: gameId, plyIndex: 0, role: "user", content: "hello")
         )
 
-        try store.deleteGame(id: gameId)
+        _ = try store.perform(.moveToRecentlyDeleted([gameId]))
+        _ = try store.perform(.deletePermanently([gameId]))
 
         let fetched = try await store.chatMessages(gameId: gameId)
         #expect(fetched.isEmpty)
@@ -513,7 +602,8 @@ struct PersistenceTests {
             updatedCard: card
         )
 
-        try store.deleteGame(id: gameId)
+        _ = try store.perform(.moveToRecentlyDeleted([gameId]))
+        _ = try store.perform(.deletePermanently([gameId]))
 
         let cards = try await store.trainingCards(gameId: gameId)
         let attempts = try await store.trainingAttempts(cardId: card.id!)
@@ -525,6 +615,7 @@ struct PersistenceTests {
         let store = try GameStore()
         let profile = try store.userProfile()
         #expect(profile.chessComUsername == nil)
+        #expect(profile.isChessComAccountConfirmed == false)
         #expect(profile.ratingBand == "adaptive")
         #expect(profile.coachEnabled == false)
     }
@@ -533,10 +624,12 @@ struct PersistenceTests {
         let store = try GameStore()
         var profile = try store.userProfile()
         profile.chessComUsername = "hikaru"
+        profile.isChessComAccountConfirmed = true
         try store.saveUserProfile(profile)
 
         let refetched = try store.userProfile()
         #expect(refetched.chessComUsername == "hikaru")
+        #expect(refetched.isChessComAccountConfirmed == true)
         #expect(refetched.id == 1)
     }
 
@@ -719,7 +812,74 @@ struct PersistenceTests {
         #expect(result.1?.hintCount == 1)
         #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
         #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
-        #expect(result.3.last == "v5_trainingIndexes")
+        #expect(result.3.last == "v7_confirmedChessComIdentity")
         #expect(result.4.isEmpty)
+    }
+
+    @Test func v6MigrationPreservesExistingGamesAndAddsSafeOrganizationDefaults() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v5_trainingIndexes")
+        let timestamp = Date(timeIntervalSince1970: 30_000)
+
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO game (
+                        id, source, pgn, white, black, importedAt
+                    ) VALUES (
+                        71, 'pgnImport', '1. d4 d5', 'Learner', 'Opponent', ?
+                    )
+                    """,
+                arguments: [timestamp]
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let result = try queue.read { db in
+            let game = try GameRecord.fetchOne(db, key: 71)
+            let columns = try db.columns(in: "game").map(\.name)
+            let foreignKeyViolations = try Row.fetchAll(
+                db,
+                sql: "PRAGMA foreign_key_check"
+            )
+            return (game, columns, foreignKeyViolations)
+        }
+
+        #expect(result.0?.white == "Learner")
+        #expect(result.0?.pinnedAt == nil)
+        #expect(result.0?.isFavorite == false)
+        #expect(result.0?.deletedAt == nil)
+        #expect(result.1.contains("pinnedAt"))
+        #expect(result.1.contains("isFavorite"))
+        #expect(result.1.contains("deletedAt"))
+        #expect(result.2.isEmpty)
+    }
+
+    @Test func v7MigrationRequiresLegacyChessComUsernamesToBeConfirmed() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v6_gameOrganization")
+
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO userProfile (
+                        id, chessComUsername, ratingBand, coachEnabled,
+                        hasCompletedOnboarding, analysisQuality, boardTheme
+                    ) VALUES (
+                        1, 'legacy-name', 'adaptive', 0, 1, 'standard', 'classic'
+                    )
+                    """
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let profile = try queue.read { db in
+            try UserProfileRecord.fetchOne(db, key: 1)
+        }
+
+        #expect(profile?.chessComUsername == "legacy-name")
+        #expect(profile?.isChessComAccountConfirmed == false)
     }
 }

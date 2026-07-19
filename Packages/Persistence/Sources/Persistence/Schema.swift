@@ -128,6 +128,27 @@ enum Schema {
             )
         }
 
+        migrator.registerMigration("v6_gameOrganization") { db in
+            try db.alter(table: "game") { t in
+                t.add(column: "pinnedAt", .datetime)
+                t.add(column: "isFavorite", .boolean).notNull().defaults(to: false)
+                t.add(column: "deletedAt", .datetime)
+            }
+            try db.create(
+                index: "game_deletedAt_pinnedAt_playedAt",
+                on: "game",
+                columns: ["deletedAt", "pinnedAt", "playedAt"]
+            )
+        }
+
+        migrator.registerMigration("v7_confirmedChessComIdentity") { db in
+            try db.alter(table: "userProfile") { t in
+                t.add(column: "isChessComAccountConfirmed", .boolean)
+                    .notNull()
+                    .defaults(to: false)
+            }
+        }
+
         return migrator
     }
 }

@@ -70,15 +70,16 @@ struct GameReportView: View {
     @ViewBuilder
     private func reportContent(_ report: GameReport) -> some View {
         Card {
-            Text("\(report.whiteName) vs \(report.blackName) - \(report.result)")
+            SectionHeader(title: "Game audit")
+            Text("\(report.whiteName) vs \(report.blackName) · \(report.result)")
                 .font(.dsTitle)
                 .foregroundStyle(DesignColors.textPrimary)
             HStack(spacing: DesignSpacing.xs) {
                 Text("White \(String(format: "%.1f", report.whiteAccuracy))%")
-                    .foregroundStyle(DesignColors.accent)
+                    .foregroundStyle(DesignColors.accentText)
                 Text("·").foregroundStyle(DesignColors.textSecondary)
                 Text("Black \(String(format: "%.1f", report.blackAccuracy))%")
-                    .foregroundStyle(DesignColors.accent)
+                    .foregroundStyle(DesignColors.accentText)
             }
             .font(.dsNotation)
 
@@ -104,7 +105,7 @@ struct GameReportView: View {
         }
 
         Card {
-            SectionHeader(title: "Key moments")
+            SectionHeader(title: "Key-moment register")
             if report.keyMoments.isEmpty {
                 Text("No significant mistakes at this analysis depth.")
                     .font(.dsBody)
@@ -137,10 +138,8 @@ struct GameReportView: View {
                                 }
                             }
                         }
-                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary)
                     .disabled(!viewModel.isTrainingReady && viewModel.trainingCardError == nil)
                     .accessibilityLabel(
                         viewModel.isTrainingReady
@@ -161,7 +160,7 @@ struct GameReportView: View {
         }
 
         Card {
-            SectionHeader(title: "Takeaways")
+            SectionHeader(title: "Review notes")
             VStack(alignment: .leading, spacing: DesignSpacing.xs) {
                 ForEach(report.takeaways, id: \.self) { takeaway in
                     Text("- \(takeaway)").font(.dsBody)
@@ -298,7 +297,7 @@ private struct KeyMomentRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                RoundedRectangle(cornerRadius: DesignSpacing.xs)
+                Rectangle()
                     .fill(configuration.isPressed || isHovering ? DesignColors.surface1 : Color.clear)
             )
             .onHover { isHovering = $0 }

@@ -46,13 +46,9 @@ struct BoardIdentityStripView: View {
                     .foregroundStyle(DesignColors.textSecondary)
             }
             if info.isUser {
-                Text("You")
+                Text("· You")
                     .font(.dsSecondary.weight(.semibold))
-                    .padding(.horizontal, DesignSpacing.xs)
-                    .padding(.vertical, 1)
-                    .background(DesignColors.accent.opacity(0.16))
-                    .foregroundStyle(DesignColors.accent)
-                    .clipShape(Capsule())
+                    .foregroundStyle(DesignColors.accentText)
             }
         }
     }

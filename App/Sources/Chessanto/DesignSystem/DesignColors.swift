@@ -10,12 +10,14 @@ import AppKit
 /// controls) in lockstep with these always-light values.
 enum DesignColors {
     static let surface0 = Color(NSColor(hex: "#FAF9F6"))
-    static let surface1 = Color(NSColor(hex: "#F2F0EB"))
+    static let surface1 = Color(NSColor(hex: "#F3F0E9"))
     static let surface2 = Color(NSColor(hex: "#FFFFFF"))
-    static let hairline = Color(NSColor(hex: "#E6E1D8"))
+    static let hairline = Color(NSColor(hex: "#DDD8CE"))
     static let textPrimary = Color(NSColor(hex: "#26231F"))
-    static let textSecondary = textPrimary.opacity(0.6)
+    static let textSecondary = Color(NSColor(hex: "#625E57"))
     static let accent = Color(NSColor(hex: "#A6791F"))
+    static let accentText = Color(NSColor(hex: "#765313"))
+    static let selection = Color(NSColor(hex: "#F2E8D2"))
     static let error = Color(NSColor(hex: "#B42318"))
 }
 

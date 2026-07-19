@@ -21,7 +21,12 @@ struct ChessantoApp: App {
                 .environmentObject(library)
                 .environmentObject(engineService)
                 .environmentObject(coachService)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(
+                    minWidth: 1040,
+                    idealWidth: 1120,
+                    minHeight: 680,
+                    idealHeight: 720
+                )
                 .tint(DesignColors.accent)
                 .preferredColorScheme(.light)
                 .task {

@@ -21,6 +21,9 @@ public struct GameRecord: Codable, Identifiable, FetchableRecord, MutablePersist
     public var timeControl: String?
     public var playedAt: Date?
     public var importedAt: Date
+    public var pinnedAt: Date?
+    public var isFavorite: Bool
+    public var deletedAt: Date?
 
     public init(
         id: Int64? = nil,
@@ -34,7 +37,10 @@ public struct GameRecord: Codable, Identifiable, FetchableRecord, MutablePersist
         result: String? = nil,
         timeControl: String? = nil,
         playedAt: Date? = nil,
-        importedAt: Date = Date()
+        importedAt: Date = Date(),
+        pinnedAt: Date? = nil,
+        isFavorite: Bool = false,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.source = source
@@ -48,6 +54,9 @@ public struct GameRecord: Codable, Identifiable, FetchableRecord, MutablePersist
         self.timeControl = timeControl
         self.playedAt = playedAt
         self.importedAt = importedAt
+        self.pinnedAt = pinnedAt
+        self.isFavorite = isFavorite
+        self.deletedAt = deletedAt
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {

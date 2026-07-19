@@ -781,6 +781,76 @@ Coach text density: `card.explanation` (Practice's post-answer feedback) and the
 `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` is now implementation-ready but **not yet implemented**.
 `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-3.md` remains a scoping stub, unstarted, and is being handed to a Codex session next (see `handoffs/CODEX-HANDOFF-PHASE-3.md`).
 
+## UI/UX clarity phase 3 and visual-system redesign complete (2026-07-19)
+
+Phase 3 is implemented and verified.
+Phase 2 remains fully planned but not implemented, and none of its playable-variation or Coach-density work was pulled into this session.
+Full implementation and native E2E detail is in the `UI/UX clarity phase 3 and visual-system redesign` section of `devlogs/2026-07-19.md`.
+
+### Library organization and recoverable deletion
+
+- A forward-only `v6_gameOrganization` migration adds `pinnedAt`, `isFavorite`, and `deletedAt` to `game`, plus the active-library ordering index.
+- A forward-only `v7_confirmedChessComIdentity` migration records whether the saved chess.com username completed the explicit account-proof flow.
+- `GameStore` now exposes atomic pin, favorite, move-to-Recently-Deleted, restore, and permanent-delete commands.
+- Normal game navigation remains single-selection, while a separate Organize mode owns multi-selection so bulk actions never destabilize the open replay detail.
+- The sidebar has persistent All Games, Favorites, Player Brief, and Recently Deleted sources, plus explicit pinned and favorite controls.
+- Moving games to Recently Deleted supports immediate undo and preserves analysis, variations, training cards, chat, and all other dependent data.
+- Permanent deletion is isolated inside Recently Deleted and requires typed confirmation before the existing cascade can run.
+- Deleted games are excluded from the active library and training queue.
+
+Two source-level assumptions from the stub were corrected during implementation.
+The existence of a cascading `deleteGame` data-layer method did not make direct destructive deletion an appropriate UI primitive, so the shipping flow is recoverable by default.
+The main `selectedGameID` binding did not need to become a `Set<Int64>` to support bulk work, because a separate organization selection preserves the detail pane's navigation contract more cleanly.
+
+### Evidence-based Player Brief
+
+- The former Progress destination is now a persistent, labeled Player Brief source rather than a hidden chart icon.
+- `PlayerInsightBuilder` derives the current finding, costly-move count, phase distribution, color and time-control context, repeated lesson themes, and classification counts only from stored analyzed-game evidence.
+- The brief names a strength only when both sides of a comparison have at least three games and differ by at least five accuracy points.
+- Sparse samples show explicit thresholds and caveats instead of decorative empty charts or invented tactical and positional claims.
+- Equal thirds are labeled First, Middle, and Final third, with a methodology note that they are game-relative segments rather than formal chess phases.
+- The presentation is a compact analysis memo with aligned registers and ruled sections rather than a dashboard of floating cards.
+
+### Confirmed chess.com identity
+
+- `ChessComProfile` and `ChessComStats` decode the public account proof needed for confirmation, including profile URL and available ratings, while allowing the stats request to fail without discarding a valid profile.
+- `ChessComAccountLookupModel` separates candidate lookup from explicit confirmation, rejects stale asynchronous results, and never persists an unconfirmed username.
+- The same text-only account proof and confirmation flow is shared by onboarding and Settings.
+- Legacy saved usernames migrate as unconfirmed and are never labeled Connected or accepted by Player Brief until the user confirms the account once.
+- The design deliberately does not fetch the remote avatar, preserving the app's local-first posture while still showing enough account evidence to make the identity choice explicit.
+
+### Company-designed native visual system
+
+- The entire app now follows a native macOS scorebook and analysis-desk direction: flat ruled sections, dense aligned rows, restrained brass selection, square analytical instruments, system typography, and clear hierarchy.
+- Rounded display type, generic emblem tiles, capsules, gradients, decorative shadows, and floating card chrome were removed from the shared design system and major app surfaces.
+- The library, replay workspace, report, Coach, onboarding, Settings, evaluation graph, evaluation bar, move classifications, and player identity treatments now use the same visual grammar.
+- The analysis workspace now presents a compact Game audit, Key-moment register, Review notes, and a quieter Review toolbar.
+- The prior narrow-width evaluation label wrap was fixed as part of the whole-app polish request.
+
+### Verification and database safety
+
+The final app suite passed 75 tests across 19 suites.
+All package suites passed: `ChessCore` 21, `AnalysisKit` 63, `CoachKit` 74, `EngineKit` 1, `ChessComKit` 4, and `Persistence` 35.
+`engine-smoke` passed every real-engine and generation-isolation check.
+`coach-grounding` completed 10 Coach runs with zero violations and zero leaks.
+`scripts/release-build.sh` produced a successful universal arm64 and x86_64 Release build.
+`git diff --check` was clean.
+
+Native E2E ran only against a disposable database copy under the app container.
+It verified bulk recoverable deletion, Recently Deleted selection, restore, retained analysis after restore, Player Brief recomputation, the library, replay workspace, onboarding, and Settings.
+A finite-height bug in the first Recently Deleted implementation was visible only in the running app and was fixed by replacing the nested `List` with a bounded selectable `ScrollView`.
+
+The final safety check detected that the live database had received only the new v6 schema migration during the build and test cycle.
+All user-data table counts matched the pre-session backup exactly.
+With no Chessanto process running, the live file was restored from the mandatory pre-session backup and its md5 returned to the original `1d218f0371a61f85bc682cc43acb9af5`.
+
+### What's still open
+
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` remains the implementation-ready plan for playable line previews and Coach text-density changes.
+`handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md` remains a separate unstarted backlog and was not superseded.
+The phase 3 document now records the locked design decisions, test-first sequence, and native acceptance record.
+The Codex briefing remains as the historical input this implementation followed and re-verified.
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.

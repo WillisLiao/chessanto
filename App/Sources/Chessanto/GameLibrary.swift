@@ -6,8 +6,10 @@ import AnalysisKit
 @MainActor
 final class GameLibrary: ObservableObject {
     @Published private(set) var games: [GameRecord] = []
+    @Published private(set) var recentlyDeletedGames: [GameRecord] = []
     @Published var errorMessage: String?
     @Published var chessComUsername: String
+    @Published private(set) var isChessComAccountConfirmed: Bool
     @Published var analysisQuality: AnalysisQuality
     @Published var boardTheme: BoardTheme
     @Published private(set) var hasCompletedOnboarding: Bool
@@ -26,17 +28,20 @@ final class GameLibrary: ObservableObject {
         }
         let profile = (try? store.userProfile())
         self.chessComUsername = profile?.chessComUsername ?? ""
+        self.isChessComAccountConfirmed = profile?.isChessComAccountConfirmed ?? false
         self.analysisQuality = profile.flatMap { AnalysisQuality(rawValue: $0.analysisQuality) } ?? .standard
         self.boardTheme = profile.flatMap { BoardTheme(rawValue: $0.boardTheme) } ?? .classic
         self.hasCompletedOnboarding = profile?.hasCompletedOnboarding ?? false
         reload()
     }
 
-    func saveChessComUsername(_ username: String) {
+    func saveChessComUsername(_ username: String, confirmed: Bool = false) {
         chessComUsername = username
+        isChessComAccountConfirmed = confirmed && !username.isEmpty
         do {
             var profile = try store.userProfile()
             profile.chessComUsername = username
+            profile.isChessComAccountConfirmed = isChessComAccountConfirmed
             try store.saveUserProfile(profile)
         } catch {
             errorMessage = error.localizedDescription
@@ -83,6 +88,7 @@ final class GameLibrary: ObservableObject {
 
         do {
             games = try store.allGames()
+            recentlyDeletedGames = try store.recentlyDeletedGames()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -156,11 +162,18 @@ final class GameLibrary: ObservableObject {
 
     func delete(_ game: GameRecord) {
         guard let id = game.id else { return }
+        apply(.moveToRecentlyDeleted([id]))
+    }
+
+    @discardableResult
+    func apply(_ command: LibraryCommand) -> LibraryMutationResult? {
         do {
-            try store.deleteGame(id: id)
+            let result = try store.perform(command)
             reload()
+            return result
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 

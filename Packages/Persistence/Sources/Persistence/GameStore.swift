@@ -1,6 +1,35 @@
 import Foundation
 import GRDB
 
+public enum LibraryCommand: Sendable, Equatable {
+    case setPinned(Set<Int64>, Bool)
+    case setFavorite(Set<Int64>, Bool)
+    case moveToRecentlyDeleted(Set<Int64>)
+    case restore(Set<Int64>)
+    case deletePermanently(Set<Int64>)
+
+    var gameIDs: Set<Int64> {
+        switch self {
+        case .setPinned(let gameIDs, _),
+            .setFavorite(let gameIDs, _),
+            .moveToRecentlyDeleted(let gameIDs),
+            .restore(let gameIDs),
+            .deletePermanently(let gameIDs):
+            return gameIDs
+        }
+    }
+}
+
+public struct LibraryMutationResult: Sendable, Equatable {
+    public let affectedIDs: Set<Int64>
+    public let staleIDs: Set<Int64>
+
+    public init(affectedIDs: Set<Int64>, staleIDs: Set<Int64>) {
+        self.affectedIDs = affectedIDs
+        self.staleIDs = staleIDs
+    }
+}
+
 public enum PersistenceError: Error, LocalizedError {
     case databaseSetupFailed(Error)
 
@@ -15,6 +44,15 @@ public enum PersistenceError: Error, LocalizedError {
 /// Owns the app's single SQLite database and exposes typed access to it.
 /// All persistence in Chessanto goes through this type.
 public final class GameStore: Sendable {
+    private static let activeTrainingCardsCTE = """
+        WITH activeTrainingCard AS (
+            SELECT tc.*, g.white AS gameWhite, g.black AS gameBlack
+            FROM trainingCard tc
+            JOIN game g ON g.id = tc.gameId
+            WHERE g.deletedAt IS NULL
+        )
+        """
+
     public let dbQueue: DatabaseQueue
 
     public init(path: String) throws {
@@ -79,7 +117,21 @@ public final class GameStore: Sendable {
     public func allGames() throws -> [GameRecord] {
         try dbQueue.read { db in
             try GameRecord
-                .order(Column("playedAt").desc, Column("importedAt").desc)
+                .filter(Column("deletedAt") == nil)
+                .order(
+                    Column("pinnedAt").desc,
+                    Column("playedAt").desc,
+                    Column("importedAt").desc
+                )
+                .fetchAll(db)
+        }
+    }
+
+    public func recentlyDeletedGames() throws -> [GameRecord] {
+        try dbQueue.read { db in
+            try GameRecord
+                .filter(Column("deletedAt") != nil)
+                .order(Column("deletedAt").desc)
                 .fetchAll(db)
         }
     }
@@ -90,9 +142,52 @@ public final class GameStore: Sendable {
         }
     }
 
-    public func deleteGame(id: Int64) throws {
-        _ = try dbQueue.write { db in
-            try GameRecord.deleteOne(db, key: id)
+    /// Applies one library command atomically across every requested game.
+    /// Missing or inapplicable IDs are reported as stale instead of causing
+    /// a partially completed batch.
+    @discardableResult
+    public func perform(_ command: LibraryCommand) throws -> LibraryMutationResult {
+        let requestedIDs = command.gameIDs
+        guard !requestedIDs.isEmpty else {
+            return LibraryMutationResult(affectedIDs: [], staleIDs: [])
+        }
+
+        return try dbQueue.write { db in
+            let records = try GameRecord
+                .filter(requestedIDs.contains(Column("id")))
+                .fetchAll(db)
+            var affectedIDs: Set<Int64> = []
+
+            for var record in records {
+                guard let id = record.id else { continue }
+                switch command {
+                case .setPinned(_, let pinned):
+                    guard record.deletedAt == nil else { continue }
+                    record.pinnedAt = pinned ? Date() : nil
+                    try record.update(db)
+                case .setFavorite(_, let favorite):
+                    guard record.deletedAt == nil else { continue }
+                    record.isFavorite = favorite
+                    try record.update(db)
+                case .moveToRecentlyDeleted:
+                    guard record.deletedAt == nil else { continue }
+                    record.deletedAt = Date()
+                    try record.update(db)
+                case .restore:
+                    guard record.deletedAt != nil else { continue }
+                    record.deletedAt = nil
+                    try record.update(db)
+                case .deletePermanently:
+                    guard record.deletedAt != nil else { continue }
+                    try record.delete(db)
+                }
+                affectedIDs.insert(id)
+            }
+
+            return LibraryMutationResult(
+                affectedIDs: affectedIDs,
+                staleIDs: requestedIDs.subtracting(affectedIDs)
+            )
         }
     }
 
@@ -348,20 +443,32 @@ public final class GameStore: Sendable {
 
     public func dueTrainingCards(now: Date = Date(), limit: Int = 20) async throws -> [TrainingCardRecord] {
         try await dbQueue.read { db in
-            try TrainingCardRecord
-                .filter(Column("dueAt") <= now)
-                .order(Column("dueAt"), Column("updatedAt"))
-                .limit(limit)
-                .fetchAll(db)
+            try TrainingCardRecord.fetchAll(
+                db,
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT tc.*
+                    FROM activeTrainingCard tc
+                    WHERE tc.dueAt <= ?
+                    ORDER BY tc.dueAt, tc.updatedAt
+                    LIMIT ?
+                    """,
+                arguments: [now, limit]
+            )
         }
     }
 
     public func anyTrainingCards(limit: Int = 20) async throws -> [TrainingCardRecord] {
         try await dbQueue.read { db in
-            try TrainingCardRecord
-                .order(Column("updatedAt").desc)
-                .limit(limit)
-                .fetchAll(db)
+            try TrainingCardRecord.fetchAll(
+                db,
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT tc.*
+                    FROM activeTrainingCard tc
+                    ORDER BY tc.updatedAt DESC
+                    LIMIT ?
+                    """,
+                arguments: [limit]
+            )
         }
     }
 
@@ -369,7 +476,11 @@ public final class GameStore: Sendable {
         try await dbQueue.read { db in
             try Date.fetchOne(
                 db,
-                sql: "SELECT MIN(dueAt) FROM trainingCard WHERE dueAt > ?",
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT MIN(tc.dueAt)
+                    FROM activeTrainingCard tc
+                    WHERE tc.dueAt > ?
+                    """,
                 arguments: [now]
             )
         }
@@ -391,11 +502,10 @@ public final class GameStore: Sendable {
                 ]
                 let dueCards = try TrainingCardRecord.fetchAll(
                     db,
-                    sql: """
+                    sql: Self.activeTrainingCardsCTE + """
                         SELECT tc.*
-                        FROM trainingCard tc
-                        JOIN game g ON g.id = tc.gameId
-                        WHERE (g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?)
+                        FROM activeTrainingCard tc
+                        WHERE (tc.gameWhite COLLATE NOCASE = ? OR tc.gameBlack COLLATE NOCASE = ?)
                           AND tc.dueAt <= ?
                         ORDER BY tc.dueAt, tc.updatedAt
                         LIMIT ?
@@ -404,22 +514,20 @@ public final class GameStore: Sendable {
                 )
                 let dueCount = try Int.fetchOne(
                     db,
-                    sql: """
+                    sql: Self.activeTrainingCardsCTE + """
                         SELECT COUNT(*)
-                        FROM trainingCard tc
-                        JOIN game g ON g.id = tc.gameId
-                        WHERE (g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?)
+                        FROM activeTrainingCard tc
+                        WHERE (tc.gameWhite COLLATE NOCASE = ? OR tc.gameBlack COLLATE NOCASE = ?)
                           AND tc.dueAt <= ?
                         """,
                     arguments: playerArguments + [now]
                 ) ?? 0
                 let fallbackCards = try TrainingCardRecord.fetchAll(
                     db,
-                    sql: """
+                    sql: Self.activeTrainingCardsCTE + """
                         SELECT tc.*
-                        FROM trainingCard tc
-                        JOIN game g ON g.id = tc.gameId
-                        WHERE g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?
+                        FROM activeTrainingCard tc
+                        WHERE (tc.gameWhite COLLATE NOCASE = ? OR tc.gameBlack COLLATE NOCASE = ?)
                         ORDER BY tc.updatedAt DESC
                         LIMIT ?
                         """,
@@ -427,11 +535,10 @@ public final class GameStore: Sendable {
                 )
                 let nextDueDate = try Date.fetchOne(
                     db,
-                    sql: """
+                    sql: Self.activeTrainingCardsCTE + """
                         SELECT MIN(tc.dueAt)
-                        FROM trainingCard tc
-                        JOIN game g ON g.id = tc.gameId
-                        WHERE (g.white COLLATE NOCASE = ? OR g.black COLLATE NOCASE = ?)
+                        FROM activeTrainingCard tc
+                        WHERE (tc.gameWhite COLLATE NOCASE = ? OR tc.gameBlack COLLATE NOCASE = ?)
                           AND tc.dueAt > ?
                         """,
                     arguments: playerArguments + [now]
@@ -446,33 +553,41 @@ public final class GameStore: Sendable {
 
             let dueCards = try TrainingCardRecord.fetchAll(
                 db,
-                sql: """
-                    SELECT *
-                    FROM trainingCard
-                    WHERE dueAt <= ?
-                    ORDER BY dueAt, updatedAt
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT tc.*
+                    FROM activeTrainingCard tc
+                    WHERE tc.dueAt <= ?
+                    ORDER BY tc.dueAt, tc.updatedAt
                     LIMIT ?
                     """,
                 arguments: [now, limit]
             )
             let dueCount = try Int.fetchOne(
                 db,
-                sql: "SELECT COUNT(*) FROM trainingCard WHERE dueAt <= ?",
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT COUNT(*)
+                    FROM activeTrainingCard tc
+                    WHERE tc.dueAt <= ?
+                    """,
                 arguments: [now]
             ) ?? 0
             let fallbackCards = try TrainingCardRecord.fetchAll(
                 db,
-                sql: """
-                    SELECT *
-                    FROM trainingCard
-                    ORDER BY updatedAt DESC
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT tc.*
+                    FROM activeTrainingCard tc
+                    ORDER BY tc.updatedAt DESC
                     LIMIT ?
                     """,
                 arguments: [limit]
             )
             let nextDueDate = try Date.fetchOne(
                 db,
-                sql: "SELECT MIN(dueAt) FROM trainingCard WHERE dueAt > ?",
+                sql: Self.activeTrainingCardsCTE + """
+                    SELECT MIN(tc.dueAt)
+                    FROM activeTrainingCard tc
+                    WHERE tc.dueAt > ?
+                    """,
                 arguments: [now]
             )
             return TrainingQueueSnapshot(

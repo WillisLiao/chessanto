@@ -16,111 +16,130 @@ struct OnboardingView: View {
 
     @State private var page: Page = .welcome
     @State private var username = ""
+    @State private var confirmedUsername: String?
     @State private var ratingBand = "adaptive"
     @State private var coachEnabled = false
     @State private var coachModel = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            Group {
-                switch page {
-                case .welcome: welcomePage
-                case .username: usernamePage
-                case .ratingBand: ratingBandPage
-                case .coach: coachPage
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding()
-
-            pageProgress
-
+        HStack(spacing: 0) {
+            stepRail
+                .frame(width: 150)
             Divider()
-
-            HStack {
-                if page != .welcome {
-                    Button("Back") { back() }
+            VStack(spacing: 0) {
+                Group {
+                    switch page {
+                    case .welcome: welcomePage
+                    case .username: usernamePage
+                    case .ratingBand: ratingBandPage
+                    case .coach: coachPage
+                    }
                 }
-                Spacer()
-                Button("Skip") { finish() }
-                Button(page == .coach ? "Finish" : "Next") { advance() }
-                    .buttonStyle(.dsPrimary)
-                    .keyboardShortcut(.defaultAction)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(DesignSpacing.xl)
+
+                Divider()
+
+                HStack {
+                    if page != .welcome {
+                        Button("Back") { back() }
+                    }
+                    Spacer()
+                    Button("Set up later") { finish() }
+                    Button(page == .coach ? "Finish" : "Continue") { advance() }
+                        .buttonStyle(.dsPrimary)
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding()
             }
-            .padding()
         }
-        .frame(width: 480, height: 460)
+        .frame(width: 640, height: 450)
         .background(DesignColors.surface0)
         .onAppear {
             username = library.chessComUsername
+            confirmedUsername = library.isChessComAccountConfirmed
+                ? library.chessComUsername
+                : nil
         }
     }
 
-    private var pageProgress: some View {
-        HStack(spacing: DesignSpacing.sm) {
+    private var stepRail: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.md) {
+            Text("Chessanto")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(DesignColors.textPrimary)
+                .padding(.bottom, DesignSpacing.lg)
             ForEach(Page.allCases, id: \.self) { candidate in
-                Circle()
-                    .fill(candidate == page ? DesignColors.accent : DesignColors.hairline)
-                    .frame(width: 6, height: 6)
+                HStack(spacing: DesignSpacing.sm) {
+                    Text("\(candidate.rawValue + 1)")
+                        .font(.dsNotation)
+                        .foregroundStyle(candidate == page ? DesignColors.accentText : DesignColors.textSecondary)
+                        .frame(width: 14)
+                    Text(stepTitle(candidate))
+                        .font(.dsBody.weight(candidate == page ? .semibold : .regular))
+                        .foregroundStyle(DesignColors.textPrimary)
+                }
+                .padding(.vertical, 3)
+                .overlay(alignment: .leading) {
+                    if candidate == page {
+                        Rectangle()
+                            .fill(DesignColors.accent)
+                            .frame(width: 2)
+                            .offset(x: -DesignSpacing.sm)
+                    }
+                }
             }
+            Spacer()
+            Text("Games and analysis stay on this Mac.")
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.bottom, DesignSpacing.sm)
-        .accessibilityLabel("Page \(page.rawValue + 1) of \(Page.allCases.count)")
+        .padding(DesignSpacing.lg)
+        .background(DesignColors.surface1)
+        .accessibilityElement(children: .contain)
     }
 
     private var welcomePage: some View {
-        VStack(alignment: .leading, spacing: DesignSpacing.xl) {
-            HStack(spacing: DesignSpacing.lg) {
-                ChessantoEmblem(size: 112)
-
-                VStack(alignment: .leading, spacing: DesignSpacing.sm) {
-                    Text("Welcome to Chessanto")
-                        .font(.dsTitle)
-                        .foregroundStyle(DesignColors.textPrimary)
-                    Text("Turn your own games into clear, trustworthy lessons - privately on this Mac.")
-                        .font(.dsBody)
-                        .foregroundStyle(DesignColors.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: DesignSpacing.md) {
-                welcomeBenefit(
-                    icon: "lock.shield.fill",
-                    title: "Private by default",
-                    detail: "Your games and analysis stay on this Mac."
-                )
-                welcomeBenefit(
-                    icon: "checkmark.seal.fill",
-                    title: "Engine-verified guidance",
-                    detail: "Coaching stays grounded in legal moves and real evaluation."
-                )
-                welcomeBenefit(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Built for improvement",
-                    detail: "See the moments and patterns that will help your next game."
-                )
+        VStack(alignment: .leading, spacing: DesignSpacing.lg) {
+            Text("Your games, turned into a study record")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(DesignColors.textPrimary)
+            Text("Chessanto reviews your own play, keeps every claim tied to analysis, and builds the positions worth revisiting.")
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 0) {
+                welcomeCommitment("Private by default", "Games and analysis stay on this Mac.")
+                welcomeCommitment("Engine verified", "Moves and evaluations come from the local engine.")
+                welcomeCommitment("Evidence led", "Player insights show the games and counts behind them.")
             }
         }
     }
 
-    private func welcomeBenefit(icon: String, title: String, detail: String) -> some View {
-        HStack(spacing: DesignSpacing.md) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(DesignColors.accent)
-                .frame(width: 28, height: 28)
-                .background(DesignColors.accent.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
-
+    private func welcomeCommitment(_ title: String, _ detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignSpacing.lg) {
+            Text(title)
+                .font(.dsBody.weight(.semibold))
+                .frame(width: 110, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.dsBody.weight(.semibold))
-                    .foregroundStyle(DesignColors.textPrimary)
                 Text(detail)
-                    .font(.dsSecondary)
+                    .font(.dsBody)
                     .foregroundStyle(DesignColors.textSecondary)
             }
+        }
+        .padding(.vertical, DesignSpacing.md)
+        .overlay(alignment: .top) {
+            Rectangle().fill(DesignColors.hairline).frame(height: 1)
+        }
+    }
+
+    private func stepTitle(_ page: Page) -> String {
+        switch page {
+        case .welcome: return "Welcome"
+        case .username: return "Account"
+        case .ratingBand: return "Teaching level"
+        case .coach: return "Local Coach"
         }
     }
 
@@ -132,8 +151,11 @@ struct OnboardingView: View {
             Text("Optional - PGN-only import works fine without one. If you set it, you can fetch your recent games straight from chess.com.")
                 .font(.dsBody)
                 .foregroundStyle(DesignColors.textSecondary)
-            ChessComUsernameField(username: $username) { validated in
-                library.saveChessComUsername(validated)
+            ChessComUsernameField(
+                username: $username,
+                savedUsername: confirmedUsername
+            ) { account in
+                confirmedUsername = account.username
             }
         }
     }
@@ -183,7 +205,9 @@ struct OnboardingView: View {
     }
 
     private func finish() {
-        library.saveChessComUsername(username)
+        if let confirmedUsername {
+            library.saveChessComUsername(confirmedUsername, confirmed: true)
+        }
         var profile = (try? library.store.userProfile()) ?? UserProfileRecord()
         profile.ratingBand = ratingBand
         profile.coachEnabled = coachEnabled

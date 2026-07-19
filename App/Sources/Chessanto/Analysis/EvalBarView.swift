@@ -33,8 +33,7 @@ struct EvalBarView: View {
             }
         }
         .frame(width: width)
-        .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
-        .overlay(RoundedRectangle(cornerRadius: DesignShape.controlRadius).stroke(DesignColors.hairline, lineWidth: 1))
+        .overlay(Rectangle().stroke(DesignColors.hairline, lineWidth: 1))
         .accessibilityLabel(accessibilityLabel)
     }
 

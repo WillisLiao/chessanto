@@ -8,6 +8,7 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
 
     public var id: Int64
     public var chessComUsername: String?
+    public var isChessComAccountConfirmed: Bool
     public var ratingBand: String
     public var coachModel: String?
     public var coachEnabled: Bool
@@ -18,6 +19,7 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
     public init(
         id: Int64 = 1,
         chessComUsername: String? = nil,
+        isChessComAccountConfirmed: Bool = false,
         ratingBand: String = "adaptive",
         coachModel: String? = nil,
         coachEnabled: Bool = false,
@@ -27,6 +29,7 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
     ) {
         self.id = id
         self.chessComUsername = chessComUsername
+        self.isChessComAccountConfirmed = isChessComAccountConfirmed
         self.ratingBand = ratingBand
         self.coachModel = coachModel
         self.coachEnabled = coachEnabled

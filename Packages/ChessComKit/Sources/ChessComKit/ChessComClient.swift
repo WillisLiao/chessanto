@@ -3,6 +3,7 @@ import Foundation
 public enum ChessComError: Error, LocalizedError {
     case invalidUsername
     case notFound
+    case serverStatus(Int)
     case network(Error)
     case decoding(Error)
 
@@ -10,16 +11,92 @@ public enum ChessComError: Error, LocalizedError {
         switch self {
         case .invalidUsername: return "Enter a chess.com username."
         case .notFound: return "No chess.com account found with that username."
+        case .serverStatus(let status): return "chess.com returned an unexpected response (\(status))."
         case .network(let error): return "Couldn't reach chess.com: \(error.localizedDescription)"
         case .decoding: return "chess.com returned data Chessanto didn't understand."
         }
     }
 }
 
-public struct ChessComProfile: Decodable, Sendable {
+public struct ChessComProfile: Decodable, Sendable, Equatable {
     public let username: String
     public let name: String?
     public let country: String?
+    public let url: String?
+    public let avatar: String?
+}
+
+public struct ChessComRatings: Sendable, Equatable {
+    public let daily: Int?
+    public let rapid: Int?
+    public let blitz: Int?
+    public let bullet: Int?
+
+    public init(daily: Int? = nil, rapid: Int? = nil, blitz: Int? = nil, bullet: Int? = nil) {
+        self.daily = daily
+        self.rapid = rapid
+        self.blitz = blitz
+        self.bullet = bullet
+    }
+}
+
+public struct ChessComStats: Decodable, Sendable, Equatable {
+    public struct Category: Decodable, Sendable, Equatable {
+        public struct Last: Decodable, Sendable, Equatable {
+            public let rating: Int
+        }
+
+        public let last: Last?
+    }
+
+    public let daily: Category?
+    public let rapid: Category?
+    public let blitz: Category?
+    public let bullet: Category?
+
+    private enum CodingKeys: String, CodingKey {
+        case daily = "chess_daily"
+        case rapid = "chess_rapid"
+        case blitz = "chess_blitz"
+        case bullet = "chess_bullet"
+    }
+}
+
+public struct ChessComAccount: Sendable, Equatable {
+    public let username: String
+    public let name: String?
+    public let countryCode: String?
+    public let profileURL: URL
+    public let ratings: ChessComRatings
+
+    public init(
+        username: String,
+        name: String?,
+        countryCode: String?,
+        profileURL: URL,
+        ratings: ChessComRatings
+    ) {
+        self.username = username
+        self.name = name
+        self.countryCode = countryCode
+        self.profileURL = profileURL
+        self.ratings = ratings
+    }
+
+    public init(profile: ChessComProfile, stats: ChessComStats?) {
+        username = profile.username
+        name = profile.name
+        countryCode = profile.country.flatMap { URL(string: $0)?.lastPathComponent.uppercased() }
+        profileURL =
+            profile.url.flatMap(URL.init(string:))
+            ?? URL(string: "https://www.chess.com/member/\(profile.username.lowercased())")!
+        ratings = ChessComRatings(
+            daily: stats?.daily?.last?.rating,
+            rapid: stats?.rapid?.last?.rating,
+            blitz: stats?.blitz?.last?.rating,
+            bullet: stats?.bullet?.last?.rating
+        )
+    }
 }
 
 public struct ChessComGame: Decodable, Sendable, Identifiable {
@@ -80,13 +157,28 @@ public actor ChessComClient {
     }
 
     public func profile(username: String) async throws -> ChessComProfile {
-        try await get("https://api.chess.com/pub/player/\(sanitized(username))")
+        try await get("https://api.chess.com/pub/player/\(try sanitized(username))")
+    }
+
+    public func stats(username: String) async throws -> ChessComStats {
+        try await get("https://api.chess.com/pub/player/\(try sanitized(username))/stats")
+    }
+
+    /// Resolves the exact identity a user can confirm. Profile lookup is
+    /// required, while ratings degrade gracefully when stats are unavailable.
+    public func account(username: String) async throws -> ChessComAccount {
+        async let profileRequest = profile(username: username)
+        async let statsRequest = try? stats(username: username)
+        return try await ChessComAccount(
+            profile: profileRequest,
+            stats: statsRequest
+        )
     }
 
     /// Returns monthly archive URLs, oldest first.
     public func archiveURLs(username: String) async throws -> [String] {
         let response: ArchivesResponse = try await get(
-            "https://api.chess.com/pub/player/\(sanitized(username))/games/archives"
+            "https://api.chess.com/pub/player/\(try sanitized(username))/games/archives"
         )
         return response.archives
     }
@@ -109,8 +201,16 @@ public actor ChessComClient {
         return results.sorted { $0.endTime > $1.endTime }
     }
 
-    private func sanitized(_ username: String) -> String {
-        username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    private func sanitized(_ username: String) throws -> String {
+        let normalized = username
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty,
+            let encoded = normalized.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else {
+            throw ChessComError.invalidUsername
+        }
+        return encoded
     }
 
     private func get<T: Decodable>(_ urlString: String) async throws -> T {
@@ -128,6 +228,9 @@ public actor ChessComClient {
 
         if let http = response as? HTTPURLResponse, http.statusCode == 404 {
             throw ChessComError.notFound
+        }
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ChessComError.serverStatus(http.statusCode)
         }
 
         do {

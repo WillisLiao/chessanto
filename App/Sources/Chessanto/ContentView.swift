@@ -4,10 +4,28 @@ import Persistence
 
 struct ContentView: View {
     @EnvironmentObject private var library: GameLibrary
-    @State private var selectedGameID: Int64?
+    private enum LibrarySource: Equatable {
+        case allGames
+        case favorites
+        case playerBrief
+        case recentlyDeleted
+    }
+
+    private enum DetailDestination: Equatable {
+        case empty
+        case game(Int64)
+        case playerBrief
+        case recentlyDeleted
+    }
+
+    @State private var librarySource: LibrarySource = .allGames
+    @State private var detailDestination: DetailDestination = .empty
+    @State private var isOrganizing = false
+    @State private var organizedSelection: Set<Int64> = []
+    @State private var pendingMoveIDs: Set<Int64> = []
+    @State private var lastMovedIDs: Set<Int64> = []
     @State private var isShowingImporter = false
     @State private var isShowingChessComFetch = false
-    @State private var isShowingDashboard = false
     @State private var isTargeted = false
     /// Set by the dashboard's "Review next lesson"/"Practice any position"
     /// (DD1) - `ContentView` owns game selection already, so it's the
@@ -18,40 +36,38 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                List(library.games, selection: $selectedGameID) { game in
-                    GameRow(
-                        game: game,
-                        username: library.chessComUsername,
-                        isAnalyzed: game.id.map { library.analyzedGameIDs.contains($0) } ?? false,
-                        opening: game.id.flatMap { library.openingByGameID[$0] }
-                    ).tag(game.id)
-                }
-                .overlay {
-                    if library.games.isEmpty {
-                        ContentUnavailableView(
-                            "No games yet",
-                            systemImage: "square.stack.3d.up.slash",
-                            description: Text("Import a PGN file or drop one here to get started.")
-                        )
-                    }
+                libraryControls
+                if isOrganizing {
+                    organizingList
+                } else {
+                    browsingList
                 }
                 sidebarBottomBar
             }
             .navigationTitle("Games")
-            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 340)
         } detail: {
-            if let selectedGameID, let game = library.games.first(where: { $0.id == selectedGameID }) {
-                GameReplayView(
-                    game: game,
-                    store: library.store,
-                    pendingPracticeLoadCards: pendingPracticeGameID == game.id ? pendingPracticeLoadCards : nil,
-                    onPendingPracticeConsumed: {
-                        pendingPracticeGameID = nil
-                        pendingPracticeLoadCards = nil
-                    }
-                )
-                .id(game.id)
-            } else {
+            switch detailDestination {
+            case .game(let gameID):
+                if let game = library.games.first(where: { $0.id == gameID }) {
+                    GameReplayView(
+                        game: game,
+                        store: library.store,
+                        pendingPracticeLoadCards: pendingPracticeGameID == game.id ? pendingPracticeLoadCards : nil,
+                        onPendingPracticeConsumed: {
+                            pendingPracticeGameID = nil
+                            pendingPracticeLoadCards = nil
+                        }
+                    )
+                    .id(game.id)
+                } else {
+                    emptySelectionView
+                }
+            case .playerBrief:
+                PlayerBriefView(onOpenPractice: openPractice)
+            case .recentlyDeleted:
+                RecentlyDeletedView()
+            case .empty:
                 emptySelectionView
             }
         }
@@ -68,14 +84,6 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingChessComFetch) {
             ChessComFetchView()
         }
-        .sheet(isPresented: $isShowingDashboard) {
-            DashboardView(onOpenPractice: { gameID, loadCards in
-                selectedGameID = gameID
-                pendingPracticeGameID = gameID
-                pendingPracticeLoadCards = loadCards
-                isShowingDashboard = false
-            })
-        }
         .sheet(isPresented: onboardingBinding) {
             OnboardingView()
         }
@@ -87,44 +95,348 @@ struct ContentView: View {
         } message: {
             Text(library.errorMessage ?? "")
         }
+        .alert(moveConfirmationTitle, isPresented: moveConfirmationBinding) {
+            Button("Cancel", role: .cancel) {}
+            Button("Move to Recently Deleted", role: .destructive) {
+                movePendingGames()
+            }
+        } message: {
+            Text("Their analysis, saved variations, Coach conversations, and practice history will be hidden with them. You can restore them later.")
+        }
+        .onChange(of: library.games.map(\.id)) { _, currentIDs in
+            let existingIDs = Set(currentIDs.compactMap { $0 })
+            organizedSelection.formIntersection(existingIDs)
+            if case .game(let gameID) = detailDestination,
+                !existingIDs.contains(gameID)
+            {
+                detailDestination = .empty
+            }
+        }
+    }
+
+    private var libraryControls: some View {
+        VStack(spacing: DesignSpacing.xs) {
+            sourceRow("All Games", systemImage: "list.bullet", isSelected: librarySource == .allGames) {
+                selectLibrarySource(.allGames)
+            }
+            sourceRow("Favorites", systemImage: "star", isSelected: librarySource == .favorites) {
+                selectLibrarySource(.favorites)
+            }
+            sourceRow("Player Brief", systemImage: "doc.text.magnifyingglass", isSelected: librarySource == .playerBrief) {
+                selectLibrarySource(.playerBrief)
+            }
+            sourceRow(
+                "Recently Deleted",
+                systemImage: "trash",
+                count: library.recentlyDeletedGames.isEmpty ? nil : library.recentlyDeletedGames.count,
+                isSelected: librarySource == .recentlyDeleted
+            ) {
+                selectLibrarySource(.recentlyDeleted)
+            }
+
+            Divider().padding(.vertical, DesignSpacing.xs)
+
+            HStack {
+                Text(librarySource == .favorites ? "Favorite games" : "Game register")
+                    .font(.dsSectionHeader)
+                    .foregroundStyle(DesignColors.textSecondary)
+                Spacer()
+                Button(isOrganizing ? "Done" : "Organize") {
+                    isOrganizing.toggle()
+                    if !isOrganizing {
+                        organizedSelection.removeAll()
+                    }
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, DesignSpacing.md)
+        .padding(.vertical, DesignSpacing.sm)
+        .background(DesignColors.surface1)
+    }
+
+    private func sourceRow(
+        _ title: String,
+        systemImage: String,
+        count: Int? = nil,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: DesignSpacing.sm) {
+                Image(systemName: systemImage)
+                    .frame(width: 16)
+                    .foregroundStyle(isSelected ? DesignColors.accentText : DesignColors.textSecondary)
+                Text(title)
+                    .foregroundStyle(DesignColors.textPrimary)
+                Spacer()
+                if let count {
+                    Text("\(count)")
+                        .font(.dsNotation)
+                        .foregroundStyle(DesignColors.textSecondary)
+                }
+            }
+            .font(.dsBody)
+            .padding(.horizontal, DesignSpacing.sm)
+            .padding(.vertical, 6)
+            .background(isSelected ? DesignColors.selection : Color.clear)
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle().fill(DesignColors.accent).frame(width: 2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func selectLibrarySource(_ source: LibrarySource) {
+        librarySource = source
+        switch source {
+        case .allGames:
+            if detailDestination == .playerBrief || detailDestination == .recentlyDeleted {
+                detailDestination = .empty
+            }
+        case .favorites:
+            if case .game(let gameID) = detailDestination,
+                library.games.first(where: { $0.id == gameID })?.isFavorite == true
+            {
+                return
+            }
+            detailDestination = .empty
+        case .playerBrief:
+            detailDestination = .playerBrief
+        case .recentlyDeleted:
+            detailDestination = .recentlyDeleted
+        }
+    }
+
+    private var browsingList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                if !pinnedGames.isEmpty {
+                    Section {
+                        ForEach(pinnedGames) { game in
+                            browsingGameRow(game)
+                        }
+                    } header: {
+                        registerHeader("Pinned")
+                    }
+                }
+                Section {
+                    ForEach(unpinnedGames) { game in
+                        browsingGameRow(game)
+                    }
+                } header: {
+                    registerHeader(pinnedGames.isEmpty ? "Games" : "Recent games")
+                }
+            }
+        }
+        .overlay { emptyLibraryOverlay }
+    }
+
+    private func browsingGameRow(_ game: GameRecord) -> some View {
+        let isSelected = game.id.map { detailDestination == .game($0) } ?? false
+        return Button {
+            if let id = game.id {
+                if librarySource == .playerBrief || librarySource == .recentlyDeleted {
+                    librarySource = .allGames
+                }
+                detailDestination = .game(id)
+            }
+        } label: {
+            gameRow(game)
+                .padding(.horizontal, DesignSpacing.md)
+                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(isSelected ? DesignColors.selection : Color.clear)
+                .overlay(alignment: .leading) {
+                    if isSelected {
+                        Rectangle().fill(DesignColors.accent).frame(width: 2)
+                    }
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu { contextMenu(for: game) }
+    }
+
+    private func registerHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.dsSecondary.weight(.semibold))
+            .foregroundStyle(DesignColors.textSecondary)
+            .padding(.horizontal, DesignSpacing.md)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DesignColors.surface0)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(DesignColors.hairline).frame(height: 1)
+            }
+    }
+
+    private var organizingList: some View {
+        List(selection: $organizedSelection) {
+            if !pinnedGames.isEmpty {
+                Section("Pinned") {
+                    ForEach(pinnedGames) { game in
+                        if let id = game.id {
+                            gameRow(game).tag(id)
+                        }
+                    }
+                }
+            }
+            Section(pinnedGames.isEmpty ? "Games" : "Recent games") {
+                ForEach(unpinnedGames) { game in
+                    if let id = game.id {
+                        gameRow(game).tag(id)
+                    }
+                }
+            }
+        }
+        .overlay { emptyLibraryOverlay }
+        .safeAreaInset(edge: .bottom) {
+            organizationBar
+        }
+        .onDeleteCommand {
+            requestMoveToRecentlyDeleted(organizedSelection)
+        }
+    }
+
+    private var filteredGames: [GameRecord] {
+        librarySource == .favorites ? library.games.filter(\.isFavorite) : library.games
+    }
+
+    private var pinnedGames: [GameRecord] {
+        filteredGames.filter { $0.pinnedAt != nil }
+    }
+
+    private var unpinnedGames: [GameRecord] {
+        filteredGames.filter { $0.pinnedAt == nil }
+    }
+
+    private func gameRow(_ game: GameRecord) -> some View {
+        GameRow(
+            game: game,
+            username: library.chessComUsername,
+            isAnalyzed: game.id.map { library.analyzedGameIDs.contains($0) } ?? false,
+            opening: game.id.flatMap { library.openingByGameID[$0] }
+        )
+    }
+
+    @ViewBuilder
+    private func contextMenu(for game: GameRecord) -> some View {
+        if let id = game.id {
+            Button(game.pinnedAt == nil ? "Pin" : "Unpin") {
+                library.apply(.setPinned([id], game.pinnedAt == nil))
+            }
+            Button(game.isFavorite ? "Remove from Favorites" : "Mark as Favorite") {
+                library.apply(.setFavorite([id], !game.isFavorite))
+            }
+            Divider()
+            Button("Move to Recently Deleted…", role: .destructive) {
+                requestMoveToRecentlyDeleted([id])
+            }
+        }
+    }
+
+    private var organizationBar: some View {
+        VStack(spacing: DesignSpacing.xs) {
+            HStack {
+                Text("\(organizedSelection.count) selected")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                Spacer()
+                Menu("Organize") {
+                    Button("Pin") {
+                        applyToOrganizedSelection { .setPinned($0, true) }
+                    }
+                    Button("Unpin") {
+                        applyToOrganizedSelection { .setPinned($0, false) }
+                    }
+                    Button("Mark as Favorite") {
+                        applyToOrganizedSelection { .setFavorite($0, true) }
+                    }
+                    Button("Remove from Favorites") {
+                        applyToOrganizedSelection { .setFavorite($0, false) }
+                    }
+                }
+                .disabled(organizedSelection.isEmpty)
+                Button("Move to Recently Deleted…", role: .destructive) {
+                    requestMoveToRecentlyDeleted(organizedSelection)
+                }
+                .disabled(organizedSelection.isEmpty)
+            }
+            if !lastMovedIDs.isEmpty {
+                HStack {
+                    Text("\(lastMovedIDs.count) game\(lastMovedIDs.count == 1 ? "" : "s") moved")
+                        .font(.dsSecondary)
+                    Spacer()
+                    Button("Undo") {
+                        library.apply(.restore(lastMovedIDs))
+                        lastMovedIDs.removeAll()
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+        .padding(DesignSpacing.sm)
+        .background(DesignColors.surface1)
+        .overlay(alignment: .top) {
+            Rectangle().fill(DesignColors.hairline).frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var emptyLibraryOverlay: some View {
+        if filteredGames.isEmpty {
+            VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                Text(librarySource == .favorites ? "No favorite games" : "No games yet")
+                    .font(.dsBody.weight(.semibold))
+                    .foregroundStyle(DesignColors.textPrimary)
+                Text(
+                    librarySource == .favorites
+                        ? "Mark a game as a favorite to find it here."
+                        : "Import a PGN file or drop one here to get started."
+                )
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(DesignSpacing.lg)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
     }
 
     private var emptySelectionView: some View {
         ZStack {
             DesignColors.surface0.ignoresSafeArea()
 
-            VStack(spacing: DesignSpacing.lg) {
-                ChessantoEmblem(size: 104)
+            VStack(alignment: .leading, spacing: DesignSpacing.md) {
+                Text(library.games.isEmpty ? "No games in the register" : "Select a game")
+                    .font(.dsTitle)
+                    .foregroundStyle(DesignColors.textPrimary)
 
-                VStack(spacing: DesignSpacing.xs) {
-                    Text(library.games.isEmpty ? "Your chess journey starts here" : "Select a game")
-                        .font(.dsTitle)
-                        .foregroundStyle(DesignColors.textPrimary)
+                Rectangle()
+                    .fill(DesignColors.accent)
+                    .frame(width: 36, height: 2)
 
-                    Text(
-                        library.games.isEmpty
-                            ? "Import a game and Chessanto will turn the engine's numbers into moments you can learn from."
-                            : "Choose a game from the sidebar to replay, analyze, and ask the Coach about any position."
-                    )
-                    .font(.dsBody)
-                    .foregroundStyle(DesignColors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 390)
-                }
+                Text(
+                    library.games.isEmpty
+                        ? "Import a PGN or fetch your recent chess.com games to begin."
+                        : "Choose a game to open the board, score sheet, and analysis."
+                )
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
+                .frame(maxWidth: 360, alignment: .leading)
 
-                HStack(spacing: DesignSpacing.sm) {
+                if library.games.isEmpty {
                     Button("Import PGN…") {
                         isShowingImporter = true
                     }
                     .buttonStyle(.dsPrimary)
-
-                    Button("Fetch from chess.com…") {
-                        isShowingChessComFetch = true
-                    }
-                    .buttonStyle(.bordered)
                 }
             }
             .padding(DesignSpacing.xl)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
 
@@ -137,16 +449,6 @@ struct ContentView: View {
     /// particular must never be hidden behind an overflow menu again.
     private var sidebarBottomBar: some View {
         HStack(spacing: DesignSpacing.sm) {
-            Button {
-                isShowingDashboard = true
-            } label: {
-                Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
-                    .labelStyle(.iconOnly)
-            }
-            .help("Progress")
-
-            Spacer()
-
             Menu {
                 Button {
                     isShowingImporter = true
@@ -162,6 +464,7 @@ struct ContentView: View {
                 Label("Add game", systemImage: "plus")
             }
             .help("Add a game")
+            Spacer()
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, DesignSpacing.md)
@@ -184,6 +487,47 @@ struct ContentView: View {
             get: { !library.hasCompletedOnboarding },
             set: { isPresented in if !isPresented { library.completeOnboarding() } }
         )
+    }
+
+    private var moveConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { !pendingMoveIDs.isEmpty },
+            set: { if !$0 { pendingMoveIDs.removeAll() } }
+        )
+    }
+
+    private var moveConfirmationTitle: String {
+        "Move \(pendingMoveIDs.count) game\(pendingMoveIDs.count == 1 ? "" : "s") to Recently Deleted?"
+    }
+
+    private func requestMoveToRecentlyDeleted(_ gameIDs: Set<Int64>) {
+        guard !gameIDs.isEmpty else { return }
+        pendingMoveIDs = gameIDs
+    }
+
+    private func movePendingGames() {
+        let gameIDs = pendingMoveIDs
+        pendingMoveIDs.removeAll()
+        guard library.apply(.moveToRecentlyDeleted(gameIDs)) != nil else { return }
+        organizedSelection.subtract(gameIDs)
+        lastMovedIDs = gameIDs
+    }
+
+    private func applyToOrganizedSelection(
+        command: (Set<Int64>) -> LibraryCommand
+    ) {
+        guard !organizedSelection.isEmpty else { return }
+        library.apply(command(organizedSelection))
+    }
+
+    private func openPractice(
+        gameID: Int64,
+        loadCards: @escaping () async throws -> [TrainingCardRecord]
+    ) {
+        librarySource = .allGames
+        detailDestination = .game(gameID)
+        pendingPracticeGameID = gameID
+        pendingPracticeLoadCards = loadCards
     }
 
     private func handleFileImport(result: Result<[URL], Error>) {
@@ -222,7 +566,10 @@ struct ContentView: View {
 
     private func importPGNText(_ text: String) {
         if let saved = library.importPGN(text) {
-            selectedGameID = saved.id
+            if let gameID = saved.id {
+                librarySource = .allGames
+                detailDestination = .game(gameID)
+            }
         }
     }
 }
@@ -238,15 +585,14 @@ private struct GameRow: View {
     let opening: String?
 
     var body: some View {
-        HStack(alignment: .top, spacing: DesignSpacing.sm) {
+        HStack(alignment: .center, spacing: DesignSpacing.sm) {
             outcomeIndicator
-                .padding(.top, 3)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(game.white).font(.dsBody.weight(.semibold)).lineLimit(1)
-                Text("vs \(game.black)").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary).lineLimit(1)
-
-                HStack(spacing: DesignSpacing.xs) {
+                Text("\(game.white) - \(game.black)")
+                    .font(.dsBody.weight(.semibold))
+                    .lineLimit(1)
+                HStack(spacing: 5) {
                     if let formattedTimeControl = GameRowMetadata.formattedTimeControl(game.timeControl) {
                         Text(formattedTimeControl)
                     }
@@ -254,29 +600,38 @@ private struct GameRow: View {
                         Text("·")
                         Text(dateText)
                     }
+                    if let opening {
+                        Text("·")
+                        Text(opening).lineLimit(1)
+                    }
                 }
                 .font(.dsSecondary)
                 .foregroundStyle(DesignColors.textSecondary)
-
-                if let opening {
-                    Text(opening)
-                        .font(.dsSecondary)
-                        .foregroundStyle(DesignColors.accent)
-                        .lineLimit(1)
-                }
+                .lineLimit(1)
             }
 
             Spacer(minLength: 0)
 
+            if game.pinnedAt != nil {
+                Image(systemName: "pin.fill")
+                    .font(.caption)
+                    .foregroundStyle(DesignColors.accentText)
+                    .accessibilityLabel("Pinned")
+            }
+            if game.isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(DesignColors.accentText)
+                    .accessibilityLabel("Favorite")
+            }
             if isAnalyzed {
-                Circle()
-                    .fill(DesignColors.accent)
-                    .frame(width: 6, height: 6)
-                    .padding(.top, 5)
+                Image(systemName: "checkmark")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(DesignColors.textSecondary)
                     .accessibilityLabel("Analyzed")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 3)
     }
 
     /// The user's own win/loss/draw perspective when they played this game,
@@ -286,24 +641,21 @@ private struct GameRow: View {
         let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
         if !trimmedUsername.isEmpty, let outcome = userOutcome(username: trimmedUsername) {
             Text(outcome.abbreviation)
-                .font(.dsSecondary.weight(.bold))
-                .frame(width: 16, height: 16)
-                .background(outcome.color.opacity(0.18))
+                .font(.dsNotation.weight(.semibold))
+                .frame(width: 18)
                 .foregroundStyle(outcome.color)
-                .clipShape(Circle())
         } else if let result = game.result, !result.isEmpty {
             Text(result == "1/2-1/2" ? "½" : result)
-                .font(.dsSecondary.weight(.semibold))
-                .padding(.horizontal, 4)
-                .frame(minWidth: 22, minHeight: 16)
-                .background(DesignColors.surface1)
+                .font(.dsNotation)
+                .frame(width: 30)
+                .fixedSize()
                 .foregroundStyle(DesignColors.textSecondary)
-                .clipShape(Capsule())
                 .accessibilityLabel("Result \(result)")
         } else {
-            Circle()
-                .fill(DesignColors.hairline)
-                .frame(width: 6, height: 6)
+            Text("·")
+                .font(.dsNotation)
+                .frame(width: 18)
+                .foregroundStyle(DesignColors.textSecondary)
         }
     }
 
@@ -320,8 +672,8 @@ private struct GameRow: View {
 
         var color: Color {
             switch self {
-            case .win: return DesignColors.accent
-            case .loss: return .red
+            case .win: return DesignColors.accentText
+            case .loss: return DesignColors.error
             case .draw: return DesignColors.textSecondary
             }
         }

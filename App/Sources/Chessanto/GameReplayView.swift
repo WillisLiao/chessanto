@@ -24,7 +24,7 @@ struct GameReplayView: View {
 
     private enum RightPaneTab: String, CaseIterable {
         case moves = "Moves"
-        case report = "Report"
+        case report = "Review"
         /// Never a segment in the Moves/Report picker - entered
         /// programmatically only, as a full-width mode (DD1).
         case practice = "Practice"
@@ -73,7 +73,6 @@ struct GameReplayView: View {
                         .overlay(alignment: .leading) {
                             Rectangle().fill(DesignColors.hairline).frame(width: 1)
                         }
-                        .shadow(color: .black.opacity(0.18), radius: 12, x: -2, y: 0)
                         .transition(.move(edge: .trailing))
                         .zIndex(1)
                 }
@@ -247,11 +246,7 @@ struct GameReplayView: View {
         } label: {
             Label("Coach", systemImage: isCoachOpen ? "bubble.left.fill" : "bubble.left")
                 .font(.dsSecondary.weight(.semibold))
-                .foregroundStyle(isCoachOpen ? DesignColors.accent : DesignColors.textSecondary)
-                .padding(.horizontal, DesignSpacing.sm)
-                .padding(.vertical, 5)
-                .background(isCoachOpen ? DesignColors.accent.opacity(0.13) : DesignColors.surface1)
-                .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+                .foregroundStyle(isCoachOpen ? DesignColors.accentText : DesignColors.textSecondary)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isCoachOpen ? "Close Coach panel" : "Open Coach panel")
@@ -373,22 +368,49 @@ struct GameReplayView: View {
                 }
             } else {
                 HStack {
-                    Picker("Quality", selection: $quality) {
-                        ForEach(AnalysisQuality.allCases) { quality in
-                            Text(quality.label).tag(quality)
+                    if viewModel.isAnalyzed {
+                        Image(systemName: "checkmark")
+                            .font(.dsSecondary.weight(.semibold))
+                            .foregroundStyle(DesignColors.accentText)
+                        Text("Analyzed · \(quality.label)")
+                            .font(.dsSecondary.weight(.semibold))
+                            .foregroundStyle(DesignColors.textPrimary)
+                        Spacer()
+                        Menu {
+                            Picker("Quality", selection: $quality) {
+                                ForEach(AnalysisQuality.allCases) { quality in
+                                    Text(quality.label).tag(quality)
+                                }
+                            }
+                            Divider()
+                            Button("Re-analyze") {
+                                startAnalysis(reanalyze: true)
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
                         }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-
-                    Button(viewModel.isAnalyzed ? "Re-analyze" : "Analyze") {
-                        startAnalysis(reanalyze: viewModel.isAnalyzed)
+                        .menuStyle(.borderlessButton)
+                    } else {
+                        Picker("Quality", selection: $quality) {
+                            ForEach(AnalysisQuality.allCases) { quality in
+                                Text(quality.label).tag(quality)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        Spacer()
+                        Button("Analyze") {
+                            startAnalysis(reanalyze: false)
+                        }
+                        .buttonStyle(.dsPrimary)
                     }
                 }
             }
         }
-        .padding(.horizontal, DesignSpacing.md)
-        .padding(.top, DesignSpacing.sm)
+        .padding(DesignSpacing.sm)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DesignColors.hairline).frame(height: 1)
+        }
     }
 
     private func startAnalysis(reanalyze: Bool) {
@@ -411,8 +433,10 @@ struct GameReplayView: View {
                 Text("·").foregroundStyle(.secondary)
                 Text("Black \(String(format: "%.1f", black))")
             }
-            .font(.callout.bold())
-            .padding(8)
+            .font(.dsNotation.weight(.semibold))
+            .foregroundStyle(DesignColors.textSecondary)
+            .padding(.horizontal, DesignSpacing.sm)
+            .padding(.vertical, DesignSpacing.xs)
         }
     }
 
@@ -459,9 +483,6 @@ struct GameReplayView: View {
             }
             .buttonStyle(.borderless)
             .padding(.horizontal, DesignSpacing.xs)
-            .padding(.vertical, DesignSpacing.xs)
-            .background(DesignColors.surface1)
-            .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
 
             flipButton
 
@@ -591,9 +612,13 @@ private struct MoveListView: View {
                 .padding(.vertical, 3)
                 .background(
                     index == viewModel.currentIndex
-                        ? DesignColors.accent.opacity(0.18) : Color.clear
+                        ? DesignColors.selection : Color.clear
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .overlay(alignment: .leading) {
+                    if index == viewModel.currentIndex {
+                        Rectangle().fill(DesignColors.accent).frame(width: 2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
@@ -614,7 +639,20 @@ private struct MoveListView: View {
 
     @ViewBuilder
     private func classificationMark(_ classification: MoveClassification) -> some View {
-        ClassificationChip(classification: classification)
+        Group {
+            switch classification.compactMark {
+            case .systemImage(let name):
+                Image(systemName: name)
+                    .imageScale(.small)
+            case .text(let mark):
+                Text(mark)
+                    .monospaced()
+            }
+        }
+        .font(.dsSecondary.weight(.semibold))
+        .foregroundStyle(classification.color)
+        .frame(width: 14)
+        .accessibilityHidden(true)
     }
 
     private func variationRow(index: MoveIndex, depth: Int) -> some View {
@@ -630,9 +668,13 @@ private struct MoveListView: View {
                     .padding(.vertical, 2)
                     .background(
                         index == viewModel.currentIndex
-                            ? DesignColors.accent.opacity(0.18) : Color.clear
+                            ? DesignColors.selection : Color.clear
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .overlay(alignment: .leading) {
+                        if index == viewModel.currentIndex {
+                            Rectangle().fill(DesignColors.accent).frame(width: 2)
+                        }
+                    }
             }
             .buttonStyle(.plain)
 

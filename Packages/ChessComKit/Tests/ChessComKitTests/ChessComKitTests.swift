@@ -36,4 +36,38 @@ struct ChessComKitTests {
         // A game played 2026-07-01 should decode to a plausible epoch-based date, not garbage.
         #expect(game.endTime.timeIntervalSince1970 > 1_700_000_000)
     }
+
+    @Test func accountIdentityCombinesCanonicalProfileAndCurrentRatings() throws {
+        let profileData = Data(
+            """
+            {
+              "username": "WillisLiao",
+              "name": "Willis Liao",
+              "country": "https://api.chess.com/pub/country/TW",
+              "url": "https://www.chess.com/member/willisliao",
+              "avatar": "https://images.chesscomfiles.com/avatar.png"
+            }
+            """.utf8
+        )
+        let statsData = Data(
+            """
+            {
+              "chess_daily": {"last": {"rating": 906}},
+              "chess_rapid": {"last": {"rating": 307}},
+              "chess_bullet": {"last": {"rating": 137}},
+              "chess_blitz": {"last": {"rating": 231}}
+            }
+            """.utf8
+        )
+
+        let profile = try JSONDecoder().decode(ChessComProfile.self, from: profileData)
+        let stats = try JSONDecoder().decode(ChessComStats.self, from: statsData)
+        let account = ChessComAccount(profile: profile, stats: stats)
+
+        #expect(account.username == "WillisLiao")
+        #expect(account.name == "Willis Liao")
+        #expect(account.countryCode == "TW")
+        #expect(account.profileURL.absoluteString == "https://www.chess.com/member/willisliao")
+        #expect(account.ratings == ChessComRatings(daily: 906, rapid: 307, blitz: 231, bullet: 137))
+    }
 }
