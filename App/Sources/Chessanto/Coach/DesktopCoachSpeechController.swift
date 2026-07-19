@@ -29,16 +29,39 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
         activeText = normalized
         phase = .speaking
 
-        // First, attempt to speak via local Kokoro TTS server
+        // First, check health, then attempt to speak via local Kokoro TTS server
         currentTask = Task {
-            if let audioData = await fetchKokoroSpeech(text: normalized) {
-                guard !Task.isCancelled else { return }
-                playAudioData(audioData)
-            } else {
-                guard !Task.isCancelled else { return }
-                // Fallback to system synthesizer
-                speakFallback(normalized)
+            let isHealthy = await checkKokoroHealth()
+            guard !Task.isCancelled else { return }
+
+            if isHealthy {
+                if let audioData = await fetchKokoroSpeech(text: normalized) {
+                    guard !Task.isCancelled else { return }
+                    playAudioData(audioData)
+                    return
+                }
             }
+
+            guard !Task.isCancelled else { return }
+            // Fallback to system synthesizer
+            speakFallback(normalized)
+        }
+    }
+
+    private func checkKokoroHealth() async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8888/health") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 0.5 // Ultra fast check
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return false
+            }
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -48,7 +71,7 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 1.2 // Fast timeout for local network
+        request.timeoutInterval = 20.0 // Allow ample time for local synthesis
 
         let payload: [String: Any] = [
             "text": text,
