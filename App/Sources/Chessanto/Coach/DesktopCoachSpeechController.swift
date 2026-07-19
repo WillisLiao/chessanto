@@ -8,6 +8,8 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
     @Published private(set) var activeText: String?
 
     private let synthesizer = AVSpeechSynthesizer()
+    private var audioPlayer: AVAudioPlayer?
+    private var currentTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -21,36 +23,110 @@ final class DesktopCoachSpeechController: NSObject, ObservableObject {
             .joined(separator: " ")
         guard !normalized.isEmpty else { return }
 
-        synthesizer.stopSpeaking(at: .immediate)
-        activeText = normalized
+        // Stop any active speech
+        stop()
 
-        let utterance = AVSpeechUtterance(string: normalized)
+        activeText = normalized
+        phase = .speaking
+
+        // First, attempt to speak via local Kokoro TTS server
+        currentTask = Task {
+            if let audioData = await fetchKokoroSpeech(text: normalized) {
+                guard !Task.isCancelled else { return }
+                playAudioData(audioData)
+            } else {
+                guard !Task.isCancelled else { return }
+                // Fallback to system synthesizer
+                speakFallback(normalized)
+            }
+        }
+    }
+
+    private func fetchKokoroSpeech(text: String) async -> Data? {
+        guard let url = URL(string: "http://127.0.0.1:8888/tts") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 1.2 // Fast timeout for local network
+
+        let payload: [String: Any] = [
+            "text": text,
+            "voice": "bm_george",
+            "speed": 0.95
+        ]
+
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        request.httpBody = httpBody
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return nil
+            }
+            return data
+        } catch {
+            return nil // Fallback silently
+        }
+    }
+
+    private func playAudioData(_ data: Data) {
+        do {
+            let player = try AVAudioPlayer(data: data)
+            player.delegate = self
+            player.prepareToPlay()
+            player.play()
+            self.audioPlayer = player
+        } catch {
+            // If audio player initialization/playback fails, fallback
+            if let activeText {
+                speakFallback(activeText)
+            }
+        }
+    }
+
+    private func speakFallback(_ text: String) {
+        let utterance = AVSpeechUtterance(string: text)
         utterance.voice = preferredSageVoice()
         utterance.rate = 0.42
         utterance.pitchMultiplier = 0.82
         utterance.volume = 0.95
         utterance.preUtteranceDelay = 0.08
         utterance.postUtteranceDelay = 0.12
-        phase = .speaking
         synthesizer.speak(utterance)
     }
 
     func pause() {
-        guard synthesizer.isSpeaking else { return }
-        if synthesizer.pauseSpeaking(at: .word) {
+        if let audioPlayer, audioPlayer.isPlaying {
+            audioPlayer.pause()
             phase = .paused
+        } else if synthesizer.isSpeaking {
+            if synthesizer.pauseSpeaking(at: .word) {
+                phase = .paused
+            }
         }
     }
 
     func resume() {
-        guard synthesizer.isPaused else { return }
-        if synthesizer.continueSpeaking() {
+        if let audioPlayer {
+            audioPlayer.play()
             phase = .speaking
+        } else if synthesizer.isPaused {
+            if synthesizer.continueSpeaking() {
+                phase = .speaking
+            }
         }
     }
 
     func stop() {
+        currentTask?.cancel()
+        currentTask = nil
+
+        audioPlayer?.stop()
+        audioPlayer = nil
+
         synthesizer.stopSpeaking(at: .immediate)
+
         phase = .idle
         activeText = nil
     }
@@ -90,6 +166,19 @@ extension DesktopCoachSpeechController: AVSpeechSynthesizerDelegate {
         Task { @MainActor in
             phase = .idle
             activeText = nil
+        }
+    }
+}
+
+extension DesktopCoachSpeechController: AVAudioPlayerDelegate {
+    nonisolated func audioPlayerDidFinishPlaying(
+        _ player: AVAudioPlayer,
+        successfully flag: Bool
+    ) {
+        Task { @MainActor in
+            phase = .idle
+            activeText = nil
+            audioPlayer = nil
         }
     }
 }
