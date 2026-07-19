@@ -877,6 +877,67 @@ With no Chessanto process running, the live file was restored from the mandatory
 The phase 3 document now records the locked design decisions, test-first sequence, and native acceptance record.
 The Codex briefing remains as the historical input this implementation followed and re-verified.
 
+## iPhone-first companion complete (2026-07-19)
+
+The approved iPhone-first companion is implemented across the Mac app, the new iPhone target, and the new shared `CompanionKit` package.
+The complete execution and verification record is in `handoffs/IPHONE-COMPANION-EXECUTION.md`.
+
+Secure pairing uses signed five-minute invitations, a matching phrase, explicit Mac approval, wrapped content keys, authenticated encryption, replay defense, rotation, and revocation.
+The phone can request the Mac's local analysis, receive exact progress and terminal status, cancel work, receive the completed portable report, and retain encrypted reports for offline review.
+Local and remote analysis now share one application service, and a durable ledger prevents redelivery from starting duplicate engine work.
+
+The Coach now has explicit speech controls on Mac and iPhone plus six deterministic emotional portraits.
+Speech uses an original slower, lower-pitched sage delivery and never starts automatically.
+
+The user corrected key-moment behavior during implementation.
+Selecting a key moment now only jumps to the position and stops an existing preview.
+Only Show better line or Replay better line starts playback.
+
+Native Release QA used only `/Users/willis/Library/Containers/com.chessanto.app/Data/tmp/iphone-companion-20260719-211052/chessanto.sqlite`.
+The live database MD5 remained `26f0882ad0e3ffdfc7a065a5791f8b5f` before and after QA.
+
+The macOS suite passes 104 tests across 27 suites, `CompanionKit` passes 29 tests across 10 suites, the iPhone target passes 3 tests across 2 suites, every existing package suite passes, and the universal Release build succeeds.
+
+Physical CloudKit pairing remains an external provisioning acceptance step.
+This checkout has no Apple Developer team or private iCloud container, so the apps show an honest blocker until the owner configures the same container and `ChessantoCloudKitContainerIdentifier` for both targets.
+
+## Final companion hardening handoff (2026-07-19)
+
+The post-review implementation is complete locally but has not yet been committed or pushed.
+
+Local Mac analysis no longer depends on a CloudKit or Keychain identity.
+One serial application queue now protects all local and remote engine batches.
+Interrupted durable requests resume once after relaunch, while completed requests remain idempotent duplicates.
+The secure mailbox now rejects a CloudKit record whose outer routing fields do not match its authenticated envelope header.
+First-run sync schedules the private zone before record delivery.
+The iPhone Reports tab shows active work and exact progress, offline Coach text identifies its evidence source, and better-line playback starts only from the explicit Show better line action.
+The desktop report also shows exact `x of total` analysis progress.
+The played continuation now begins after the selected key move.
+XCTest hosts automatically use a temporary isolated database.
+
+Final verification passed:
+
+- macOS app: 107 tests in 27 suites.
+- CompanionKit: 32 tests in 11 suites.
+- iPhone app: 4 tests in 3 suites.
+- Persistence: 40 tests.
+- ChessCore: 21 tests.
+- AnalysisKit: 63 tests.
+- CoachKit: 74 tests.
+- EngineKit: 1 test.
+- ChessComKit: 4 tests.
+- Universal arm64 and x86_64 Release build succeeded.
+- Engine smoke and ten-run Coach grounding passed with zero violations and zero leaks.
+
+The Release app is at `/Users/willis/Library/Developer/Xcode/DerivedData/Chessanto-dvybgihmaxaffpbutfmycvjeqlkn/Build/Products/Release/Chessanto.app`.
+Native QA used only `/Users/willis/Library/Containers/com.chessanto.app/Data/tmp/iphone-companion-20260719-211052/chessanto.sqlite`.
+The six GM/demo games with IDs 1 through 6 were removed from that QA copy at the user's request.
+The QA copy passes `PRAGMA integrity_check` and retains the five personal games with IDs 7 through 11.
+The live database was not modified and remains MD5 `26f0882ad0e3ffdfc7a065a5791f8b5f`.
+
+The next agent should inspect the diff, update any remaining stale counts in `handoffs/IPHONE-COMPANION-EXECUTION.md`, run `git diff --check`, then commit and push the implementation.
+Physical Mac-iPhone CloudKit acceptance still requires the owner's Apple Developer team and shared private iCloud container.
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.

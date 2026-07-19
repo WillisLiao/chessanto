@@ -109,6 +109,48 @@ final class CoachService: ObservableObject {
         }
     }
 
+    /// Builds verified, portable narration without changing the desktop
+    /// report's currently displayed Coach state.
+    func portableNarrations(
+        report: GameReport,
+        input: ReportInput,
+        userProfile: UserProfileRecord,
+        userRating: Int?,
+        executor: EngineToolExecutor
+    ) async -> [Int: CoachNarration] {
+        guard
+            userProfile.coachEnabled,
+            let model = userProfile.coachModel,
+            !model.isEmpty
+        else {
+            return [:]
+        }
+        let register = RatingRegister.resolve(
+            ratingBand: userProfile.ratingBand,
+            userRating: userRating
+        )
+        var narrations: [Int: CoachNarration] = [:]
+        for moment in report.keyMoments {
+            if Task.isCancelled {
+                break
+            }
+            let fallback = ReportText.momentSummary(
+                moment,
+                report: report
+            )
+            narrations[moment.ply] = await CoachNarrator.narrateMoment(
+                moment,
+                input: input,
+                register: register,
+                fallbackText: fallback,
+                client: client,
+                model: model,
+                executor: executor
+            )
+        }
+        return narrations
+    }
+
     // MARK: - Position chat (M7)
 
     /// Loads a game's persisted chat history on game load.

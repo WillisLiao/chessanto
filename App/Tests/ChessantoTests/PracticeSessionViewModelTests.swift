@@ -210,12 +210,12 @@ struct PracticeSessionViewModelTests {
             """,
             classification: "mistake"
         ))
-        var shouldTimeout = true
+        let timeoutState = TrainingTimeoutState()
         let viewModel = PracticeSessionViewModel(
             store: store,
             loadCards: { [card] },
             evaluator: DefaultTrainingMoveEvaluator { _ in
-                if shouldTimeout {
+                if await timeoutState.shouldTimeout {
                     throw EngineSearchError.timedOut(milliseconds: 4400)
                 }
                 return .centipawns(40)
@@ -226,7 +226,7 @@ struct PracticeSessionViewModelTests {
         await viewModel.submit(attemptedUCI: "g1f3")
         #expect(viewModel.state == .prompt)
 
-        shouldTimeout = false
+        await timeoutState.disable()
         await viewModel.submit(attemptedUCI: "g1f3")
 
         guard case .feedback(let feedback) = viewModel.state else {
@@ -438,5 +438,13 @@ struct PracticeSessionViewModelTests {
         viewModel.reveal()
 
         #expect(viewModel.linePreview == nil)
+    }
+}
+
+private actor TrainingTimeoutState {
+    private(set) var shouldTimeout = true
+
+    func disable() {
+        shouldTimeout = false
     }
 }

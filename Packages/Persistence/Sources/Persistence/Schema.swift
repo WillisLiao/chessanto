@@ -157,6 +157,14 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v9_analysisProvenance") { db in
+            try db.alter(table: "analysis") { t in
+                t.add(column: "qualityPreset", .text)
+                t.add(column: "analyzedAt", .datetime)
+                t.add(column: "engineIdentifier", .text)
+            }
+        }
+
         return migrator
     }
 }

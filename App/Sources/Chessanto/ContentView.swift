@@ -4,6 +4,8 @@ import Persistence
 
 struct ContentView: View {
     @EnvironmentObject private var library: GameLibrary
+    @EnvironmentObject private var companion: MacCompanionManager
+    @Environment(\.scenePhase) private var scenePhase
     private enum LibrarySource: Equatable {
         case allGames
         case favorites
@@ -110,6 +112,14 @@ struct ContentView: View {
                 !existingIDs.contains(gameID)
             {
                 detailDestination = .empty
+            }
+            Task { try? await companion.publishCatalog() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                try? await companion.synchronize(reason: .foreground)
+                try? await companion.publishCatalog()
             }
         }
     }
@@ -465,6 +475,17 @@ struct ContentView: View {
             }
             .help("Add a game")
             Spacer()
+            SettingsLink {
+                Label(
+                    companion.activeDevices.isEmpty
+                        ? "Pair iPhone"
+                        : "iPhone connected",
+                    systemImage: companion.activeDevices.isEmpty
+                        ? "iphone.and.arrow.forward"
+                        : "iphone.gen3.circle.fill"
+                )
+            }
+            .help("Open Companion settings")
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, DesignSpacing.md)

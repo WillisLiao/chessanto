@@ -13,6 +13,9 @@ public struct AnalysisRecord: Codable, Identifiable, FetchableRecord, MutablePer
     public var mateIn: Int?
     public var principalVariation: String
     public var multiPVRank: Int
+    public var qualityPreset: AnalysisQualityProvenance?
+    public var analyzedAt: Date?
+    public var engineIdentifier: String?
 
     public init(
         id: Int64? = nil,
@@ -23,7 +26,10 @@ public struct AnalysisRecord: Codable, Identifiable, FetchableRecord, MutablePer
         scoreCentipawns: Int? = nil,
         mateIn: Int? = nil,
         principalVariation: String,
-        multiPVRank: Int
+        multiPVRank: Int,
+        qualityPreset: AnalysisQualityProvenance? = nil,
+        analyzedAt: Date? = nil,
+        engineIdentifier: String? = nil
     ) {
         self.id = id
         self.gameId = gameId
@@ -34,6 +40,9 @@ public struct AnalysisRecord: Codable, Identifiable, FetchableRecord, MutablePer
         self.mateIn = mateIn
         self.principalVariation = principalVariation
         self.multiPVRank = multiPVRank
+        self.qualityPreset = qualityPreset
+        self.analyzedAt = analyzedAt
+        self.engineIdentifier = engineIdentifier
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {

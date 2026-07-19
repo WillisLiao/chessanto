@@ -1,4 +1,5 @@
 import SwiftUI
+import CompanionDomain
 
 /// The board half of inline practice mode (DD1) - observes
 /// `PracticeSessionViewModel` directly so taps and hints repaint without
@@ -45,7 +46,8 @@ struct PracticeBoardSection: View {
                         ? "You found the idea."
                         : "Let’s put the better move on the board.",
                     message: CoachStageText.condensed(feedback.explanation),
-                    source: "Engine verified"
+                    source: "Engine verified",
+                    emotion: feedback.outcome == .strong ? .delighted : .encouraging
                 )
                 if let preview = viewModel.linePreview {
                     CoachPlaybackStageView(playback: preview, fallback: stage)

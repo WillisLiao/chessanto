@@ -25,6 +25,14 @@ public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
         case .deep: return 2000
         }
     }
+
+    var provenance: AnalysisQualityProvenance {
+        switch self {
+        case .fast: return .fast
+        case .standard: return .standard
+        case .deep: return .deep
+        }
+    }
 }
 
 /// The app's single owner of the in-process Stockfish engine (only one
@@ -33,6 +41,9 @@ public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
 /// share this one engine and are mutually exclusive.
 @MainActor
 public final class EngineService: ObservableObject {
+    private static let engineIdentifier =
+        "Stockfish 17 via chesskit-engine 0.7.0"
+
     public struct LiveEvaluation: Sendable {
         public let generation: Int
         public let fen: String
@@ -205,7 +216,8 @@ public final class EngineService: ObservableObject {
         fens: [String],
         quality: AnalysisQuality,
         store: GameStore,
-        terminalMateWhiteWins: Bool? = nil
+        terminalMateWhiteWins: Bool? = nil,
+        progress: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil
     ) async throws {
         guard isStarted else { return }
 
@@ -217,15 +229,20 @@ public final class EngineService: ObservableObject {
             resumeLiveIfPending()
         }
 
-        let analyzedPlies = try await store.analyzedPlyIndices(gameId: gameId)
+        let analyzedPlies = try await store.analyzedPlyIndices(
+            gameId: gameId,
+            satisfying: quality.provenance
+        )
         let total = fens.count
         batchProgress = (done: 0, total: total)
+        progress?(0, total)
 
         for (plyIndex, fen) in fens.enumerated() {
             try Task.checkCancellation()
 
             if analyzedPlies.contains(plyIndex) {
                 batchProgress = (done: plyIndex + 1, total: total)
+                progress?(plyIndex + 1, total)
                 continue
             }
 
@@ -240,7 +257,10 @@ public final class EngineService: ObservableObject {
                         scoreCentipawns: nil,
                         mateIn: whiteWins ? 99 : -99,
                         principalVariation: "",
-                        multiPVRank: 1
+                        multiPVRank: 1,
+                        qualityPreset: quality.provenance,
+                        analyzedAt: Date(),
+                        engineIdentifier: Self.engineIdentifier
                     )
                 ]
             } else {
@@ -253,6 +273,7 @@ public final class EngineService: ObservableObject {
                 throw error
             }
             batchProgress = (done: plyIndex + 1, total: total)
+            progress?(plyIndex + 1, total)
         }
     }
 
@@ -272,7 +293,10 @@ public final class EngineService: ObservableObject {
                 scoreCentipawns: EngineScoreNormalizer.whitePerspectiveScore(info.scoreCentipawns, fen: fen),
                 mateIn: EngineScoreNormalizer.whitePerspectiveMate(info.mateIn, fen: fen),
                 principalVariation: info.principalVariation.joined(separator: " "),
-                multiPVRank: info.multiPVRank ?? 1
+                multiPVRank: info.multiPVRank ?? 1,
+                qualityPreset: quality.provenance,
+                analyzedAt: Date(),
+                engineIdentifier: Self.engineIdentifier
             )
         }
     }

@@ -1,5 +1,6 @@
 import AnalysisKit
 import CoachKit
+import CompanionDomain
 import Persistence
 import SwiftUI
 
@@ -18,6 +19,8 @@ struct ChatView: View {
     var onClose: (() -> Void)?
 
     @State private var inputText = ""
+    @State private var speakingMessageID: Int64?
+    @StateObject private var speech = DesktopCoachSpeechController()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,6 +49,9 @@ struct ChatView: View {
             if coachService.health == .unknown {
                 await coachService.checkHealth()
             }
+        }
+        .onDisappear {
+            speech.stop()
         }
     }
 
@@ -161,34 +167,88 @@ struct ChatView: View {
     @ViewBuilder
     private func messageRow(_ message: ChatMessageRecord) -> some View {
         let isUser = message.role == "user"
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
-            markdownText(
-                isUser ? message.content : moveNotation.text(message.content)
-            )
-                .font(.dsBody)
-                .padding(isUser ? DesignSpacing.sm : 0)
-                .background(isUser ? DesignColors.selection : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: isUser ? DesignShape.controlRadius : 0))
-            HStack(spacing: DesignSpacing.xs) {
-                if let source = message.source {
-                    Text(sourceCaption(source))
-                        .font(.dsSecondary)
-                        .foregroundStyle(DesignColors.textSecondary)
+        HStack(alignment: .top, spacing: DesignSpacing.xs) {
+            if !isUser {
+                Image(coachEmotion(for: message).assetName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 46, height: 58, alignment: .top)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
+                markdownText(
+                    isUser ? message.content : moveNotation.text(message.content)
+                )
+                    .font(.dsBody)
+                    .padding(isUser ? DesignSpacing.sm : 0)
+                    .background(isUser ? DesignColors.selection : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: isUser ? DesignShape.controlRadius : 0))
+                HStack(spacing: DesignSpacing.xs) {
+                    if !isUser {
+                        speechButton(for: message)
+                    }
+                    if let source = message.source {
+                        Text(sourceCaption(source))
+                            .font(.dsSecondary)
+                            .foregroundStyle(DesignColors.textSecondary)
+                    }
+                    Button("at move \(moveLabel(plyIndex: message.plyIndex))") {
+                        jump(toPly: message.plyIndex)
+                    }
+                    .font(.dsSecondary)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DesignColors.accentText)
+                    .accessibilityIdentifier("chat-jump-\(message.id ?? 0)")
                 }
-                Button("at move \(moveLabel(plyIndex: message.plyIndex))") {
-                    jump(toPly: message.plyIndex)
-                }
-                .font(.dsSecondary)
-                .buttonStyle(.plain)
-                .foregroundStyle(DesignColors.accentText)
-                .accessibilityIdentifier("chat-jump-\(message.id ?? 0)")
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(
             "\(isUser ? "You" : "Coach"): \(isUser ? message.content : moveNotation.accessibilityText(message.content))"
         )
+    }
+
+    @ViewBuilder
+    private func speechButton(for message: ChatMessageRecord) -> some View {
+        let isCurrent = speakingMessageID == message.id
+        if isCurrent, speech.phase == .speaking {
+            Button {
+                speech.pause()
+            } label: {
+                Label("Pause", systemImage: "pause.fill")
+            }
+            .buttonStyle(.plain)
+            .font(.dsSecondary)
+        } else if isCurrent, speech.phase == .paused {
+            Button {
+                speech.resume()
+            } label: {
+                Label("Resume", systemImage: "play.fill")
+            }
+            .buttonStyle(.plain)
+            .font(.dsSecondary)
+        } else {
+            Button {
+                speakingMessageID = message.id
+                speech.speak(moveNotation.text(message.content))
+            } label: {
+                Label("Hear Coach", systemImage: "speaker.wave.2.fill")
+            }
+            .buttonStyle(.plain)
+            .font(.dsSecondary)
+        }
+    }
+
+    private func coachEmotion(for message: ChatMessageRecord) -> CoachEmotion {
+        switch message.source {
+        case "fallback":
+            return .concerned
+        case "precheck":
+            return .instructive
+        default:
+            return .thoughtful
+        }
     }
 
     /// Renders `**bold**`/lists rather than showing literal asterisks

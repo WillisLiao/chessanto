@@ -93,6 +93,23 @@ public final class GameStore: Sendable {
             return try GameStore(path: databaseURL.path)
         }
 
+        if environment["XCTestConfigurationFilePath"]?.isEmpty == false {
+            let runID = environment["CHESSANTO_TEST_RUN_ID"]
+                ?? String(ProcessInfo.processInfo.processIdentifier)
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ChessantoTests", isDirectory: true)
+                .appendingPathComponent(runID, isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            return try GameStore(
+                path: directory
+                    .appendingPathComponent("chessanto.sqlite")
+                    .path
+            )
+        }
+
         let appSupport = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -235,6 +252,34 @@ public final class GameStore: Sendable {
                 .fetchAll(db)
                 .map(\.plyIndex)
             return Set(plies)
+        }
+    }
+
+    /// Plies whose rank-one analysis records were produced at an equal or
+    /// stronger quality than the explicit request.
+    ///
+    /// Legacy rows have no provenance and are deliberately insufficient.
+    public func analyzedPlyIndices(
+        gameId: Int64,
+        satisfying requestedQuality: AnalysisQualityProvenance
+    ) async throws -> Set<Int> {
+        try await dbQueue.read { db in
+            let rows = try AnalysisRecord
+                .filter(
+                    Column("gameId") == gameId
+                        && Column("multiPVRank") == 1
+                )
+                .fetchAll(db)
+            return Set(
+                rows.lazy
+                    .filter {
+                        AnalysisProvenance.canReuse(
+                            storedQuality: $0.qualityPreset,
+                            requestedQuality: requestedQuality
+                        )
+                    }
+                    .map(\.plyIndex)
+            )
         }
     }
 

@@ -28,6 +28,23 @@ struct PersistenceTests {
         #expect(try store.allGames().map(\.white) == ["QA"])
     }
 
+    @Test func defaultStoreAutomaticallyIsolatesAnXCTestHost() throws {
+        let store = try GameStore.defaultStore(environment: [
+            "XCTestConfigurationFilePath": "/tmp/ChessantoTests.xctestconfiguration",
+            "CHESSANTO_TEST_RUN_ID": UUID().uuidString
+        ])
+
+        let databasePath = try store.dbQueue.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT file FROM pragma_database_list WHERE name = 'main'"
+            )
+        }
+
+        #expect(databasePath?.contains("/ChessantoTests/") == true)
+        #expect(databasePath?.contains("Application Support/Chessanto") == false)
+    }
+
     @Test func trainingReconciliationErrorsExplainTheInvalidPracticeData() {
         #expect(
             TrainingCardReconciliationError.invalidFEN.localizedDescription
@@ -815,7 +832,7 @@ struct PersistenceTests {
         #expect(result.1?.hintCount == 1)
         #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
         #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
-        #expect(result.3.last == "v8_moveNotationStyle")
+        #expect(result.3.last == "v9_analysisProvenance")
         #expect(result.4.isEmpty)
     }
 
@@ -915,6 +932,6 @@ struct PersistenceTests {
         }
 
         #expect(profile?.moveNotationStyle == "standard")
-        #expect(migrations.last == "v8_moveNotationStyle")
+        #expect(migrations.last == "v9_analysisProvenance")
     }
 }

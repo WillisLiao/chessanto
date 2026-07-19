@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.chessanto
   deploymentTarget:
     macOS: "14.0"
+    iOS: "17.0"
   createIntermediateGroups: true
 
 packages:
@@ -18,6 +19,8 @@ packages:
     path: Packages/ChessComKit
   Persistence:
     path: Packages/Persistence
+  CompanionKit:
+    path: Packages/CompanionKit
 
 targets:
   Chessanto:
@@ -65,6 +68,12 @@ targets:
       - package: CoachKit
       - package: ChessComKit
       - package: Persistence
+      - package: CompanionKit
+        product: CompanionDomain
+      - package: CompanionKit
+        product: CompanionSecurity
+      - package: CompanionKit
+        product: CompanionCloudKit
     scheme:
       testTargets:
         - ChessantoTests
@@ -82,6 +91,58 @@ targets:
     dependencies:
       - target: Chessanto
 
+  ChessantoMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Mobile/Sources/ChessantoMobile
+      - path: App/Resources/Pieces.xcassets
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.chessanto.companion
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.10"
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    info:
+      path: Mobile/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Chessanto
+        NSCameraUsageDescription: Scan a Chessanto pairing code shown on your Mac.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    dependencies:
+      - package: ChessCore
+      - package: CompanionKit
+        product: CompanionDomain
+      - package: CompanionKit
+        product: CompanionSecurity
+      - package: CompanionKit
+        product: CompanionCloudKit
+    scheme:
+      testTargets:
+        - ChessantoMobileTests
+      gatherCoverageData: true
+
+  ChessantoMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Mobile/Tests/ChessantoMobileTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_VERSION: "5.10"
+    dependencies:
+      - target: ChessantoMobile
+
 schemes:
   Chessanto:
     build:
@@ -93,3 +154,14 @@ schemes:
       config: Debug
       targets:
         - ChessantoTests
+
+  ChessantoMobile:
+    build:
+      targets:
+        ChessantoMobile: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ChessantoMobileTests

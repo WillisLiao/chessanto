@@ -6,6 +6,7 @@ struct ChessantoApp: App {
     @StateObject private var library = GameLibrary()
     @StateObject private var engineService = EngineService()
     @StateObject private var coachService = CoachService()
+    @StateObject private var companionManager = MacCompanionManager()
 
     init() {
         // Chessanto is white-forward by design (user decision, 2026-07-18) -
@@ -21,6 +22,7 @@ struct ChessantoApp: App {
                 .environmentObject(library)
                 .environmentObject(engineService)
                 .environmentObject(coachService)
+                .environmentObject(companionManager)
                 .environment(
                     \.moveNotation,
                     MoveNotationFormatter(style: library.moveNotationStyle)
@@ -35,6 +37,11 @@ struct ChessantoApp: App {
                 .preferredColorScheme(.light)
                 .task {
                     await engineService.start()
+                    await companionManager.start(
+                        library: library,
+                        engineService: engineService,
+                        coachService: coachService
+                    )
                 }
         }
         .commands {
@@ -60,6 +67,10 @@ struct ChessantoApp: App {
                     .environmentObject(library)
                     .environmentObject(coachService)
                     .tabItem { Label("Coach", systemImage: "person.fill.questionmark") }
+
+                CompanionSettingsView()
+                    .environmentObject(companionManager)
+                    .tabItem { Label("Companion", systemImage: "iphone") }
             }
         }
     }

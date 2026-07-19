@@ -457,6 +457,11 @@ final class GameReplayViewModel: ObservableObject {
         await analyze(engineService: engineService, quality: quality)
     }
 
+    func refreshAnalysisAfterExternalRun() async {
+        guard let gameId else { return }
+        await loadCachedAnalysis(gameId: gameId)
+    }
+
     /// The real game's mainline moves after `ply`, capped for a short,
     /// read-only board demonstration.
     ///

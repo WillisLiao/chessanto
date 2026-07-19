@@ -14,6 +14,7 @@ struct GameReportView: View {
     let onAskCoach: (Int) -> Void
     let onPractice: (Int?) -> Void
     let onSelectMoment: (KeyMoment) -> Void
+    let onPlayBetterLine: (KeyMoment) -> Void
     let onPlayContinuation: (KeyMoment) -> Void
 
     var body: some View {
@@ -21,8 +22,23 @@ struct GameReportView: View {
             VStack(alignment: .leading, spacing: DesignSpacing.md) {
                 if let report = viewModel.report {
                     reportContent(report)
+                } else if engineService.isAnalyzing,
+                    let progress = engineService.batchProgress
+                {
+                    VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                        ProgressView(
+                            value: Double(progress.done),
+                            total: Double(max(progress.total, 1))
+                        )
+                        Text(
+                            "Analyzing \(progress.done) of \(progress.total) positions"
+                        )
+                        .font(.dsSecondary.monospacedDigit())
+                        .foregroundStyle(DesignColors.textSecondary)
+                    }
+                    .padding()
                 } else if engineService.isAnalyzing {
-                    ProgressView("Analyzing...")
+                    ProgressView("Preparing analysis...")
                         .padding()
                 } else if viewModel.loadError != nil {
                     Text("This game couldn't be parsed, so no report is available.")
@@ -195,7 +211,7 @@ struct GameReportView: View {
             HStack(spacing: DesignSpacing.sm) {
                 if moment.betterMove != nil {
                     Button {
-                        onSelectMoment(moment)
+                        onPlayBetterLine(moment)
                     } label: {
                         Label("Show better line", systemImage: "play.fill")
                     }

@@ -3,12 +3,14 @@ import ChessCore
 import Persistence
 import AnalysisKit
 import CoachKit
+import CompanionDomain
 
 struct GameReplayView: View {
     @StateObject private var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
     @EnvironmentObject private var library: GameLibrary
     @EnvironmentObject private var coachService: CoachService
+    @EnvironmentObject private var companion: MacCompanionManager
     private let game: GameRecord
     private let store: GameStore
 
@@ -258,7 +260,12 @@ struct GameReplayView: View {
                         viewModel: viewModel,
                         onAskCoach: askCoach(aboutPly:),
                         onPractice: openPractice(sourcePly:),
-                        onSelectMoment: selectAndPreview(moment:),
+                        onSelectMoment: {
+                            handleKeyMoment($0, intent: .selectOnly)
+                        },
+                        onPlayBetterLine: {
+                            handleKeyMoment($0, intent: .playBetterLine)
+                        },
                         onPlayContinuation: playContinuation(moment:)
                     )
                 case .practice:
@@ -297,11 +304,17 @@ struct GameReplayView: View {
         isCoachOpen = true
     }
 
-    private func selectAndPreview(moment: KeyMoment) {
+    private func handleKeyMoment(
+        _ moment: KeyMoment,
+        intent: KeyMomentInteractionIntent
+    ) {
         guard moment.ply < viewModel.moveIndices.count else { return }
+        if intent == .selectOnly, linePreview != nil {
+            endLinePreview()
+        }
         coachMomentPly = moment.ply
         viewModel.jump(to: viewModel.moveIndices[moment.ply])
-        if moment.betterMove != nil {
+        if intent.startsBetterLinePreview, moment.betterMove != nil {
             previewBetterLine(atPly: moment.ply)
         }
     }
@@ -372,7 +385,8 @@ struct GameReplayView: View {
                 eyebrow: "Coach",
                 headline: "Choose a key moment.",
                 message: "I’ll connect the explanation to the exact moves on the board.",
-                source: "Engine verified"
+                source: "Engine verified",
+                emotion: .resting
             )
         }
         let narration = coachService.narrationsByPly[ply]
@@ -380,8 +394,22 @@ struct GameReplayView: View {
             eyebrow: "\(moveNumberLabel(ply: ply)) \(moment.evalSwing.playedSAN)",
             headline: CoachStageText.headline(for: moment.evalSwing.classification),
             message: CoachStageText.condensed(narration?.text ?? momentSummary(moment)),
-            source: narration?.source == .coach ? "Local Coach" : "Engine verified"
+            source: narration?.source == .coach ? "Local Coach" : "Engine verified",
+            emotion: coachEmotion(for: moment.evalSwing.classification)
         )
+    }
+
+    private func coachEmotion(for classification: MoveClassification) -> CoachEmotion {
+        switch classification {
+        case .blunder, .mistake:
+            return .concerned
+        case .inaccuracy, .missedWin:
+            return .encouraging
+        case .brilliant:
+            return .delighted
+        case .best, .excellent, .good:
+            return .instructive
+        }
     }
 
     private func momentSummary(_ moment: KeyMoment) -> String {
@@ -520,6 +548,10 @@ struct GameReplayView: View {
             } else if engineService.isAnalyzing, let progress = engineService.batchProgress {
                 HStack {
                     ProgressView(value: Double(progress.done), total: Double(max(progress.total, 1)))
+                    Text("\(progress.done) of \(progress.total)")
+                        .font(.dsSecondary.monospacedDigit())
+                        .foregroundStyle(DesignColors.textSecondary)
+                        .fixedSize()
                     Button("Cancel") {
                         analysisTask?.cancel()
                     }
@@ -534,6 +566,17 @@ struct GameReplayView: View {
                             .font(.dsSecondary.weight(.semibold))
                             .foregroundStyle(DesignColors.textPrimary)
                         Spacer()
+                        if companion.canSendReports {
+                            Button {
+                                startSendToPhone()
+                            } label: {
+                                Image(systemName: "iphone.and.arrow.forward")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Send this report to iPhone")
+                            .accessibilityLabel("Send report to iPhone")
+                            .disabled(companion.isSendingReport)
+                        }
                         Menu {
                             Picker("Quality", selection: $quality) {
                                 ForEach(AnalysisQuality.allCases) { quality in
@@ -561,6 +604,19 @@ struct GameReplayView: View {
                             startAnalysis(reanalyze: false)
                         }
                         .buttonStyle(.dsPrimary)
+                        if companion.canSendReports {
+                            Button {
+                                startSendToPhone()
+                            } label: {
+                                Image(systemName: "iphone.and.arrow.forward")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Analyze on this Mac and send to iPhone")
+                            .accessibilityLabel(
+                                "Analyze on this Mac and send to iPhone"
+                            )
+                            .disabled(companion.isSendingReport)
+                        }
                     }
                 }
             }
@@ -574,11 +630,27 @@ struct GameReplayView: View {
     private func startAnalysis(reanalyze: Bool) {
         analysisTask?.cancel()
         analysisTask = Task {
-            if reanalyze {
-                await viewModel.reanalyze(engineService: engineService, quality: quality)
-            } else {
-                await viewModel.analyze(engineService: engineService, quality: quality)
+            do {
+                try await companion.analyzeLocally(
+                    game: game,
+                    quality: quality,
+                    reanalyze: reanalyze
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                viewModel.analysisError = error.localizedDescription
             }
+            await viewModel.refreshAnalysisAfterExternalRun()
+            library.reload()
+        }
+    }
+
+    private func startSendToPhone() {
+        analysisTask?.cancel()
+        analysisTask = Task {
+            await companion.analyzeAndSend(game: game, quality: quality)
+            await viewModel.refreshAnalysisAfterExternalRun()
             library.reload()
         }
     }
@@ -694,6 +766,15 @@ struct GameReplayView: View {
             get: { viewModel.analysisError != nil },
             set: { if !$0 { viewModel.analysisError = nil } }
         )
+    }
+}
+
+enum KeyMomentInteractionIntent: Equatable {
+    case selectOnly
+    case playBetterLine
+
+    var startsBetterLinePreview: Bool {
+        self == .playBetterLine
     }
 }
 

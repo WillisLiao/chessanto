@@ -1,4 +1,5 @@
 import AnalysisKit
+import CompanionDomain
 import SwiftUI
 
 struct CoachStageContent: Equatable {
@@ -6,6 +7,25 @@ struct CoachStageContent: Equatable {
     let headline: String
     let message: String
     let source: String
+    let emotion: CoachEmotion
+
+    init(
+        eyebrow: String,
+        headline: String,
+        message: String,
+        source: String,
+        emotion: CoachEmotion = .thoughtful
+    ) {
+        self.eyebrow = eyebrow
+        self.headline = headline
+        self.message = message
+        self.source = source
+        self.emotion = emotion
+    }
+
+    var spokenText: String {
+        "\(headline). \(message)"
+    }
 }
 
 enum CoachStageText {
@@ -49,6 +69,7 @@ enum CoachStageText {
 
 struct CoachStageView: View {
     @Environment(\.moveNotation) private var moveNotation
+    @StateObject private var speech = DesktopCoachSpeechController()
     let content: CoachStageContent
     var primaryActionTitle: String?
     var onPrimaryAction: (() -> Void)?
@@ -58,10 +79,11 @@ struct CoachStageView: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            Image("coach-comic")
+            Image(content.emotion.assetName)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 132, height: 148, alignment: .bottom)
+                .animation(.easeInOut(duration: 0.18), value: content.emotion)
                 .accessibilityHidden(true)
 
             speechBubble
@@ -70,6 +92,14 @@ struct CoachStageView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 154, alignment: .leading)
         .accessibilityElement(children: .contain)
+        .onChange(of: content.spokenText) {
+            if speech.phase != .idle {
+                speech.stop()
+            }
+        }
+        .onDisappear {
+            speech.stop()
+        }
     }
 
     private var speechBubble: some View {
@@ -97,6 +127,7 @@ struct CoachStageView: View {
                 )
 
             HStack(spacing: DesignSpacing.sm) {
+                speechButton
                 if let primaryActionTitle, let onPrimaryAction {
                     Button(primaryActionTitle, action: onPrimaryAction)
                         .buttonStyle(.dsPrimary)
@@ -131,6 +162,48 @@ struct CoachStageView: View {
         }
         .shadow(color: DesignColors.textPrimary.opacity(0.08), radius: 10, y: 4)
     }
+
+    @ViewBuilder
+    private var speechButton: some View {
+        switch speech.phase {
+        case .idle:
+            Button {
+                speech.speak(moveNotation.text(content.spokenText))
+            } label: {
+                Label("Hear Coach", systemImage: "speaker.wave.2.fill")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityHint("Reads this verified coaching aloud in a calm, older British voice.")
+        case .speaking:
+            Button {
+                speech.pause()
+            } label: {
+                Label("Pause", systemImage: "pause.fill")
+            }
+            .buttonStyle(.bordered)
+            Button {
+                speech.stop()
+            } label: {
+                Image(systemName: "stop.fill")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Stop Coach")
+        case .paused:
+            Button {
+                speech.resume()
+            } label: {
+                Label("Resume", systemImage: "play.fill")
+            }
+            .buttonStyle(.bordered)
+            Button {
+                speech.stop()
+            } label: {
+                Image(systemName: "stop.fill")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Stop Coach")
+        }
+    }
 }
 
 struct CoachPlaybackStageView: View {
@@ -145,19 +218,27 @@ struct CoachPlaybackStageView: View {
                 eyebrow: playback.label,
                 headline: fallback.headline,
                 message: "Watch the board. I’ll demonstrate the verified line move by move.",
-                source: fallback.source
+                source: fallback.source,
+                emotion: .instructive
             )
         }
         return CoachStageContent(
             eyebrow: "\(playback.label) \(moveNumber)/\(moveTotal)",
             headline: san,
             message: fallback.message,
-            source: fallback.source
+            source: fallback.source,
+            emotion: .instructive
         )
     }
 
     var body: some View {
         CoachStageView(content: content)
+    }
+}
+
+extension CoachEmotion {
+    var assetName: String {
+        "coach-\(rawValue)"
     }
 }
 
