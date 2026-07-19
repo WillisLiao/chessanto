@@ -762,6 +762,25 @@ All seven acceptance scenarios from the plan were reproduced live: no `AXSheet` 
 Not done and not claimed: playable variations, Coach text density, sidebar select/delete/pin/favorite, the richer player dashboard, chess.com identity confirmation in onboarding, and the remaining V1 hardening phase 3 backlog.
 One cosmetic, out-of-scope gap noticed live and not fixed: the practice session-complete screen shows an empty board (no pieces) since `currentCard` is `nil` at that state; carry into a future polish pass if it comes up again.
 
+## UI/UX clarity phase 2 planning complete (2026-07-19, planning only, no code)
+
+A Claude Sonnet session expanded `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` from a scoping stub into a fully specified execution plan, the way the Opus session expanded phase 1.
+No product code changed; this was planning and live verification only.
+Full detail is in the `UI/UX clarity phase 2 planning` section of `devlogs/2026-07-19.md`.
+
+Verified live against a read-only copy of the real production database (never written to, md5 confirmed unchanged before and after): card 6's rank-1 engine line is 15 plies deep while its rendered explanation shows only 6 SANs, confirming the "better line" data already exists in full on both the Practice and Report models with no schema change needed.
+
+One real trap found and corrected: the stub's "actual bad continuation that was played" could be misread as `PunishmentFact.refutingSAN`, but that fact is the engine's hypothetical best reply to a mistake, not a record of what the opponent actually played in the game.
+The plan sources the real continuation from the game's own mainline instead.
+
+The design locks a single new module, `LinePreviewController` (pure, `ChessGame.replayLine`-backed, no persistence), owned independently by `PracticeSessionViewModel` and by `GameReplayView`, explicitly never touching `GameReplayViewModel`'s persisted `variation` table - reusing `adoptLine` for this would have silently written DB rows for every line the learner previews.
+
+Coach text density: `card.explanation` (Practice's post-answer feedback) and the Report's rule-based fallback text share the same underlying string, so one rendering-only fix (sentence-level chunking, not truncation, not a new disclosure affordance) fixes both surfaces at once.
+`CoachVerifier` was confirmed to check numeric claims anywhere in the response text rather than requiring the parenthetical-eval format the prompt asks for, so the rendering fix cannot weaken grounding; any `CoachPrompt` wording change stays conditional on that rendering fix proving insufficient, and is gated on a real fallback-rate measurement, not a single run.
+
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` is now implementation-ready but **not yet implemented**.
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-3.md` remains a scoping stub, unstarted, and is being handed to a Codex session next (see `handoffs/CODEX-HANDOFF-PHASE-3.md`).
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.
