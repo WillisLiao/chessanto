@@ -718,6 +718,50 @@ That decision is the structural anchor of phase 1.
 
 `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md` remains separately open and is not superseded.
 
+## UI/UX clarity phase 1 complete (2026-07-19)
+
+Followed `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-1.md` step by step; all six build steps and full verification landed.
+Full detail, including live E2E evidence and one real bug found and fixed during native testing, is in the `UI/UX clarity phase 1` section of `devlogs/2026-07-19.md`.
+
+### What changed
+
+- `ChessGlossary` (`App/Sources/Chessanto/Training/ChessGlossary.swift`), a pure lookup mapping `en prise`, `hanging`, `forced mate`, `O-O`, `O-O-O`, and the eight `MoveClassification` cases to a one-sentence plain-language gloss, term kept beside its real name rather than replacing it (DD2).
+- `BoardTheme.hint` and `BoardView.hintSquares` render the practice hint's target square as a fourth, distinct board channel (brass accent plus a stroked ring), never overloading last-move/selected/destination (DD3).
+  `PracticeSessionViewModel.hintSquares` exposes the best move's origin square once `hintCount >= 2`.
+- `GameReportView.keyMomentRow` was restructured (DD4) so the entire block - header, summary, Coach narration, source caption - is the jump target, via a `KeyMomentRowButtonStyle` that adds a hover/pressed `surface1` background where a bare `.plain` style would show none.
+  A prior planning session's confident source-reading diagnosis of this exact code (a missing `.frame(maxWidth: .infinity)`) was wrong for the second consecutive planning cycle; the real defect was vertical (the `Button` wrapped only a 20pt header line), not horizontal, and was found only by a real click test.
+- `BoardIdentityStrip` (`App/Sources/Chessanto/Board/BoardIdentityStrip.swift`) is a pure helper plus `BoardIdentityStripView`, rendering compact name/rating/"You" strips above and below the board, bound to screen position (top/bottom) rather than color so they swap correctly on flip (DD5).
+- Inline practice mode (DD1): `PracticeSessionView.swift` is now `PracticeContentView.swift` (prompt/hints/feedback/progress only, no board, no frame); `PracticeBoardSection` is a new `@ObservedObject`-driven board wrapper.
+  `GameReplayView.RightPaneTab` gained a programmatic-only `.practice` case; the fixed 420pt board and 760x560 sheet minimum are deleted, not enlarged.
+  `GameReplayViewModel.isPracticeActive`/`enterPractice()`/`exitPractice()` suspend live engine analysis while practice shows a position that isn't a ply of this game.
+  The Dashboard's practice entry points no longer own a `.sheet`; `DashboardView.onOpenPractice` and `ContentView`'s new `pendingPracticeGameID`/`pendingPracticeLoadCards` hand the session to `GameReplayView`, which owns game selection already.
+- Plain language (D1/DD2): the practice prompt's classification chip now renders its word alongside the glyph (`PracticeSessionViewModel.classificationLabel`), and theme hints gloss their term (`themeHintTextIgnoringHintCount` - see the bug note below for why it's not just `themeHintText`).
+- DD6 (stable hint layout): both hint lines reserve real, final-content height from the start of a card rather than a shorter placeholder, so a second `Hint` press at the same screen point lands correctly.
+
+### A real bug found and fixed during native E2E, not caught by unit tests or code review
+
+The first DD6 implementation swapped between a short placeholder string (hidden via opacity 0) and the real hint text (shown via opacity 1) to "reserve space."
+This does not work when the real text is longer and wraps to more lines than the placeholder: native testing (two real `cliclick` presses at one fixed, un-recomputed screen coordinate) showed the `Hint` button shifting downward after the first press, so the second press missed.
+Fixed by adding `PracticeSessionViewModel.themeHintTextIgnoringHintCount`, which is always the real, final gloss text; the view renders it unconditionally and only toggles opacity by `hintCount`, so the reserved height is the actual height.
+Re-tested with the same fixed-coordinate double-click and confirmed both presses landed, including the level-2 hint's board-square highlight.
+
+### Verification
+
+The final app suite passed 70 tests across 17 suites (up from the phase-2 baseline of 55/15): `ChessGlossaryTests` (4), `BoardIdentityStripTests` (5), 4 new `PracticeSessionViewModelTests`, and 2 new `GameReplayViewModelTrainingTests`.
+All package suites (`ChessCore`, `AnalysisKit`, `CoachKit`, `EngineKit`, `ChessComKit`, `Persistence`), `engine-smoke`, `coach-grounding`, and `scripts/release-build.sh` passed.
+`Packages/Persistence` was unchanged, as expected (no schema migration in this phase).
+`git diff --check` was clean.
+
+Native E2E acceptance used a disposable database copy under the sandbox container (game 9, `adamzainuri vs WillisLiao`) and the freshly built universal Release app.
+All seven acceptance scenarios from the plan were reproduced live: no `AXSheet` anywhere in the practice flow; the key-moment block's summary prose (not just its header) now jumps the board, and the nested `Practice` button still opens a single-card session independently; the identity strips render and swap correctly on flip; hint clarity/stability including the board-square highlight; plain-language classification on a correct answer; the Dashboard's "Review next lesson" opening inline practice on the correct game with no nested sheet; and the live sandbox database confirmed byte-identical (`md5`) before and after the whole session.
+
+### What's still open
+
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` (playable variations, Coach text density) has been expanded with what phase 1 actually built, and is the next planning task.
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-3.md` and `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md` remain open and untouched by this phase.
+Not done and not claimed: playable variations, Coach text density, sidebar select/delete/pin/favorite, the richer player dashboard, chess.com identity confirmation in onboarding, and the remaining V1 hardening phase 3 backlog.
+One cosmetic, out-of-scope gap noticed live and not fixed: the practice session-complete screen shows an empty board (no pieces) since `currentCard` is `nil` at that state; carry into a future polish pass if it comes up again.
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.

@@ -11,6 +11,11 @@ struct DashboardView: View {
     @EnvironmentObject private var library: GameLibrary
     @EnvironmentObject private var engineService: EngineService
     @Environment(\.dismiss) private var dismiss
+    /// Dismisses the dashboard and asks `ContentView`, which already owns
+    /// game selection, to open `gameID` in inline practice mode with the
+    /// given queue (DD1) - practice is no longer a sheet nested inside this
+    /// sheet.
+    let onOpenPractice: (_ gameID: Int64, _ loadCards: @escaping () async throws -> [TrainingCardRecord]) -> Void
 
     private struct AccuracyPoint: Identifiable {
         let id: Int64
@@ -40,7 +45,6 @@ struct DashboardView: View {
     @State private var dueTrainingCardCount = 0
     @State private var fallbackTrainingCards: [TrainingCardRecord] = []
     @State private var nextTrainingDueDate: Date?
-    @State private var isPracticeOpen = false
     @State private var trainingQueueError: String?
     @State private var loadGeneration = 0
 
@@ -139,7 +143,7 @@ struct DashboardView: View {
                         .foregroundStyle(DesignColors.textSecondary)
                 }
                 Button("Practice any position") {
-                    isPracticeOpen = true
+                    startPractice(cards: fallbackTrainingCards)
                 }
                 .buttonStyle(.bordered)
                 .disabled(fallbackTrainingCards.isEmpty)
@@ -148,7 +152,7 @@ struct DashboardView: View {
                     .font(.dsBody)
                     .foregroundStyle(DesignColors.textPrimary)
                 Button {
-                    isPracticeOpen = true
+                    startPractice(cards: dueTrainingCards)
                 } label: {
                     Label("Review next lesson", systemImage: "target")
                         .frame(maxWidth: .infinity)
@@ -157,27 +161,20 @@ struct DashboardView: View {
                 .controlSize(.large)
             }
         }
-        .sheet(isPresented: $isPracticeOpen, onDismiss: {
-            loadGeneration += 1
-        }) {
-            PracticeSessionView(viewModel: PracticeSessionViewModel(
-                store: library.store,
-                loadCards: {
-                    let username = library.chessComUsername
-                        .trimmingCharacters(in: .whitespaces)
-                    let queue = try await library.store.trainingQueueSnapshot(
-                        username: username.isEmpty ? nil : username
-                    )
-                    return queue.dueCards.isEmpty
-                        ? queue.fallbackCards
-                        : queue.dueCards
-                },
-                evaluator: DefaultTrainingMoveEvaluator { request in
-                    try await engineService.evaluateTrainingPosition(request)
-                }
-            ))
-            .environmentObject(library)
-            .environmentObject(engineService)
+    }
+
+    /// Opens the game the queue's first card belongs to and hands
+    /// `GameReplayView` the same live queue lookup the sheet used to run,
+    /// so the spaced-repetition scheduling is untouched - only the
+    /// container changes (DD1).
+    private func startPractice(cards: [TrainingCardRecord]) {
+        guard let gameID = cards.first?.gameId else { return }
+        onOpenPractice(gameID) {
+            let username = library.chessComUsername.trimmingCharacters(in: .whitespaces)
+            let queue = try await library.store.trainingQueueSnapshot(
+                username: username.isEmpty ? nil : username
+            )
+            return queue.dueCards.isEmpty ? queue.fallbackCards : queue.dueCards
         }
     }
 

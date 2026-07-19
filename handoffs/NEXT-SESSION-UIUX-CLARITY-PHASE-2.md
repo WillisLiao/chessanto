@@ -6,9 +6,32 @@ A planning session should expand this the way `handoffs/NEXT-SESSION-UIUX-CLARIT
 
 ## Precondition
 
-Phase 1 must be complete, because both items below depend on it.
-Playable variations need the inline full-size practice board that phase 1 lands.
-The Coach density work is easier to judge once the Report's key-moment block has phase 1's new structure.
+Phase 1 is complete as of this writing (2026-07-19).
+Full detail, including live E2E evidence, is in the `UI/UX clarity phase 1 complete` section of `handoffs/HANDOFF.md` and the matching devlog section.
+
+### What phase 1 actually built, so phase 2 does not have to re-derive it
+
+- `PracticeSessionView.swift` was renamed `PracticeContentView.swift`.
+  The struct is `PracticeContentView`, right-pane-only (prompt, hints, feedback, session progress) - it no longer renders a board or owns a frame.
+- `PracticeBoardSection` (`App/Sources/Chessanto/Training/PracticeBoardSection.swift`) is the new board-side half: an `@ObservedObject`-driven wrapper around `BoardView`, reading `PracticeSessionViewModel.position/flipped/selectedSquare/legalDestinations/hintSquares/revealArrow` directly.
+  This is almost certainly the seam a variation-preview mode should sit next to, or reuse the same observation pattern for, since it already demonstrates a non-`GameReplayViewModel`-driven board.
+- `GameReplayView.RightPaneTab` gained a `case practice`, entered only programmatically (`openPractice(sourcePly:)` / `openPractice(loadCards:)`), never a segment in the Moves/Report picker.
+  `boardColumn` and `movesReportColumn` both branch on `rightPaneTab == .practice`.
+- `GameReplayViewModel` gained `isPracticeActive` (published) plus `enterPractice()`/`exitPractice()`, which `showLivePosition()` now checks before pushing a position to the live engine.
+- `PracticeSessionViewModel.flipped` is no longer purely derived - it gained a private `isManuallyFlipped` toggle and a `toggleFlip()` method, because the flip button stays live during practice (DD1) but the card's side-to-move orientation has no other mutable state to hang a user override on.
+  A variation preview that also needs orientation control should read `flipped` the same way, not add a second orientation source.
+- The Dashboard's "Review next lesson" / "Practice any position" no longer own a `.sheet`.
+  `DashboardView` takes an `onOpenPractice: (Int64, @escaping () async throws -> [TrainingCardRecord]) -> Void` callback; `ContentView` owns `pendingPracticeGameID` / `pendingPracticeLoadCards` and threads them into `GameReplayView.init`, which consumes them once in `.onAppear`.
+  Known limitation, not fixed in phase 1: if the dashboard's due queue spans multiple games, the identity strips and board frame belong to whichever game the *first* queued card's `gameId` points to, even for later cards in the same session that belong to a different game.
+  This was an accepted simplification, not an oversight; revisit only if it becomes a real complaint.
+- `ChessGlossary` (`App/Sources/Chessanto/Training/ChessGlossary.swift`) is a pure, unit-tested lookup (`gloss(for: String) -> String?`, `gloss(for: MoveClassification) -> String`) seeded with exactly `en prise`, `hanging`, `forced mate`, `O-O`, `O-O-O`, and the eight `MoveClassification` cases.
+  Extend it here rather than inventing a second glossary if phase 2's preview needs to gloss a term the practice prompt does not already cover.
+- A real DD6 bug was found and fixed live, worth knowing before touching this code again: reserving hint-line space by swapping between a *different, shorter* placeholder string and the real (longer, sometimes-wrapping) hint text does not actually reserve stable height, because the placeholder and the real text wrap differently.
+  The fix was `PracticeSessionViewModel.themeHintTextIgnoringHintCount`, which is always the real, final text; the view renders it unconditionally and only toggles opacity by `hintCount`.
+  If phase 2 reserves space for anything else that changes length, use this pattern (always render final content, gate visibility by opacity), not a placeholder swap.
+
+Playable variations need the inline full-size practice board that phase 1 lands - it now exists at `PracticeBoardSection`.
+The Coach density work is easier to judge once the Report's key-moment block has phase 1's new structure (`GameReportView.keyMomentRow`, restructured under DD4 so the whole block, not just the header line, is the jump target).
 
 ## Item A - playable variations
 

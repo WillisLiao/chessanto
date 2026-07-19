@@ -64,6 +64,28 @@ struct GameReplayViewModelTrainingTests {
         #expect(cards.map { $0.sourcePly } == [1])
         #expect(cards.first?.preMoveFEN == fens[0])
     }
+
+    @Test
+    func testEnteringPracticeModeSuspendsLiveAnalysis() async throws {
+        let store = try GameStore()
+        let record = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let viewModel = GameReplayViewModel(record: record, store: store)
+
+        #expect(viewModel.isPracticeActive == false)
+        viewModel.enterPractice()
+        #expect(viewModel.isPracticeActive == true)
+    }
+
+    @Test
+    func testExitingPracticeModeRestoresReportTab() async throws {
+        let store = try GameStore()
+        let record = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let viewModel = GameReplayViewModel(record: record, store: store)
+
+        viewModel.enterPractice()
+        viewModel.exitPractice()
+        #expect(viewModel.isPracticeActive == false)
+    }
 }
 
 @MainActor

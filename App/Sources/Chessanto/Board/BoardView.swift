@@ -8,6 +8,7 @@ struct BoardView: View {
     var showCoordinates: Bool = true
     var selectedSquare: BoardSquare?
     var legalDestinations: Set<BoardSquare> = []
+    var hintSquares: Set<BoardSquare> = []
     /// Suggested-move arrows (engine best line, "Better was..." moves) -
     /// drawn green like most match-analysis tools (chess.com/Lichess),
     /// reusing the app's own move-quality green (`MoveClassification.best`)
@@ -36,6 +37,11 @@ struct BoardView: View {
                                     theme.selected
                                 } else if legalDestinations.contains(square) {
                                     theme.destination
+                                }
+                                if hintSquares.contains(square) {
+                                    theme.hint
+                                    Rectangle()
+                                        .strokeBorder(DesignColors.accent, lineWidth: max(squareSize * 0.06, 2))
                                 }
                                 if showCoordinates {
                                     coordinateOverlay(for: square, row: row, col: col, squareSize: squareSize)

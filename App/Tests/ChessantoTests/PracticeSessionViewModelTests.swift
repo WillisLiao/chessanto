@@ -238,4 +238,117 @@ struct PracticeSessionViewModelTests {
         let attempts = try await store.trainingAttempts(cardId: card.id!)
         #expect(attempts.count == 1)
     }
+
+    @Test
+    func hintSquaresAreEmptyBeforeSecondHint() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.hintSquares.isEmpty)
+
+        viewModel.hint()
+        #expect(viewModel.hintCount == 1)
+        #expect(viewModel.hintSquares.isEmpty)
+    }
+
+    @Test
+    func secondHintExposesBestMoveOriginSquare() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await viewModel.load()
+        viewModel.hint()
+        viewModel.hint()
+        #expect(viewModel.hintCount == 2)
+        #expect(viewModel.hintSquares == [BoardSquare(algebraic: "e2")!])
+    }
+
+    @Test
+    func promptExposesClassificationLabelNotOnlyGlyph() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "inaccuracy"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.classificationLabel == "Inaccuracy")
+    }
+
+    @Test
+    func themeHintExposesGlossForEnPrise() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4"],"depth":12}]
+            """,
+            classification: "mistake",
+            themesJSON: #"["Material left en prise"]"#
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.themeHintText == nil)
+
+        viewModel.hint()
+        let hintText = try #require(viewModel.themeHintText)
+        #expect(hintText.contains("Material left en prise"))
+        #expect(hintText.contains("left where the opponent can capture it for free"))
+    }
 }

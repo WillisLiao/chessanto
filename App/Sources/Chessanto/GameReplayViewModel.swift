@@ -163,6 +163,20 @@ final class GameReplayViewModel: ObservableObject {
         return !chessGame.isMainline(currentIndex)
     }
 
+    /// Whether inline practice mode (Step 6 of the UI/UX clarity pass) is
+    /// showing its own board position instead of `position`. While active,
+    /// the displayed board is not a ply of this game, so the view must not
+    /// keep pointing live engine analysis at `currentFEN`.
+    @Published private(set) var isPracticeActive = false
+
+    func enterPractice() {
+        isPracticeActive = true
+    }
+
+    func exitPractice() {
+        isPracticeActive = false
+    }
+
     /// The mainline ply to highlight on the eval graph while exploring a
     /// variation - the ply the variation branched off from.
     var currentGraphPly: Int {

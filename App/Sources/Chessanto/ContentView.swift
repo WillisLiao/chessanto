@@ -9,6 +9,11 @@ struct ContentView: View {
     @State private var isShowingChessComFetch = false
     @State private var isShowingDashboard = false
     @State private var isTargeted = false
+    /// Set by the dashboard's "Review next lesson"/"Practice any position"
+    /// (DD1) - `ContentView` owns game selection already, so it's the
+    /// natural owner of "select this game, then enter practice mode".
+    @State private var pendingPracticeGameID: Int64?
+    @State private var pendingPracticeLoadCards: (() async throws -> [TrainingCardRecord])?
 
     var body: some View {
         NavigationSplitView {
@@ -36,8 +41,16 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
             if let selectedGameID, let game = library.games.first(where: { $0.id == selectedGameID }) {
-                GameReplayView(game: game, store: library.store)
-                    .id(game.id)
+                GameReplayView(
+                    game: game,
+                    store: library.store,
+                    pendingPracticeLoadCards: pendingPracticeGameID == game.id ? pendingPracticeLoadCards : nil,
+                    onPendingPracticeConsumed: {
+                        pendingPracticeGameID = nil
+                        pendingPracticeLoadCards = nil
+                    }
+                )
+                .id(game.id)
             } else {
                 emptySelectionView
             }
@@ -56,7 +69,12 @@ struct ContentView: View {
             ChessComFetchView()
         }
         .sheet(isPresented: $isShowingDashboard) {
-            DashboardView()
+            DashboardView(onOpenPractice: { gameID, loadCards in
+                selectedGameID = gameID
+                pendingPracticeGameID = gameID
+                pendingPracticeLoadCards = loadCards
+                isShowingDashboard = false
+            })
         }
         .sheet(isPresented: onboardingBinding) {
             OnboardingView()

@@ -206,37 +206,40 @@ struct GameReportView: View {
                 guard moment.ply < viewModel.moveIndices.count else { return }
                 viewModel.jump(to: viewModel.moveIndices[moment.ply])
             } label: {
-                HStack(spacing: DesignSpacing.xs) {
-                    Text(moveNumberLabel(ply: moment.ply))
-                        .font(.dsNotation)
+                VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                    HStack(spacing: DesignSpacing.xs) {
+                        Text(moveNumberLabel(ply: moment.ply))
+                            .font(.dsNotation)
+                            .foregroundStyle(DesignColors.textSecondary)
+                        Text(moment.evalSwing.playedSAN)
+                            .font(.dsNotation.weight(.semibold))
+                        ClassificationChip(classification: moment.evalSwing.classification)
+                        Spacer()
+                    }
+
+                    Text(momentSummary(moment))
+                        .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
-                    Text(moment.evalSwing.playedSAN)
-                        .font(.dsNotation.weight(.semibold))
-                    ClassificationChip(classification: moment.evalSwing.classification)
-                    Spacer()
+
+                    if isCoachEnabled {
+                        if let narration = coachService.narrationsByPly[moment.ply] {
+                            narrationView(narration)
+                        } else if coachService.isGenerating {
+                            HStack(spacing: DesignSpacing.xs) {
+                                ProgressView().controlSize(.mini)
+                                Text("Coach is writing…").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary)
+                            }
+                        }
+                    }
                 }
+                .padding(DesignSpacing.xs)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(KeyMomentRowButtonStyle())
             .accessibilityLabel("Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moment.evalSwing.playedSAN). \(momentSummary(moment))")
             .contextMenu {
                 Button("Ask the coach about this moment") {
                     onAskCoach(moment.ply)
-                }
-            }
-
-            Text(momentSummary(moment))
-                .font(.dsBody)
-                .foregroundStyle(DesignColors.textSecondary)
-
-            if isCoachEnabled {
-                if let narration = coachService.narrationsByPly[moment.ply] {
-                    narrationView(narration)
-                } else if coachService.isGenerating {
-                    HStack(spacing: DesignSpacing.xs) {
-                        ProgressView().controlSize(.mini)
-                        Text("Coach is writing…").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary)
-                    }
                 }
             }
 
@@ -282,5 +285,22 @@ struct GameReportView: View {
     /// (fact 11: "Left book on move 3. with Nc3.").
     private func bareMoveNumber(ply: Int) -> String {
         String((ply + 1) / 2)
+    }
+}
+
+/// A chrome-free button style, equivalent to `.plain` in that it paints no
+/// system border or fill, but adds a hover/pressed `surface1` background so
+/// the whole key-moment block reads as clickable (DD4) - which a bare
+/// `.plain` style, by design, never does.
+private struct KeyMomentRowButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: DesignSpacing.xs)
+                    .fill(configuration.isPressed || isHovering ? DesignColors.surface1 : Color.clear)
+            )
+            .onHover { isHovering = $0 }
     }
 }

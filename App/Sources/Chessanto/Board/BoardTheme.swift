@@ -1,5 +1,9 @@
 import SwiftUI
 
+// Uses the app's brass accent, DesignColors.accent, rather than a new hue -
+// yellow/blue/green on the board already mean last-move/selected/destination,
+// so a hint square needs its own distinct fourth channel (DD3).
+
 /// A chess board is not system-appearance-inverted - these are fixed
 /// palettes, not adaptive colors. Persisted (raw value) in
 /// `userProfile.boardTheme`.
@@ -44,6 +48,7 @@ enum BoardTheme: String, CaseIterable, Identifiable {
 
     var selected: Color { Color.blue.opacity(0.35) }
     var destination: Color { Color.green.opacity(0.35) }
+    var hint: Color { DesignColors.accent.opacity(0.35) }
 
     /// Coordinate label color, legible against both square shades in this theme.
     var coordinateColor: Color {

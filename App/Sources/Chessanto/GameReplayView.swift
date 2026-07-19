@@ -16,12 +16,18 @@ struct GameReplayView: View {
     @State private var rightPaneTab: RightPaneTab = .moves
     @State private var flipped = false
     @State private var isCoachOpen = false
-    @State private var isPracticeOpen = false
     @State private var practiceSourcePly: Int?
+    @State private var practiceViewModel: PracticeSessionViewModel?
+
+    private let pendingPracticeLoadCards: (() async throws -> [TrainingCardRecord])?
+    private let onPendingPracticeConsumed: (() -> Void)?
 
     private enum RightPaneTab: String, CaseIterable {
         case moves = "Moves"
         case report = "Report"
+        /// Never a segment in the Moves/Report picker - entered
+        /// programmatically only, as a full-width mode (DD1).
+        case practice = "Practice"
     }
 
     /// Below this window width the Coach panel slides over the Moves/Report
@@ -30,9 +36,16 @@ struct GameReplayView: View {
     /// coexist comfortably.
     private static let coachDockWidthThreshold: CGFloat = 1100
 
-    init(game: GameRecord, store: GameStore) {
+    init(
+        game: GameRecord,
+        store: GameStore,
+        pendingPracticeLoadCards: (() async throws -> [TrainingCardRecord])? = nil,
+        onPendingPracticeConsumed: (() -> Void)? = nil
+    ) {
         self.game = game
         self.store = store
+        self.pendingPracticeLoadCards = pendingPracticeLoadCards
+        self.onPendingPracticeConsumed = onPendingPracticeConsumed
         _viewModel = StateObject(wrappedValue: GameReplayViewModel(record: game, store: store))
     }
 
@@ -92,6 +105,10 @@ struct GameReplayView: View {
         .onAppear {
             quality = library.analysisQuality
             showLivePosition()
+            if let pendingPracticeLoadCards {
+                openPractice(loadCards: pendingPracticeLoadCards)
+                onPendingPracticeConsumed?()
+            }
         }
         .onChange(of: viewModel.currentIndex) {
             selectedSquare = nil
@@ -107,87 +124,111 @@ struct GameReplayView: View {
     }
 
     private func showLivePosition() {
-        guard let fen = viewModel.currentFEN else { return }
+        guard !viewModel.isPracticeActive, let fen = viewModel.currentFEN else { return }
         engineService.showPosition(fen: fen)
     }
 
     // MARK: - Columns
 
+    private func identityStrips(flipped: Bool) -> (top: BoardIdentityStripInfo, bottom: BoardIdentityStripInfo) {
+        BoardIdentityStrip.strips(
+            whiteName: game.white,
+            blackName: game.black,
+            whiteRating: game.whiteRating,
+            blackRating: game.blackRating,
+            flipped: flipped,
+            username: library.chessComUsername
+        )
+    }
+
     private var boardColumn: some View {
         VStack {
-            HStack(alignment: .top, spacing: DesignSpacing.md) {
-                EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
-                BoardView(
-                    position: viewModel.position,
-                    lastMove: viewModel.lastMove,
-                    flipped: flipped,
+            if rightPaneTab == .practice, let practiceViewModel {
+                PracticeBoardSection(
+                    viewModel: practiceViewModel,
                     theme: library.boardTheme,
-                    selectedSquare: selectedSquare,
-                    legalDestinations: legalDestinations,
-                    arrows: suggestedMoveArrows,
-                    onSquareTapped: handleSquareTapped
+                    identityStrips: identityStrips(flipped: practiceViewModel.flipped)
                 )
-            }
-            .padding()
-            if viewModel.isExploringVariation {
-                Button("Back to game") { viewModel.backToGame() }
-                    .font(.caption)
-            }
-            controls
-            EvalGraphView(
-                series: viewModel.evalGraphSeries,
-                currentPly: viewModel.currentGraphPly,
-                keyMoments: viewModel.report?.keyMoments ?? []
-            ) { ply in
-                guard ply >= 0, ply < viewModel.moveIndices.count else { return }
-                viewModel.jump(to: viewModel.moveIndices[ply])
-            }
-            .padding(.horizontal)
-            if let fen = viewModel.currentFEN {
-                LinesPanelView(lines: engineService.liveEvaluation?.lines ?? [], fen: fen) { uciMoves in
-                    Task { await viewModel.adoptLine(sanMoves: ChessGame.sanLine(fromUCI: uciMoves, startingFEN: fen)) }
+                .padding()
+                practiceControls(practiceViewModel)
+            } else {
+                HStack(alignment: .top, spacing: DesignSpacing.md) {
+                    EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
+                    VStack(spacing: DesignSpacing.xs) {
+                        BoardIdentityStripView(info: identityStrips(flipped: flipped).top)
+                        BoardView(
+                            position: viewModel.position,
+                            lastMove: viewModel.lastMove,
+                            flipped: flipped,
+                            theme: library.boardTheme,
+                            selectedSquare: selectedSquare,
+                            legalDestinations: legalDestinations,
+                            arrows: suggestedMoveArrows,
+                            onSquareTapped: handleSquareTapped
+                        )
+                        BoardIdentityStripView(info: identityStrips(flipped: flipped).bottom)
+                    }
+                }
+                .padding()
+                if viewModel.isExploringVariation {
+                    Button("Back to game") { viewModel.backToGame() }
+                        .font(.caption)
+                }
+                controls
+                EvalGraphView(
+                    series: viewModel.evalGraphSeries,
+                    currentPly: viewModel.currentGraphPly,
+                    keyMoments: viewModel.report?.keyMoments ?? []
+                ) { ply in
+                    guard ply >= 0, ply < viewModel.moveIndices.count else { return }
+                    viewModel.jump(to: viewModel.moveIndices[ply])
                 }
                 .padding(.horizontal)
-                .padding(.top, 4)
+                if let fen = viewModel.currentFEN {
+                    LinesPanelView(lines: engineService.liveEvaluation?.lines ?? [], fen: fen) { uciMoves in
+                        Task { await viewModel.adoptLine(sanMoves: ChessGame.sanLine(fromUCI: uciMoves, startingFEN: fen)) }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                }
             }
         }
     }
 
     private var movesReportColumn: some View {
         VStack(spacing: 0) {
-            analysisControls
-            accuracySummary
-            HStack(spacing: DesignSpacing.sm) {
-                Picker("", selection: $rightPaneTab) {
-                    ForEach(RightPaneTab.allCases, id: \.self) { tab in
-                        Text(tab.rawValue).tag(tab)
+            if rightPaneTab == .practice, let practiceViewModel {
+                PracticeContentView(viewModel: practiceViewModel, onExit: exitPractice)
+            } else {
+                analysisControls
+                accuracySummary
+                HStack(spacing: DesignSpacing.sm) {
+                    Picker("", selection: $rightPaneTab) {
+                        ForEach([RightPaneTab.moves, .report], id: \.self) { tab in
+                            Text(tab.rawValue).tag(tab)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+
+                    coachToggleButton
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
 
-                coachToggleButton
+                switch rightPaneTab {
+                case .moves:
+                    MoveListView(viewModel: viewModel, onAskCoach: askCoach(aboutPly:))
+                case .report:
+                    GameReportView(
+                        viewModel: viewModel,
+                        onAskCoach: askCoach(aboutPly:),
+                        onPractice: openPractice(sourcePly:)
+                    )
+                case .practice:
+                    EmptyView()
+                }
             }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 4)
-
-            switch rightPaneTab {
-            case .moves:
-                MoveListView(viewModel: viewModel, onAskCoach: askCoach(aboutPly:))
-            case .report:
-                GameReportView(
-                    viewModel: viewModel,
-                    onAskCoach: askCoach(aboutPly:),
-                    onPractice: openPractice(sourcePly:)
-                )
-            }
-        }
-        .sheet(isPresented: $isPracticeOpen) {
-            PracticeSessionView(viewModel: practiceSessionViewModel()) {
-                rightPaneTab = .report
-            }
-            .environmentObject(library)
-            .environmentObject(engineService)
         }
     }
 
@@ -224,23 +265,39 @@ struct GameReplayView: View {
         isCoachOpen = true
     }
 
-    private func practiceSessionViewModel() -> PracticeSessionViewModel {
-        PracticeSessionViewModel(
+    private func openPractice(sourcePly: Int?) {
+        practiceSourcePly = sourcePly
+        openPractice {
+            let cards = try await viewModel.trainingCards()
+            guard let sourcePly else { return cards }
+            return cards.filter { $0.sourcePly == sourcePly }
+        }
+    }
+
+    /// The single seam both the Report's "Practice" button and a
+    /// dashboard-originated pending practice session go through (DD1) - the
+    /// caller supplies which cards to practice, and this owns creating the
+    /// session, switching the right pane, and suspending live analysis.
+    private func openPractice(loadCards: @escaping () async throws -> [TrainingCardRecord]) {
+        let sessionViewModel = PracticeSessionViewModel(
             store: store,
-            loadCards: {
-                let cards = try await viewModel.trainingCards()
-                guard let practiceSourcePly else { return cards }
-                return cards.filter { $0.sourcePly == practiceSourcePly }
-            },
+            loadCards: loadCards,
             evaluator: DefaultTrainingMoveEvaluator { request in
                 try await engineService.evaluateTrainingPosition(request)
             }
         )
+        practiceViewModel = sessionViewModel
+        rightPaneTab = .practice
+        viewModel.enterPractice()
+        engineService.stopLive()
+        Task { await sessionViewModel.load() }
     }
 
-    private func openPractice(sourcePly: Int?) {
-        practiceSourcePly = sourcePly
-        isPracticeOpen = true
+    private func exitPractice() {
+        rightPaneTab = .report
+        practiceViewModel = nil
+        viewModel.exitPractice()
+        showLivePosition()
     }
 
     /// The live engine's top line's first move, drawn as a board arrow -
@@ -406,13 +463,7 @@ struct GameReplayView: View {
             .background(DesignColors.surface1)
             .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
 
-            Button {
-                flipped.toggle()
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
-            }
-            .buttonStyle(.bordered)
-            .accessibilityLabel("Flip board")
+            flipButton
 
             Button {
                 askCoach(aboutPly: viewModel.currentGraphPly)
@@ -422,6 +473,32 @@ struct GameReplayView: View {
             }
             .buttonStyle(.bordered)
             .accessibilityLabel("Ask the coach about this position")
+        }
+        .padding(.bottom)
+    }
+
+    private var flipButton: some View {
+        Button {
+            flipped.toggle()
+        } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Flip board")
+    }
+
+    /// Practice hides the step/jump controls, eval graph, and lines panel -
+    /// none of them apply to a position that isn't a ply of this game - but
+    /// keeps the flip button, per DD1.
+    private func practiceControls(_ practiceViewModel: PracticeSessionViewModel) -> some View {
+        HStack {
+            Button {
+                practiceViewModel.toggleFlip()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Flip board")
         }
         .padding(.bottom)
     }

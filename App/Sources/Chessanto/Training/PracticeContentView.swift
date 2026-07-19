@@ -1,33 +1,28 @@
 import SwiftUI
 
-struct PracticeSessionView: View {
-    @StateObject private var viewModel: PracticeSessionViewModel
-    @Environment(\.dismiss) private var dismiss
-    let backToGame: (() -> Void)?
-
-    init(viewModel: PracticeSessionViewModel, backToGame: (() -> Void)? = nil) {
-        _viewModel = StateObject(wrappedValue: viewModel)
-        self.backToGame = backToGame
-    }
+/// Practice as a right-pane mode of `GameReplayView` (DD1) - no modal sheet,
+/// no fixed frame. The board itself is driven directly from `viewModel` by
+/// `GameReplayView.boardColumn`; this view owns only the prompt, hints,
+/// feedback, and session progress, in the same `Card` idiom the Report uses.
+struct PracticeContentView: View {
+    @ObservedObject var viewModel: PracticeSessionViewModel
+    let onExit: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(DesignColors.hairline)
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView {
+                content
+                    .padding()
+            }
         }
-        .frame(minWidth: 760, minHeight: 560)
-        .background(DesignColors.surface0)
-        .task { await viewModel.load() }
     }
 
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Practice key moments")
-                    .font(.dsTitle)
-                    .foregroundStyle(DesignColors.textPrimary)
+                Text("Practice").font(.dsTitle).foregroundStyle(DesignColors.textPrimary)
                 if let card = viewModel.currentCard {
                     Text("Card \(viewModel.currentIndex + 1) of \(viewModel.cards.count) - move \(moveNumberLabel(ply: card.sourcePly))")
                         .font(.dsSecondary)
@@ -35,7 +30,7 @@ struct PracticeSessionView: View {
                 }
             }
             Spacer()
-            Button("Done") { dismiss() }
+            Button("Exit practice") { onExit() }
                 .keyboardShortcut(.cancelAction)
         }
         .padding()
@@ -55,32 +50,9 @@ struct PracticeSessionView: View {
         case .failed(let message):
             ContentUnavailableView("Practice unavailable", systemImage: "exclamationmark.triangle", description: Text(message))
         case .prompt, .evaluating, .feedback:
-            practiceBody
+            promptCard
         case .completed(let summary):
             completion(summary)
-        }
-    }
-
-    private var practiceBody: some View {
-        HStack(alignment: .top, spacing: DesignSpacing.lg) {
-            BoardView(
-                position: viewModel.position,
-                flipped: viewModel.flipped,
-                selectedSquare: viewModel.selectedSquare,
-                legalDestinations: viewModel.legalDestinations,
-                arrows: viewModel.revealArrow,
-                onSquareTapped: viewModel.select(square:)
-            )
-            .frame(width: 420, height: 420)
-            .padding()
-
-            VStack(alignment: .leading, spacing: DesignSpacing.md) {
-                promptCard
-                Spacer()
-            }
-            .frame(minWidth: 260, maxWidth: 320)
-            .padding(.vertical)
-            .padding(.trailing)
         }
     }
 
@@ -92,16 +64,28 @@ struct PracticeSessionView: View {
                 .foregroundStyle(DesignColors.textPrimary)
 
             if let card = viewModel.currentCard {
-                ClassificationChip(classification: card.classification)
-                if viewModel.hintCount >= 1 {
-                    Text(card.themes.first ?? "Look for the forcing idea.")
-                        .font(.dsBody)
-                        .foregroundStyle(DesignColors.textSecondary)
+                HStack(spacing: DesignSpacing.xs) {
+                    ClassificationChip(classification: card.classification)
+                    if let label = viewModel.classificationLabel {
+                        Text(label)
+                            .font(.dsSecondary)
+                            .foregroundStyle(DesignColors.textSecondary)
+                    }
                 }
-                if viewModel.hintCount >= 2, let best = card.bestMoveUCI {
-                    Text("Start from \(String(best.prefix(2))).")
+
+                // Both hint lines reserve their space from the start of the
+                // card (DD6) - toggling opacity rather than inserting the
+                // text keeps the card's height constant, so a second `Hint`
+                // press at the same screen point still lands on the button.
+                VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+                    Text(viewModel.themeHintTextIgnoringHintCount)
                         .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
+                        .opacity(viewModel.hintCount >= 1 ? 1 : 0)
+                    Text(hintSquareText(card: card))
+                        .font(.dsBody)
+                        .foregroundStyle(DesignColors.textSecondary)
+                        .opacity(viewModel.hintCount >= 2 ? 1 : 0)
                 }
             }
 
@@ -172,35 +156,29 @@ struct PracticeSessionView: View {
     }
 
     private func completion(_ summary: PracticeSessionViewModel.SessionSummary) -> some View {
-        VStack(alignment: .leading, spacing: DesignSpacing.md) {
-            Card {
-                SectionHeader(title: "Session complete")
-                Text("\(summary.cardsCompleted) card\(summary.cardsCompleted == 1 ? "" : "s") completed")
+        Card {
+            SectionHeader(title: "Session complete")
+            Text("\(summary.cardsCompleted) card\(summary.cardsCompleted == 1 ? "" : "s") completed")
+                .font(.dsBody)
+            Text("\(summary.firstAttemptSuccesses) successful first attempt\(summary.firstAttemptSuccesses == 1 ? "" : "s")")
+                .font(.dsBody)
+            if let recurringTheme = summary.recurringTheme {
+                Text("Recurring theme: \(recurringTheme)")
                     .font(.dsBody)
-                Text("\(summary.firstAttemptSuccesses) successful first attempt\(summary.firstAttemptSuccesses == 1 ? "" : "s")")
-                    .font(.dsBody)
-                if let recurringTheme = summary.recurringTheme {
-                    Text("Recurring theme: \(recurringTheme)")
-                        .font(.dsBody)
-                }
-                if let nextDue = summary.nextDueDate {
-                    Text("Next review: \(nextDue.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.dsSecondary)
-                        .foregroundStyle(DesignColors.textSecondary)
-                }
-                HStack {
-                    Button("Back to game") {
-                        dismiss()
-                        backToGame?()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    Button("Done") { dismiss() }
-                        .buttonStyle(.bordered)
-                }
             }
-            .frame(width: 360)
+            if let nextDue = summary.nextDueDate {
+                Text("Next review: \(nextDue.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+            }
+            Button("Back to game") { onExit() }
+                .buttonStyle(.borderedProminent)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func hintSquareText(card: TrainingCard) -> String {
+        guard let best = card.bestMoveUCI else { return " " }
+        return "Start from \(String(best.prefix(2))) - highlighted on the board."
     }
 
     private func moveNumberLabel(ply: Int) -> String {

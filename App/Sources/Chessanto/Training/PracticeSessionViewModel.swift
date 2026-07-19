@@ -64,8 +64,17 @@ final class PracticeSessionViewModel: ObservableObject {
         return BoardPositionMapper.position(fromFEN: fen) ?? .empty
     }
 
+    /// Defaults to the learner's own side to move, but the flip button
+    /// (which stays available during inline practice per DD1) can override
+    /// it, same as the replay board's own flip control.
+    @Published private var isManuallyFlipped = false
+
     var flipped: Bool {
-        currentCard?.sideToMove == .black
+        isManuallyFlipped != (currentCard?.sideToMove == .black)
+    }
+
+    func toggleFlip() {
+        isManuallyFlipped.toggle()
     }
 
     var revealArrow: [(from: BoardSquare, to: BoardSquare)] {
@@ -74,6 +83,39 @@ final class PracticeSessionViewModel: ObservableObject {
             let uci = feedback.bestMoveUCI
         else { return [] }
         return arrow(for: uci).map { [$0] } ?? []
+    }
+
+    /// The best move's origin square, shown once the learner has taken both
+    /// hints (D2). Empty before then so the board reveals nothing early.
+    var hintSquares: Set<BoardSquare> {
+        guard hintCount >= 2, let uci = currentCard?.bestMoveUCI,
+            let from = arrow(for: uci)?.from
+        else { return [] }
+        return [from]
+    }
+
+    /// The classification's plain word, e.g. "Inaccuracy" - never just the
+    /// bare `?!` glyph the chip alone would show (D1/DD2).
+    var classificationLabel: String? {
+        currentCard?.classification.abbreviation
+    }
+
+    /// The first theme plus its plain-language gloss, once the learner has
+    /// taken the first hint. `nil` before that hint, so nothing is revealed
+    /// early.
+    var themeHintText: String? {
+        guard hintCount >= 1 else { return nil }
+        return themeHintTextIgnoringHintCount
+    }
+
+    /// Same text as `themeHintText`, but always computed regardless of
+    /// `hintCount` - the view renders this unconditionally and only toggles
+    /// its opacity, so the reserved space (DD6) is the text's *real* height
+    /// rather than a differently-wrapping placeholder's.
+    var themeHintTextIgnoringHintCount: String {
+        guard let theme = currentCard?.themes.first else { return "Look for the forcing idea." }
+        guard let gloss = ChessGlossary.gloss(for: theme) else { return theme }
+        return "\(theme) - \(gloss)"
     }
 
     var legalDestinations: Set<BoardSquare> {
