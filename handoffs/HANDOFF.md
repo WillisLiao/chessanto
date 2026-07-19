@@ -693,6 +693,31 @@ One unrelated, pre-existing bug was found along the way and not fixed (out of sc
 The next planning task is described in `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md`.
 It carries forward the full practice render-state machine, non-disclosing incorrect feedback and the distinct Reveal state, duplicate-submit rejection, review decisions for Reveal and Skip, Dashboard/practice presentation ownership, the 900-point replay and practice layout, accessibility coverage, promotion moves in practice, README/version alignment, a project-level `CLAUDE.md` (Follow-up A), and a root `CONTEXT.md` (Follow-up B) - all of which were out of scope for phase 2 and remain not started.
 
+## UI/UX clarity planning complete (2026-07-19, planning only, no code)
+
+An Opus planning session executed `handoffs/NEXT-CLAUDE-OPUS-PLANNING.md` and produced three phase documents.
+Full detail, including every live reproduction, is in the `UI/UX clarity: Opus planning session` section of `devlogs/2026-07-19.md`.
+
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-1.md` is a fully specified execution plan for one Claude Sonnet medium session.
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` and `-PHASE-3.md` are deliberate scoping stubs, not designed in advance, because phase 1 restructures the surfaces they build on.
+
+Everything was reproduced live in the Release app against a disposable database copy; the live sandbox database was confirmed byte-identical before and after.
+
+Two findings overturned assumptions the bootstrap carried:
+
+- The key-moment row hit-target bug is **not** a missing width modifier.
+  Clicking the far right of the row already works; clicking the prose below the header line does not, because the `Button` wraps only the header line while the summary, narration, and caption are siblings outside it.
+  A confident source-reading diagnosis was wrong for the second consecutive planning cycle.
+- Playable variations need **no** schema migration.
+  `RankedLine.principalVariationUCI` already persists a full PV, verified directly against `trainingCard.rankedLinesJSON`.
+
+Pin and favorite, by contrast, genuinely have no data model in any migration `v1` through `v5` and would need a forward-only `v6`.
+
+The user added one feedback item mid-session and resolved its ambiguity directly: practice must run inline on the existing full-size board with no modal sheet, while the training-card model, the spaced-repetition scheduler, and the Progress queue stay exactly as they are.
+That decision is the structural anchor of phase 1.
+
+`handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md` remains separately open and is not superseded.
+
 ## Future directions (explicitly out of v1)
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.
