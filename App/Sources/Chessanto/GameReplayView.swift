@@ -2,11 +2,13 @@ import SwiftUI
 import ChessCore
 import Persistence
 import AnalysisKit
+import CoachKit
 
 struct GameReplayView: View {
     @StateObject private var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
     @EnvironmentObject private var library: GameLibrary
+    @EnvironmentObject private var coachService: CoachService
     private let game: GameRecord
     private let store: GameStore
 
@@ -18,6 +20,8 @@ struct GameReplayView: View {
     @State private var isCoachOpen = false
     @State private var practiceSourcePly: Int?
     @State private var practiceViewModel: PracticeSessionViewModel?
+    @State private var linePreview: LinePreviewController?
+    @State private var coachMomentPly: Int?
 
     private let pendingPracticeLoadCards: (() async throws -> [TrainingCardRecord])?
     private let onPendingPracticeConsumed: (() -> Void)?
@@ -111,19 +115,25 @@ struct GameReplayView: View {
         }
         .onChange(of: viewModel.currentIndex) {
             selectedSquare = nil
-            showLivePosition()
+            if linePreview == nil {
+                showLivePosition()
+            }
         }
         .onChange(of: quality) { _, newValue in
             library.saveAnalysisQuality(newValue)
         }
         .onDisappear {
             analysisTask?.cancel()
+            linePreview?.pause()
             engineService.stopLive()
+        }
+        .task(id: viewModel.report) {
+            await maybeGenerateNarrations()
         }
     }
 
     private func showLivePosition() {
-        guard !viewModel.isPracticeActive, let fen = viewModel.currentFEN else { return }
+        guard linePreview == nil, !viewModel.isPracticeActive, let fen = viewModel.currentFEN else { return }
         engineService.showPosition(fen: fen)
     }
 
@@ -150,6 +160,16 @@ struct GameReplayView: View {
                 )
                 .padding()
                 practiceControls(practiceViewModel)
+            } else if let linePreview {
+                LinePreviewBoardSection(
+                    controller: linePreview,
+                    flipped: flipped,
+                    theme: library.boardTheme,
+                    identityStrips: identityStrips(flipped: flipped),
+                    coachContent: coachContent(forPly: coachMomentPly),
+                    onDone: endLinePreview
+                )
+                .padding()
             } else {
                 HStack(alignment: .top, spacing: DesignSpacing.md) {
                     EvalBarView(eval: viewModel.currentEvalDisplay(live: engineService.liveEvaluation))
@@ -169,6 +189,21 @@ struct GameReplayView: View {
                     }
                 }
                 .padding()
+                if let coachMomentPly {
+                    CoachStageView(
+                        content: coachContent(forPly: coachMomentPly),
+                        primaryActionTitle: canPreviewBetterLine(atPly: coachMomentPly)
+                            ? "Replay better line"
+                            : nil,
+                        onPrimaryAction: canPreviewBetterLine(atPly: coachMomentPly)
+                            ? { previewBetterLine(atPly: coachMomentPly) }
+                            : nil,
+                        secondaryActionTitle: "What happened",
+                        onSecondaryAction: { previewPlayedContinuation(atPly: coachMomentPly) },
+                        onAskCoach: { askCoach(aboutPly: coachMomentPly) }
+                    )
+                    .padding(.horizontal)
+                }
                 if viewModel.isExploringVariation {
                     Button("Back to game") { viewModel.backToGame() }
                         .font(.caption)
@@ -222,7 +257,9 @@ struct GameReplayView: View {
                     GameReportView(
                         viewModel: viewModel,
                         onAskCoach: askCoach(aboutPly:),
-                        onPractice: openPractice(sourcePly:)
+                        onPractice: openPractice(sourcePly:),
+                        onSelectMoment: selectAndPreview(moment:),
+                        onPlayContinuation: playContinuation(moment:)
                     )
                 case .practice:
                     EmptyView()
@@ -258,6 +295,127 @@ struct GameReplayView: View {
         guard ply < viewModel.moveIndices.count else { return }
         viewModel.pinChat(to: viewModel.moveIndices[ply])
         isCoachOpen = true
+    }
+
+    private func selectAndPreview(moment: KeyMoment) {
+        guard moment.ply < viewModel.moveIndices.count else { return }
+        coachMomentPly = moment.ply
+        viewModel.jump(to: viewModel.moveIndices[moment.ply])
+        if moment.betterMove != nil {
+            previewBetterLine(atPly: moment.ply)
+        }
+    }
+
+    private func playContinuation(moment: KeyMoment) {
+        guard moment.ply < viewModel.moveIndices.count else { return }
+        coachMomentPly = moment.ply
+        viewModel.jump(to: viewModel.moveIndices[moment.ply])
+        previewPlayedContinuation(atPly: moment.ply)
+    }
+
+    private func canPreviewBetterLine(atPly ply: Int) -> Bool {
+        guard let input = viewModel.reportInput, ply > 0, ply - 1 < input.plies.count else { return false }
+        return input.plies[ply - 1].rank1?.principalVariationUCI.isEmpty == false
+    }
+
+    private func previewBetterLine(atPly ply: Int) {
+        guard let input = viewModel.reportInput,
+            ply > 0,
+            ply - 1 < input.plies.count,
+            let line = input.plies[ply - 1].rank1,
+            !line.principalVariationUCI.isEmpty
+        else { return }
+        beginLinePreview(
+            label: "Better line",
+            startingFEN: input.plies[ply - 1].fen,
+            moves: line.principalVariationUCI,
+            coachPly: ply
+        )
+    }
+
+    private func previewPlayedContinuation(atPly ply: Int) {
+        guard let input = viewModel.reportInput,
+            ply >= 0,
+            ply < input.plies.count
+        else { return }
+        let continuation = viewModel.uciContinuation(fromPly: ply, maxPlies: 10)
+        guard !continuation.isEmpty else { return }
+        beginLinePreview(
+            label: "What happened",
+            startingFEN: input.plies[ply].fen,
+            moves: continuation,
+            coachPly: ply
+        )
+    }
+
+    private func beginLinePreview(label: String, startingFEN: String, moves: [String], coachPly: Int) {
+        linePreview?.pause()
+        engineService.stopLive()
+        selectedSquare = nil
+        coachMomentPly = coachPly
+        let preview = LinePreviewController(label: label, startingFEN: startingFEN, uciMoves: moves)
+        linePreview = preview
+        preview.play()
+    }
+
+    private func endLinePreview() {
+        linePreview?.pause()
+        linePreview = nil
+        showLivePosition()
+    }
+
+    private func coachContent(forPly ply: Int?) -> CoachStageContent {
+        guard let ply,
+            let moment = viewModel.report?.keyMoments.first(where: { $0.ply == ply })
+        else {
+            return CoachStageContent(
+                eyebrow: "Coach",
+                headline: "Choose a key moment.",
+                message: "I’ll connect the explanation to the exact moves on the board.",
+                source: "Engine verified"
+            )
+        }
+        let narration = coachService.narrationsByPly[ply]
+        return CoachStageContent(
+            eyebrow: "\(moveNumberLabel(ply: ply)) \(moment.evalSwing.playedSAN)",
+            headline: CoachStageText.headline(for: moment.evalSwing.classification),
+            message: CoachStageText.condensed(narration?.text ?? momentSummary(moment)),
+            source: narration?.source == .coach ? "Local Coach" : "Engine verified"
+        )
+    }
+
+    private func momentSummary(_ moment: KeyMoment) -> String {
+        var parts = [
+            "Winning chances changed from \(Int(moment.evalSwing.moverWinProbabilityBefore.rounded()))% to \(Int(moment.evalSwing.moverWinProbabilityAfter.rounded()))%."
+        ]
+        if let betterMove = moment.betterMove {
+            parts.append("Better was \(betterMove.bestMoveSAN).")
+        }
+        if let punishment = moment.punishment {
+            parts.append("\(punishment.refutingSAN) is the reply to watch.")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private func moveNumberLabel(ply: Int) -> String {
+        let moveNumber = (ply + 1) / 2
+        return ply % 2 == 1 ? "\(moveNumber)." : "\(moveNumber)..."
+    }
+
+    @MainActor
+    private func maybeGenerateNarrations() async {
+        guard let report = viewModel.report,
+            let input = viewModel.reportInput,
+            let profile = viewModel.userProfile(),
+            profile.coachEnabled
+        else { return }
+        coachService.generateNarrations(
+            report: report,
+            input: input,
+            userProfile: profile,
+            userRating: viewModel.userRatingInThisGame,
+            executor: engineService
+        )
     }
 
     private func openPractice(sourcePly: Int?) {

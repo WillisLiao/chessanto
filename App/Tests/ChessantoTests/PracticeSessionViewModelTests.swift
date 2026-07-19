@@ -351,4 +351,92 @@ struct PracticeSessionViewModelTests {
         #expect(hintText.contains("Material left en prise"))
         #expect(hintText.contains("left where the opponent can capture it for free"))
     }
+
+    @Test
+    func feedbackAutomaticallyStartsTheFullBetterLine() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5","g1f3"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(40) }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "e2e4")
+
+        let preview = try #require(viewModel.linePreview)
+        #expect(preview.label == "Better line")
+        #expect(preview.stepCount == 4)
+        #expect(preview.isPlaying)
+    }
+
+    @Test
+    func tryingAgainEndsAutomaticLinePlayback() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(-400) }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "g1f3")
+        #expect(viewModel.linePreview != nil)
+
+        viewModel.tryAgain()
+
+        #expect(viewModel.linePreview == nil)
+        #expect(viewModel.state == .prompt)
+    }
+
+    @Test
+    func feedbackWithoutAPlayableRankedLineDoesNotCreateAPreview() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":[],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await viewModel.load()
+        viewModel.reveal()
+
+        #expect(viewModel.linePreview == nil)
+    }
 }

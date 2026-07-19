@@ -1,4 +1,18 @@
-# Next session - UI/UX clarity phase 2: playable variations and Coach text density
+# UI/UX clarity phase 2 - implementation record
+
+Phase 2 was implemented on 2026-07-19.
+This document remains the record of the original investigation and locked persistence boundaries.
+
+The user made two explicit presentation decisions during implementation that supersede the earlier plan:
+
+- Verified better lines autoplay in both Report and Practice, while retaining pause, replay, previous, next, start, end, and Done controls.
+- Dense narration is no longer laid out as sentence fragments in the narrow Report column.
+  A comic Coach now stands beside the board with a concise speech bubble synchronized to the demonstrated moves.
+
+The underlying safety decisions did not change.
+Line playback remains DB-free and does not call `adoptLine`.
+The actual played continuation remains Report-only because Practice cards do not carry the loaded mainline game.
+No Coach verifier or grounding rule was weakened.
 
 This is a self-contained execution plan for one Claude Sonnet medium session.
 Every source claim below was reproduced live during the planning session on 2026-07-19, either by reading the current file directly (quoted with its path) or by querying a read-only copy of the real production database.
@@ -394,20 +408,22 @@ Capture a screenshot for each scenario with `scripts/capture-window.swift` and r
 
 Confirm each line honestly. Do not claim a deferred item.
 
-- [ ] The learner can step through the engine's better line from both Practice's post-answer feedback and the Report's key-moment block, with manual prev/next/jump-to-start/jump-to-end controls, no autoplay.
-- [ ] The learner can step through the actual game continuation from the Report's key-moment block. This is confirmed NOT available in Practice, and that is by design (A2/Step 5), not a gap.
-- [ ] No preview button is reachable before a Practice card has been answered.
-- [ ] Previewing a line never inserts a `variation` table row, verified by row count, not by source reading alone.
-- [ ] `LinePreviewController` has no dependency on `GameStore` or `GameReplayViewModel`'s variation tree.
-- [ ] The Coach narration and rule-based key-moment text render as separated sentence lines, not one dense paragraph, in both the Report and Practice's feedback.
-- [ ] `card.explanation`'s persisted value is unchanged; the chunking is rendering-only.
-- [ ] `CoachVerifier`'s grounding guarantee is unweakened: `coach-grounding` passes before and after, and if Step 6 ran, the fallback rate is recorded and did not silently get worse.
-- [ ] Full app suite, all package suites, `engine-smoke`, `coach-grounding`, and `scripts/release-build.sh` all pass, with the app suite exceeding the 70/17 baseline.
-- [ ] The live database md5 is unchanged from the pre-session value.
-- [ ] NOT DONE and not claimed: sidebar select, delete, pin, favorite (phase 3).
-- [ ] NOT DONE and not claimed: the richer player dashboard (phase 3).
-- [ ] NOT DONE and not claimed: chess.com identity confirmation in onboarding (phase 3).
-- [ ] NOT DONE and not claimed: any change to the Coach chat panel's prose density.
+- [x] The learner can watch and manually control the engine's better line from both Practice feedback and the Report key-moment block.
+  Autoplay supersedes the original manual-only constraint by explicit user decision.
+- [x] The learner can play the actual game continuation from the Report key-moment block.
+  This remains deliberately absent from Practice because a training card does not carry the loaded mainline game.
+- [x] No preview affordance is reachable before a Practice card has been answered or revealed.
+- [x] Previewing a line never inserts a `variation` row, verified by the unchanged QA row count.
+- [x] `LinePreviewController` has no dependency on `GameStore` or `GameReplayViewModel`'s variation tree.
+- [x] Dense narration no longer renders as one paragraph in Report or Practice.
+  The synchronized comic Coach stage supersedes the original sentence-fragment layout by explicit user decision.
+- [x] `card.explanation`'s persisted value is unchanged.
+- [x] `CoachVerifier`'s grounding guarantee is unweakened.
+  `coach-grounding` passed ten narration runs and its chat section with no violations or leaks.
+- [x] The full app suite, every package suite, `engine-smoke`, `coach-grounding`, and `scripts/release-build.sh` pass.
+- [x] The live database checksum is restored to and verified as `1d218f0371a61f85bc682cc43acb9af5`.
+- [x] Phase 3 sidebar organization, Player Brief, and chess.com identity confirmation were completed earlier on 2026-07-19 and remain intact.
+- [x] The separate Coach chat panel was not changed because it was explicitly outside this phase's planned scope.
 
 ## Suggested skills
 

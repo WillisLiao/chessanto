@@ -1,5 +1,4 @@
 import AnalysisKit
-import CoachKit
 import SwiftUI
 
 /// The M5 rule-based coaching report - the "Report" tab of the game replay
@@ -9,11 +8,12 @@ import SwiftUI
 struct GameReportView: View {
     @ObservedObject var viewModel: GameReplayViewModel
     @EnvironmentObject private var engineService: EngineService
-    @EnvironmentObject private var coachService: CoachService
     /// Opens the Coach panel pinned to a ply - the Report key-moment entry
     /// point (decision A).
     let onAskCoach: (Int) -> Void
     let onPractice: (Int?) -> Void
+    let onSelectMoment: (KeyMoment) -> Void
+    let onPlayContinuation: (KeyMoment) -> Void
 
     var body: some View {
         ScrollView {
@@ -35,35 +35,6 @@ struct GameReportView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .task(id: viewModel.report) {
-            await maybeGenerateNarrations()
-        }
-    }
-
-    private var isCoachEnabled: Bool {
-        viewModel.userProfile()?.coachEnabled == true
-    }
-
-    @MainActor
-    private func maybeGenerateNarrations() async {
-        guard let report = viewModel.report, let input = viewModel.reportInput,
-            let profile = viewModel.userProfile(), profile.coachEnabled
-        else { return }
-        coachService.generateNarrations(
-            report: report, input: input, userProfile: profile,
-            userRating: viewModel.userRatingInThisGame, executor: engineService
-        )
-    }
-
-    @ViewBuilder
-    private func narrationView(_ narration: CoachNarration) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(narration.text)
-                .font(.dsBody)
-            Text(narration.source == .coach ? "Coach" : "Rule-based")
-                .font(.dsSecondary)
-                .foregroundStyle(DesignColors.textSecondary)
         }
     }
 
@@ -168,19 +139,6 @@ struct GameReportView: View {
             }
         }
 
-        if isCoachEnabled {
-            Card {
-                SectionHeader(title: "Coach summary")
-                if let narration = coachService.summaryNarration {
-                    narrationView(narration)
-                } else if coachService.isGenerating {
-                    HStack {
-                        ProgressView().controlSize(.small)
-                        Text("Coach is writing…").foregroundStyle(DesignColors.textSecondary)
-                    }
-                }
-            }
-        }
     }
 
     /// A per-player row of classification chips that must never wrap
@@ -202,8 +160,7 @@ struct GameReportView: View {
     private func keyMomentRow(_ moment: KeyMoment) -> some View {
         VStack(alignment: .leading, spacing: DesignSpacing.xs) {
             Button {
-                guard moment.ply < viewModel.moveIndices.count else { return }
-                viewModel.jump(to: viewModel.moveIndices[moment.ply])
+                onSelectMoment(moment)
             } label: {
                 VStack(alignment: .leading, spacing: DesignSpacing.xs) {
                     HStack(spacing: DesignSpacing.xs) {
@@ -220,16 +177,6 @@ struct GameReportView: View {
                         .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
 
-                    if isCoachEnabled {
-                        if let narration = coachService.narrationsByPly[moment.ply] {
-                            narrationView(narration)
-                        } else if coachService.isGenerating {
-                            HStack(spacing: DesignSpacing.xs) {
-                                ProgressView().controlSize(.mini)
-                                Text("Coach is writing…").font(.dsSecondary).foregroundStyle(DesignColors.textSecondary)
-                            }
-                        }
-                    }
                 }
                 .padding(DesignSpacing.xs)
                 .contentShape(Rectangle())
@@ -242,7 +189,26 @@ struct GameReportView: View {
                 }
             }
 
-            if viewModel.trainingCardSourcePlies.contains(moment.ply) {
+            HStack(spacing: DesignSpacing.sm) {
+                if moment.betterMove != nil {
+                    Button {
+                        onSelectMoment(moment)
+                    } label: {
+                        Label("Show better line", systemImage: "play.fill")
+                    }
+                    .font(.dsSecondary.weight(.semibold))
+                    .buttonStyle(.bordered)
+                }
+
+                Button {
+                    onPlayContinuation(moment)
+                } label: {
+                    Label("What happened", systemImage: "arrow.right")
+                }
+                .font(.dsSecondary.weight(.semibold))
+                .buttonStyle(.bordered)
+
+                if viewModel.trainingCardSourcePlies.contains(moment.ply) {
                 Button {
                     onPractice(moment.ply)
                 } label: {
@@ -251,6 +217,7 @@ struct GameReportView: View {
                 .font(.dsSecondary.weight(.semibold))
                 .buttonStyle(.bordered)
                 .accessibilityLabel("Practice this key moment")
+                }
             }
         }
     }

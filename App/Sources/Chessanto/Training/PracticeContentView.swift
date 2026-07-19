@@ -132,8 +132,8 @@ struct PracticeContentView: View {
                 Text(feedback.outcome.title)
                     .font(.dsBody.weight(.semibold))
             }
-            Text(feedback.explanation)
-                .font(.dsBody)
+            Text("The Coach is demonstrating the verified line beside the board.")
+                .font(.dsSecondary)
                 .foregroundStyle(DesignColors.textSecondary)
 
             if let loss = feedback.lossCentipawns, feedback.outcome != .strong {
@@ -143,6 +143,11 @@ struct PracticeContentView: View {
             }
 
             HStack(spacing: DesignSpacing.sm) {
+                Button("Replay better line") {
+                    viewModel.startBetterLinePreview()
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Replay the engine's better line automatically on the board")
                 if feedback.outcome == .incorrect {
                     Button("Try again") { viewModel.tryAgain() }
                         .buttonStyle(.bordered)

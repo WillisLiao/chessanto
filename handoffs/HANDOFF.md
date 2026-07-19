@@ -3,7 +3,23 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
-## Current state (2026-07-18)
+## Current state (2026-07-19)
+
+- **UI/UX clarity phase 2 complete (2026-07-19): synchronized Coach stage and playable analysis.**
+  - `LinePreviewController` is a small, DB-free replay module built on `ChessGame.replayLine`.
+    It cannot access `GameStore`, the variation tree, or `adoptLine`.
+  - Report key moments now start the full stored rank-1 line automatically on the board.
+    Report also offers a separate read-only playback of the moves that actually followed in the game.
+  - Practice feedback and Reveal start the full stored better line automatically.
+    Nothing is previewed before the learner has answered or revealed the card.
+  - Both surfaces retain manual pause, replay, previous, next, jump-to-start, jump-to-end, and Done controls.
+  - The narrow Review and Practice panes no longer print long Coach paragraphs.
+    A purpose-built comic Coach portrait and speech bubble sit with the board and update with each demonstrated SAN move.
+  - The bubble uses verified local Coach narration when available and otherwise labels deterministic report text as `Engine verified`.
+  - The original phase 2 plan's manual-only and sentence-fragment presentation decisions were superseded by the user's explicit autoplay and comic-stage direction.
+  - App coverage increased from 75 tests across 19 suites to 91 tests across 22 suites.
+  - Native Release QA exercised better-line autoplay in Review and Practice plus the real played continuation.
+    The QA database had one variation row before and after, and the live database checksum remains `1d218f0371a61f85bc682cc43acb9af5`.
 
 - **M1 complete.** App builds, all tests pass, and the acceptance criteria in
   `PLAN.md` are met: a real chess.com PGN (fetched live from the public API,
@@ -778,13 +794,12 @@ The design locks a single new module, `LinePreviewController` (pure, `ChessGame.
 Coach text density: `card.explanation` (Practice's post-answer feedback) and the Report's rule-based fallback text share the same underlying string, so one rendering-only fix (sentence-level chunking, not truncation, not a new disclosure affordance) fixes both surfaces at once.
 `CoachVerifier` was confirmed to check numeric claims anywhere in the response text rather than requiring the parenthetical-eval format the prompt asks for, so the rendering fix cannot weaken grounding; any `CoachPrompt` wording change stays conditional on that rendering fix proving insufficient, and is gated on a real fallback-rate measurement, not a single run.
 
-`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` is now implementation-ready but **not yet implemented**.
-`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-3.md` remains a scoping stub, unstarted, and is being handed to a Codex session next (see `handoffs/CODEX-HANDOFF-PHASE-3.md`).
+This historical planning note is superseded by the completed phase 2 and phase 3 implementation records below.
 
 ## UI/UX clarity phase 3 and visual-system redesign complete (2026-07-19)
 
 Phase 3 is implemented and verified.
-Phase 2 remains fully planned but not implemented, and none of its playable-variation or Coach-density work was pulled into this session.
+Phase 2 was subsequently implemented on 2026-07-19, as recorded at the top of this handoff.
 Full implementation and native E2E detail is in the `UI/UX clarity phase 3 and visual-system redesign` section of `devlogs/2026-07-19.md`.
 
 ### Library organization and recoverable deletion
@@ -846,7 +861,7 @@ With no Chessanto process running, the live file was restored from the mandatory
 
 ### What's still open
 
-`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` remains the implementation-ready plan for playable line previews and Coach text-density changes.
+`handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md` now preserves the investigation and records the completed implementation.
 `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-3.md` remains a separate unstarted backlog and was not superseded.
 The phase 3 document now records the locked design decisions, test-first sequence, and native acceptance record.
 The Codex briefing remains as the historical input this implementation followed and re-verified.

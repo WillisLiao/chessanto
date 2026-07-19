@@ -457,6 +457,22 @@ final class GameReplayViewModel: ObservableObject {
         await analyze(engineService: engineService, quality: quality)
     }
 
+    /// The real game's mainline moves after `ply`, capped for a short,
+    /// read-only board demonstration.
+    ///
+    /// This never touches the variation tree or persistence.
+    func uciContinuation(fromPly ply: Int, maxPlies: Int) -> [String] {
+        guard let chessGame,
+            ply >= 0,
+            ply < moveIndices.count,
+            maxPlies > 0
+        else { return [] }
+        return moveIndices
+            .dropFirst(ply + 1)
+            .prefix(maxPlies)
+            .compactMap { chessGame.uciMove(at: $0) }
+    }
+
     // MARK: - Exploration (variation play)
 
     /// Rebuilds the in-memory variation tree from persisted rows, replaying

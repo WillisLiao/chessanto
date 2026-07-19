@@ -28,6 +28,7 @@ final class PracticeSessionViewModel: ObservableObject {
     @Published private(set) var selectedSquare: BoardSquare?
     @Published private(set) var completedEvaluations: [TrainingEvaluation] = []
     @Published private(set) var firstAttemptSuccesses = 0
+    @Published private(set) var linePreview: LinePreviewController?
     /// A non-blocking message for a recoverable engine failure during
     /// `submit`, shown alongside the prompt controls. `.failed` stays
     /// reserved for a failure to load the lesson at all (see `load()`); a
@@ -128,6 +129,7 @@ final class PracticeSessionViewModel: ObservableObject {
     }
 
     func load() async {
+        endLinePreview()
         state = .loading
         do {
             cardRecords = try await loadCards()
@@ -183,14 +185,17 @@ final class PracticeSessionViewModel: ObservableObject {
             explanation: "Best was \(card.bestMoveSAN ?? "the engine move")."
         )
         state = .feedback(feedback)
+        startBetterLinePreview()
     }
 
     func tryAgain() {
+        endLinePreview()
         selectedSquare = nil
         state = .prompt
     }
 
     func next() async {
+        endLinePreview()
         selectedSquare = nil
         hintCount = 0
         attemptsOnCurrentCard = 0
@@ -240,6 +245,7 @@ final class PracticeSessionViewModel: ObservableObject {
                 cards[currentIndex] = card
             }
             state = .feedback(result)
+            startBetterLinePreview()
         } catch let error as EngineSearchError {
             // Recoverable: the card, board, and attempt count are untouched
             // so the learner can simply try the same card again.
@@ -260,6 +266,29 @@ final class PracticeSessionViewModel: ObservableObject {
         case .noAnalysis, .engineUnavailable:
             return "The engine couldn't evaluate that move. Try again."
         }
+    }
+
+    func startBetterLinePreview() {
+        guard let card = currentCard,
+            let line = card.rankedLines
+                .sorted(by: { $0.rank < $1.rank })
+                .first(where: { !$0.principalVariationUCI.isEmpty })
+        else {
+            endLinePreview()
+            return
+        }
+        let preview = LinePreviewController(
+            label: "Better line",
+            startingFEN: card.preMoveFEN,
+            uciMoves: line.principalVariationUCI
+        )
+        linePreview = preview
+        preview.play()
+    }
+
+    func endLinePreview() {
+        linePreview?.pause()
+        linePreview = nil
     }
 
     private func recurringTheme() -> String? {
