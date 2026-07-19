@@ -922,6 +922,9 @@ The companion implementation has been fully audited, finalized, committed, and p
 - **Fallback:** If the server is offline or fails to respond within 1.2s, the app falls back seamlessly to the native Apple `AVSpeechSynthesizer` voices.
 - Committed under hash `dc52df8076935cae2030ee28929e00db7583641b` and pushed to remote `main`.
 - Physical CloudKit pairing remains blocked on Apple Developer team and container setup.
+- The latest compiled Release app is located at:
+  `/Users/willis/Library/Developer/Xcode/DerivedData/Chessanto-dvybgihmaxaffpbutfmycvjeqlkn/Build/Products/Release/Chessanto.app`
+
 
 
 ## Future directions (explicitly out of v1)
