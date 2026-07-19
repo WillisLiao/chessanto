@@ -901,42 +901,28 @@ The macOS suite passes 104 tests across 27 suites, `CompanionKit` passes 29 test
 Physical CloudKit pairing remains an external provisioning acceptance step.
 This checkout has no Apple Developer team or private iCloud container, so the apps show an honest blocker until the owner configures the same container and `ChessantoCloudKitContainerIdentifier` for both targets.
 
-## Final companion hardening handoff (2026-07-19)
+## Final companion hardening and Kokoro TTS integration (2026-07-19)
 
-The post-review implementation is complete locally but has not yet been committed or pushed.
+The companion implementation has been fully audited, finalized, committed, and pushed. On top of that, Kokoro TTS has been integrated as the primary natural-sounding voice for the Coach.
 
-Local Mac analysis no longer depends on a CloudKit or Keychain identity.
-One serial application queue now protects all local and remote engine batches.
-Interrupted durable requests resume once after relaunch, while completed requests remain idempotent duplicates.
-The secure mailbox now rejects a CloudKit record whose outer routing fields do not match its authenticated envelope header.
-First-run sync schedules the private zone before record delivery.
-The iPhone Reports tab shows active work and exact progress, offline Coach text identifies its evidence source, and better-line playback starts only from the explicit Show better line action.
-The desktop report also shows exact `x of total` analysis progress.
-The played continuation now begins after the selected key move.
-XCTest hosts automatically use a temporary isolated database.
+### Companion Delivery
+- The companion work was committed under hash `c2e349d1140950d1e6457cc1e4916fcb5f4a21a7` and pushed to remote `main`.
+- Pre-commit audits verified no secrets, no trailing whitespaces, and no accidental files.
+- The live SQLite database was restored to its backup state with MD5 `26f0882ad0e3ffdfc7a065a5791f8b5f` and WAL/SHM sidecars were removed.
+- All test counts are fully verified:
+  - macOS app: 107 tests in 27 suites.
+  - CompanionKit: 32 tests in 11 suites.
+  - iPhone app: 4 tests in 3 suites.
+  - Local packages and grounding/smoke targets all green.
 
-Final verification passed:
+### Kokoro TTS Integration
+- **Selected Voice:** George (`bm_george` preset), British male (deeper, measured).
+- **Server:** A local lightweight HTTP server (`server.py` in `.voice-demo/`) exposes `/tts` (and `/v1/audio/speech`) running on port `8888` using the Kokoro-82M ONNX model.
+- **Client:** `DesktopCoachSpeechController.swift` (macOS) and `OfflineReportReader.swift` (iOS) check if `http://127.0.0.1:8888/tts` is active. If so, they send a POST request with text, stream audio via `AVAudioPlayer`, and support standard speech controls.
+- **Fallback:** If the server is offline or fails to respond within 1.2s, the app falls back seamlessly to the native Apple `AVSpeechSynthesizer` voices.
+- Committed under hash `dc52df8076935cae2030ee28929e00db7583641b` and pushed to remote `main`.
+- Physical CloudKit pairing remains blocked on Apple Developer team and container setup.
 
-- macOS app: 107 tests in 27 suites.
-- CompanionKit: 32 tests in 11 suites.
-- iPhone app: 4 tests in 3 suites.
-- Persistence: 40 tests.
-- ChessCore: 21 tests.
-- AnalysisKit: 63 tests.
-- CoachKit: 74 tests.
-- EngineKit: 1 test.
-- ChessComKit: 4 tests.
-- Universal arm64 and x86_64 Release build succeeded.
-- Engine smoke and ten-run Coach grounding passed with zero violations and zero leaks.
-
-The Release app is at `/Users/willis/Library/Developer/Xcode/DerivedData/Chessanto-dvybgihmaxaffpbutfmycvjeqlkn/Build/Products/Release/Chessanto.app`.
-Native QA used only `/Users/willis/Library/Containers/com.chessanto.app/Data/tmp/iphone-companion-20260719-211052/chessanto.sqlite`.
-The six GM/demo games with IDs 1 through 6 were removed from that QA copy at the user's request.
-The QA copy passes `PRAGMA integrity_check` and retains the five personal games with IDs 7 through 11.
-The live database was not modified and remains MD5 `26f0882ad0e3ffdfc7a065a5791f8b5f`.
-
-The next agent should inspect the diff, update any remaining stale counts in `handoffs/IPHONE-COMPANION-EXECUTION.md`, run `git diff --check`, then commit and push the implementation.
-Physical Mac-iPhone CloudKit acceptance still requires the owner's Apple Developer team and shared private iCloud container.
 
 ## Future directions (explicitly out of v1)
 
