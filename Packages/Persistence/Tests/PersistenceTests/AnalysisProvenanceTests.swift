@@ -142,4 +142,67 @@ struct AnalysisProvenanceTests {
         #expect(standard == [1])
         #expect(deep == [1])
     }
+
+    /// The quality preset is a label, not a measurement. Rows written when a
+    /// preset meant a fixed movetime carry that preset's name with whatever
+    /// depth the machine happened to reach, so reusing on the label alone
+    /// keeps shallow data under a preset that now promises a depth. The real
+    /// case that motivated this: a game stored as "standard" whose rank-one
+    /// depths ranged from 8 to 17.
+    @Test("a row shallower than the request is not reused despite its preset")
+    func aRowShallowerThanTheRequestIsNotReused() async throws {
+        let store = try GameStore()
+        let gameID = try #require(
+            try store.save(GameRecord(source: .pgnImport, pgn: "*", white: "W", black: "B")).id
+        )
+        try await store.saveAnalysis(
+            [
+                AnalysisRecord(
+                    gameId: gameID,
+                    plyIndex: 0,
+                    fen: "shallow",
+                    depth: 13,
+                    scoreCentipawns: 10,
+                    principalVariation: "e2e4",
+                    multiPVRank: 1,
+                    qualityPreset: .standard,
+                    analyzedAt: Date(timeIntervalSince1970: 100)
+                ),
+            ],
+            gameId: gameID,
+            plyIndex: 0
+        )
+        try await store.saveAnalysis(
+            [
+                AnalysisRecord(
+                    gameId: gameID,
+                    plyIndex: 1,
+                    fen: "deep-enough",
+                    depth: 18,
+                    scoreCentipawns: 12,
+                    principalVariation: "e7e5",
+                    multiPVRank: 1,
+                    qualityPreset: .standard,
+                    analyzedAt: Date(timeIntervalSince1970: 101)
+                ),
+            ],
+            gameId: gameID,
+            plyIndex: 1
+        )
+
+        // On the preset alone both rows qualify.
+        let withoutFloor = try await store.analyzedPlyIndices(
+            gameId: gameID,
+            satisfying: .standard
+        )
+        #expect(withoutFloor == [0, 1])
+
+        // With the depth the preset now stands for, only the deep row does.
+        let withFloor = try await store.analyzedPlyIndices(
+            gameId: gameID,
+            satisfying: .standard,
+            minimumDepth: 18
+        )
+        #expect(withFloor == [1])
+    }
 }

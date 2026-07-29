@@ -33,6 +33,14 @@ final class GameReplayViewModel: ObservableObject {
     @Published private(set) var whiteAccuracy: Double?
     @Published private(set) var blackAccuracy: Double?
     @Published private(set) var isAnalyzed = false
+    /// The shallowest search depth across this game's stored rank-one rows,
+    /// or `nil` when unanalyzed.
+    ///
+    /// Reported instead of the preset's nominal depth because the two can
+    /// disagree: a game analyzed before the presets meant a fixed depth
+    /// carries its old preset name with whatever depth the machine reached,
+    /// and claiming the nominal figure for it would be a false measurement.
+    @Published private(set) var analyzedDepth: Int?
     @Published var analysisError: String?
 
     private var chessGame: ChessGame?
@@ -251,6 +259,12 @@ final class GameReplayViewModel: ObservableObject {
         cachedEvaluationsByPly = byPly
         cachedAllRanksByPly = allRanksByPly
         isAnalyzed = !fens.isEmpty && fens.indices.allSatisfy { byPly[$0] != nil }
+        // The last ply of a decisive game is a synthetic terminal-mate row
+        // stored at depth 0, which is not a search result, so it must not
+        // drag the reported depth to zero.
+        analyzedDepth = isAnalyzed
+            ? byPly.values.map(\.depth).filter { $0 > 0 }.min()
+            : nil
         // The report is built first because it owns the authoritative
         // classification and accuracy for this game; the move-list badges
         // and the accuracy line above the board are then derived from the

@@ -256,12 +256,24 @@ public final class GameStore: Sendable {
     }
 
     /// Plies whose rank-one analysis records were produced at an equal or
-    /// stronger quality than the explicit request.
+    /// stronger quality than the explicit request, and searched at least as
+    /// deep.
     ///
     /// Legacy rows have no provenance and are deliberately insufficient.
+    ///
+    /// The depth floor matters because the quality presets are a label, not
+    /// a measurement. Rows written when a preset meant a fixed movetime
+    /// carry that preset's name but whatever depth the machine happened to
+    /// reach, so trusting the label alone would silently keep shallow data
+    /// under a preset that now promises a specific depth. A row is reused
+    /// only if it actually meets the depth being asked for.
+    ///
+    /// Synthetic terminal-mate rows are stored at depth 0 and so never
+    /// satisfy a positive floor; rewriting them costs no engine search.
     public func analyzedPlyIndices(
         gameId: Int64,
-        satisfying requestedQuality: AnalysisQualityProvenance
+        satisfying requestedQuality: AnalysisQualityProvenance,
+        minimumDepth: Int = 0
     ) async throws -> Set<Int> {
         try await dbQueue.read { db in
             let rows = try AnalysisRecord
@@ -276,7 +288,7 @@ public final class GameStore: Sendable {
                         AnalysisProvenance.canReuse(
                             storedQuality: $0.qualityPreset,
                             requestedQuality: requestedQuality
-                        )
+                        ) && $0.depth >= minimumDepth
                     }
                     .map(\.plyIndex)
             )

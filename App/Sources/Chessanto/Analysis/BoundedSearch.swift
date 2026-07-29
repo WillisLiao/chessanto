@@ -28,60 +28,31 @@ final class BoundedSearchSession {
     }
 
     let generation: Int
-    /// The depth this search was asked for, or 0 for a movetime search
-    /// where no particular depth was promised.
-    private let targetDepth: Int
     private var collector = BatchCollector()
     private var outcome: Outcome?
     private var waiters: [CheckedContinuation<Void, Never>] = []
-    /// Set when the terminating bestmove arrived before the target depth's
-    /// own info lines did. The session stays open, still recording, until
-    /// either they land or the caller gives up waiting (`settle()`).
-    private(set) var isAwaitingFinalDepth = false
 
-    init(generation: Int, targetDepth: Int = 0) {
+    init(generation: Int) {
         self.generation = generation
-        self.targetDepth = targetDepth
     }
 
     /// Records an info if it belongs to this session and it is still open.
-    ///
-    /// Once the bestmove has arrived and only the final iteration is
-    /// outstanding, an info that completes that iteration resolves the
-    /// session immediately - so the common case costs no extra wait.
     func record(_ info: AnalysisEngine.EngineInfo) {
         guard outcome == nil, info.generation == generation else { return }
         collector.record(info)
-        if isAwaitingFinalDepth, collector.hasReachedDepth(targetDepth) {
-            isAwaitingFinalDepth = false
-            resolve(.success(collector.rankedInfos))
-        }
     }
 
     /// Marks the search finished. Safe to call before, during, or after a
     /// caller begins awaiting, and safe to call more than once.
     ///
-    /// If the search's final iteration has not been delivered yet, this does
-    /// not resolve: the bestmove and that iteration's info lines race in
-    /// delivery, and resolving here would silently store an evaluation one
-    /// ply shallower than the one that was paid for, nondeterministically.
-    /// The caller bounds the wait with `settle()`.
+    /// A depth-limited search sometimes terminates having last reported one
+    /// ply short of the depth it was asked for. Do not add a grace period
+    /// here hoping to collect that final iteration: `engine-smoke` verifies
+    /// by draining that the missing line is never emitted at all, so
+    /// waiting only adds latency. Callers report the depth reached rather
+    /// than the depth requested.
     func complete(generation: Int) {
         guard outcome == nil, generation == self.generation else { return }
-        guard collector.hasReachedDepth(targetDepth) else {
-            isAwaitingFinalDepth = true
-            return
-        }
-        resolve(.success(collector.rankedInfos))
-    }
-
-    /// Resolves a session left open by `complete` waiting on its final
-    /// iteration, with whatever has been collected. The caller calls this
-    /// once its grace window has elapsed, so a lost info line degrades to a
-    /// slightly shallower result rather than to a hang.
-    func settle() {
-        guard outcome == nil, isAwaitingFinalDepth else { return }
-        isAwaitingFinalDepth = false
         resolve(.success(collector.rankedInfos))
     }
 

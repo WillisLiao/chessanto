@@ -564,7 +564,7 @@ struct GameReplayView: View {
                         Image(systemName: "checkmark")
                             .font(.dsSecondary.weight(.semibold))
                             .foregroundStyle(DesignColors.accentText)
-                        Text("Analyzed · \(quality.labelWithDepth)")
+                        Text(analyzedLabel)
                             .font(.dsSecondary.weight(.semibold))
                             .foregroundStyle(DesignColors.textPrimary)
                         Spacer()
@@ -627,6 +627,19 @@ struct GameReplayView: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(DesignColors.hairline).frame(height: 1)
         }
+    }
+
+    /// Reports the depth the stored analysis actually reached, not the depth
+    /// the currently selected preset stands for. A game analyzed under the
+    /// old fixed-movetime presets carries its preset name with whatever
+    /// depth the machine managed, and re-analysing at the same preset now
+    /// deepens it - so the two figures genuinely differ, and the honest one
+    /// is what was measured.
+    private var analyzedLabel: String {
+        guard let depth = viewModel.analyzedDepth else {
+            return "Analyzed · \(quality.label)"
+        }
+        return "Analyzed · depth \(depth)"
     }
 
     private func startAnalysis(reanalyze: Bool) {

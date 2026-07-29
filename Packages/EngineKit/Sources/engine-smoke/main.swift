@@ -151,15 +151,29 @@ Task.detached {
     }
     log("go(movetime: 300ms): cp \(movetimeInfo?.scoreCentipawns.map(String.init) ?? "nil"), bestmove \(movetimeBestMove!)")
 
-    // 4b. A depth-limited search reports exactly the depth it was asked for.
-    //     Batch game analysis is budgeted by depth precisely so the same
-    //     position re-analyzed yields the same evaluation, which only holds
-    //     if the limit is honoured exactly.
+    // 4b. A depth-limited search terminates having reported either the depth
+    //     it was asked for or one less, and waiting longer does not change
+    //     that.
     //
-    //     Do not "improve" this by sending depth and movetime in one `go`:
-    //     Stockfish then reports one iteration fewer (depth 12 with a 20s
-    //     ceiling terminates having reported 11). EngineService bounds a
-    //     depth search with an explicit `stop` instead, which 4c covers.
+    //     The tolerance is a measured property of Stockfish under MultiPV 3
+    //     with multiple threads, not slack. It is deliberately pinned here
+    //     because it was originally misdiagnosed: seeing depth 11 for a
+    //     depth-12 request looks exactly like chesskit-engine's unordered
+    //     response dispatch losing the last `info` behind the terminating
+    //     `bestmove`. It is not. The drain below flushes everything still in
+    //     flight by running a second search and consuming to its own
+    //     bestmove; the depth never improves, so the missing line was never
+    //     emitted, and no amount of waiting on the consumer side can
+    //     recover it.
+    //
+    //     Consequence for callers: budget by depth for reproducibility, and
+    //     report the depth actually reached rather than the depth asked for.
+    //     Do not add a grace period waiting for the final iteration.
+    //
+    //     Do not "improve" this by sending depth and movetime in one `go`
+    //     either: with both limits Stockfish reports one iteration fewer
+    //     again. EngineService bounds a depth search with an explicit `stop`
+    //     instead, which 4c covers.
     // A depth-limited search terminates, and the depth it reports by the
     // time the bestmove is seen is at most the depth requested and never
     // more than one short of it.
@@ -180,11 +194,49 @@ Task.detached {
     // under XCTest.
     let requestedDepth = 12
     var observedDepths: [Int] = []
+    var drainedDepths: [Int] = []
     for _ in 1...8 {
-        let budgeted = await search(fen: startpos, depth: requestedDepth)
-        observedDepths.append(budgeted.rank1Info?.depth ?? -1)
+        let generation = await engine.setPosition(fen: startpos)
+        await engine.go(depth: requestedDepth)
+        var atBestMove = 0
+        var afterDrain = 0
+        var sawBestMove = false
+        drainLoop: while let update = await iterator.next() {
+            switch update {
+            case let .info(info):
+                guard info.generation == generation, info.multiPVRank ?? 1 == 1 else { continue }
+                if sawBestMove {
+                    afterDrain = max(afterDrain, info.depth ?? 0)
+                } else {
+                    atBestMove = max(atBestMove, info.depth ?? 0)
+                    afterDrain = atBestMove
+                }
+            case let .bestMove(gen, _):
+                guard gen == generation else {
+                    // A stale bestmove from the flush search below.
+                    break drainLoop
+                }
+                sawBestMove = true
+                // Flush anything still in flight for this generation by
+                // running a trivial search and consuming up to its own
+                // terminating bestmove.
+                _ = await engine.setPosition(fen: startpos)
+                await engine.go(depth: 1)
+            }
+        }
+        observedDepths.append(atBestMove)
+        drainedDepths.append(afterDrain)
     }
-    log("go(depth: \(requestedDepth)) x8 depths at bestmove: \(observedDepths)")
+    log("go(depth: \(requestedDepth)) x8 depth at bestmove:  \(observedDepths)")
+    log("go(depth: \(requestedDepth)) x8 depth after drain:  \(drainedDepths)")
+    guard observedDepths.allSatisfy({ $0 == requestedDepth || $0 == requestedDepth - 1 }) else {
+        fail("go(depth: \(requestedDepth)) reported depths outside [\(requestedDepth - 1), \(requestedDepth)]: \(observedDepths)")
+    }
+    guard drainedDepths == observedDepths else {
+        fail(
+            "draining after bestmove changed the reported depth (\(observedDepths) -> \(drainedDepths)) - the final iteration IS delivered late, so EngineService should wait for it after all"
+        )
+    }
     guard observedDepths.allSatisfy({ $0 == requestedDepth || $0 == requestedDepth - 1 }) else {
         fail(
             "go(depth: \(requestedDepth)) reported unexpected depths \(observedDepths) - the depth limit is not being honoured"

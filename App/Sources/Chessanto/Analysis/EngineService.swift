@@ -40,13 +40,6 @@ public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    /// The label with the search depth it stands for, so "Standard" is not
-    /// an opaque brand name and two reports analyzed at different presets
-    /// are visibly not the same measurement.
-    public var labelWithDepth: String {
-        "\(label) · depth \(depth)"
-    }
-
     /// The search depth every position in a batch is analyzed to.
     ///
     /// Game analysis is budgeted by depth, not by movetime. The classifier
@@ -55,24 +48,40 @@ public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
     /// anywhere near that precision: the reached depth varies with machine
     /// load, so the same game re-analyzed produces different
     /// classifications, different key moments, and a churning practice
-    /// queue. Depth is reproducible; these numbers are set against Lichess
-    /// server analysis, which runs at roughly depth 20.
+    /// queue.
+    ///
+    /// These numbers are measured rather than chosen. A 50-position game at
+    /// depth 18 with a 4-second ceiling reached 18 on only 14% of its
+    /// positions, the rest cut off between 14 and 17 - reintroducing exactly
+    /// the machine-dependent spread the scheme exists to remove. The depth
+    /// has to be one the search reaches comfortably, with the ceiling as a
+    /// rare backstop. MultiPV is 3, so each of these costs roughly three
+    /// single-line searches.
+    ///
+    /// Expect the depth actually reached to be this or one less: Stockfish
+    /// under MultiPV sometimes terminates having last reported the previous
+    /// iteration, which `engine-smoke` pins down. That is why the UI reports
+    /// the depth stored rather than the depth requested.
     var depth: Int {
         switch self {
-        case .fast: return 14
-        case .standard: return 18
-        case .deep: return 22
+        case .fast: return 12
+        case .standard: return 16
+        case .deep: return 20
         }
     }
 
     /// The wall-clock ceiling on any single position's search, so one
-    /// pathological position cannot stall a whole-game batch. Reaching the
-    /// ceiling before the depth is the exceptional case, not the plan.
+    /// pathological position cannot stall a whole-game batch.
+    ///
+    /// Deliberately generous relative to the depth above: if the ceiling
+    /// binds routinely then the stored depth is really a function of how
+    /// busy the machine was, and reproducibility is lost. It should fire
+    /// for the occasional tactical thicket, not for ordinary positions.
     var movetimeCeilingMilliseconds: Int {
         switch self {
-        case .fast: return 1500
-        case .standard: return 4000
-        case .deep: return 15000
+        case .fast: return 5000
+        case .standard: return 20000
+        case .deep: return 60000
         }
     }
 
@@ -285,7 +294,8 @@ public final class EngineService: ObservableObject {
 
         let analyzedPlies = try await store.analyzedPlyIndices(
             gameId: gameId,
-            satisfying: quality.provenance
+            satisfying: quality.provenance,
+            minimumDepth: quality.depth
         )
         let total = fens.count
         batchProgress = (done: 0, total: total)
@@ -378,15 +388,9 @@ public final class EngineService: ObservableObject {
     private static let deadlineMultiplier = 4
     private static let deadlineFloorMilliseconds = 3000
 
-    /// How long `searchOneShot` will wait, after the terminating bestmove,
-    /// for the final iteration's own info lines to be delivered. They are
-    /// normally already in hand or arrive within a frame; this only bounds
-    /// the case where they are lost entirely.
-    private static let finalDepthGraceMilliseconds = 250
-
     func searchOneShot(fen: String, budget: SearchBudget) async throws -> [AnalysisEngine.EngineInfo] {
         let generation = await engine.setPosition(fen: fen)
-        let session = BoundedSearchSession(generation: generation, targetDepth: budget.depth)
+        let session = BoundedSearchSession(generation: generation)
         activeSearch = session
         let engineRef = engine
         // A depth-limited search is bounded by `stop` at the ceiling rather
@@ -418,33 +422,17 @@ public final class EngineService: ObservableObject {
             session.fail(.timedOut(milliseconds: deadlineMilliseconds))
         }
 
-        // Bounds the post-bestmove wait for the final iteration's info
-        // lines (see `BoundedSearchSession.complete`). Harmless when they
-        // arrive on time, which is the usual case: `settle()` is a no-op on
-        // an already-resolved session.
-        let graceTask = Task { [session] in
-            while !Task.isCancelled {
-                try? await Task.sleep(
-                    nanoseconds: UInt64(Self.finalDepthGraceMilliseconds) * 1_000_000
-                )
-                guard !Task.isCancelled else { return }
-                await MainActor.run { session.settle() }
-            }
-        }
-
         do {
             let infos = try await withTaskCancellationHandler {
                 try await session.value()
             } onCancel: {
                 Task { @MainActor in session.fail(.cancelled) }
             }
-            graceTask.cancel()
             ceilingTask?.cancel()
             deadlineTask.cancel()
             clearActiveSearch(session)
             return infos
         } catch {
-            graceTask.cancel()
             ceilingTask?.cancel()
             deadlineTask.cancel()
             clearActiveSearch(session)
