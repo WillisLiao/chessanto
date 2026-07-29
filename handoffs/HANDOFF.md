@@ -3,7 +3,30 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
-## Current state (2026-07-19)
+## Current state (2026-07-30)
+
+- **Player-lens product review complete (2026-07-30). Review only, no code changed.**
+  - Reviewed the whole product twice, once as an intermediate 1800-rated club player and once as a 300 to 600 rated beginner, covering flow, UI, UX, chess theory, teaching method, analysis correctness, learning science, and attention design.
+  - Findings and a prioritized plan are in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`.
+    Session narrative and method are in `devlogs/2026-07-30.md`.
+    Nothing in either document has been implemented.
+  - **The highest-leverage defect is analysis depth.**
+    `EngineService.swift:21-27` uses movetime (standard is 350ms per position) where the classification thresholds need to distinguish a 9-point win-probability drop from an 11-point one.
+    That is below the evaluation noise floor in sharp positions, and movetime is not reproducible, so re-analysis churns key moments and the spaced-repetition queue.
+    Every teaching surface in the app is downstream of these numbers, so this should land before any other work.
+  - Four correctness holes compound it: no book move exemption (despite `deepestBookPly` already being computed), no forced-move or already-decided-position handling (`WinProbability.fromMate` returns a hard 0 or 100, so every move after an opponent's forced mate reads as a blunder), `Accuracy.average` being a plain arithmetic mean where Lichess uses a volatility-weighted and harmonic combination, and `ThemeDetector.punishment` firing on any capture-first PV so ordinary trades render as hanging pieces.
+    That last false fact propagates into practice card themes, Player Brief motifs, and the takeaway generator.
+  - `MoveClassification.brilliant` is still assigned nowhere despite having a color, a `!!` mark, a glossary entry, and a coach headline.
+  - `KeyMomentSelector` does not filter to the user's side, so the register and the practice card count disagree.
+  - Flow: every aggregate surface needs many analyzed games, and analysis is manual one game at a time with no batch action.
+    Onboarding collects a chess.com username and then lands on an empty window.
+    Player Brief is hard-gated behind chess.com confirmation, so PGN-only users can never see their progress.
+  - Board: no drag and drop, no piece animation, no sounds, no annotation arrows.
+    `playMove` auto-queens with no picker, and a promotion practice card is probably ungradeable (four-character UCI cannot match a five-character `bestMoveUCI`).
+    Reproduce that one before fixing.
+  - The teaching level setting is cosmetic: `RatingRegister` injects one sentence into the LLM prompt and changes no thresholds, moment counts, PV lengths, cards, or grading.
+  - Environment note: sandboxed screen capture was refused by the OS, so visual findings are grounded in the pre-2026-07-19 QA screenshots and are all marked as needing re-verification against a current build.
+  - The live database was backed up before launching the Release build and verified byte-identical afterward at SHA-256 `e9947babbf767d66d5164d28b86af9c843f6973231b0351bb82e84d5921b027b`.
 
 - **User-selectable move notation complete (2026-07-19).**
   - General Settings now lets the user choose standard SAN such as `Nf3` or full piece names such as `Knight f3`.
