@@ -1,5 +1,5 @@
 {
-  "blackAccuracy" : 90.54017937213416,
+  "blackAccuracy" : 74.91771975957465,
   "blackName" : "artin10862",
   "currentPositionLines" : [
     {
@@ -105,6 +105,6 @@
   "movesSoFarSAN" : "1. d4 d6 2. e4 Nf6 3. Nc3 e5 4. f4 exd4 5. Qxd4 Nbd7 6. Nf3 c6 7. Be3 d5 8. exd5 Bc5 9. Qd3 cxd5",
   "result" : "1-0",
   "sideToMoveIsWhite" : true,
-  "whiteAccuracy" : 93.77489639168675,
+  "whiteAccuracy" : 90.05730446536427,
   "whiteName" : "MagnusCarlsen"
 }

@@ -234,3 +234,99 @@ struct MoveClassifierTests {
         #expect(result.allSatisfy { $0 != .blunder && $0 != .mistake })
     }
 }
+
+/// Verifies `Accuracy.game` against values computed by hand from the
+/// documented formula, so the implementation is pinned to arithmetic rather
+/// than to whatever it happened to produce first.
+struct GameAccuracyTests {
+    /// A four-move game, White to move first, no exemptions.
+    /// White win probability: 50 -> 50 -> 50 -> 50 -> 50.
+    ///
+    /// Every window is constant, so every standard deviation is 0 and every
+    /// weight clamps to the 0.5 floor. Every drop is 0, so every per-move
+    /// accuracy is 100. Weighted mean and harmonic mean are therefore both
+    /// 100, and so is their mean.
+    @Test func aPerfectlyLevelGameIsFullAccuracyForBothSides() throws {
+        let accuracies = try #require(
+            Accuracy.game(
+                whiteWinPercents: [50, 50, 50, 50, 50],
+                moverIsWhite: [true, false, true, false],
+                isScored: [true, true, true, true]
+            )
+        )
+        #expect(abs(accuracies.white - 100) < 0.001)
+        #expect(abs(accuracies.black - 100) < 0.001)
+    }
+
+    /// The harmonic mean is the reason a single catastrophe is not buried.
+    /// White plays nine level moves and one that drops 40 points; Black
+    /// never does anything. Nine 100s and one 14.9 average to 91.5 flat,
+    /// which is the number this replaces; the harmonic component pulls the
+    /// reported figure well below it.
+    @Test func oneCatastropheIsNotAveragedAway() throws {
+        var winPercents: [Double] = [50]
+        var movers: [Bool] = []
+        for move in 0..<20 {
+            let isWhite = move % 2 == 0
+            movers.append(isWhite)
+            // White's tenth move is the blunder.
+            winPercents.append(move == 18 ? 10 : winPercents[move])
+        }
+        let accuracies = try #require(
+            Accuracy.game(
+                whiteWinPercents: winPercents,
+                moverIsWhite: movers,
+                isScored: Array(repeating: true, count: 20)
+            )
+        )
+
+        let flatMean = Accuracy.average(
+            (0..<10).map { Accuracy.perMove(drop: $0 == 9 ? 40 : 0) }
+        )
+        #expect(abs(flatMean - 91.5) < 0.5)
+        #expect(accuracies.white < flatMean - 10)
+        #expect(abs(accuracies.black - 100) < 0.001)
+    }
+
+    /// An unscored move contributes nothing to either player's figure, but
+    /// still sits in the win-probability series shaping the volatility
+    /// windows.
+    @Test func unscoredMovesDoNotChangeTheScore() throws {
+        let winPercents: [Double] = [50, 50, 50, 50, 50]
+        let allScored = try #require(
+            Accuracy.game(
+                whiteWinPercents: winPercents,
+                moverIsWhite: [true, false, true, false],
+                isScored: [true, true, true, true]
+            )
+        )
+        let firstExempt = try #require(
+            Accuracy.game(
+                whiteWinPercents: winPercents,
+                moverIsWhite: [true, false, true, false],
+                isScored: [false, true, true, true]
+            )
+        )
+        #expect(abs(allScored.white - firstExempt.white) < 0.001)
+    }
+
+    @Test func aSideWithNoScoredMovesHasNoAccuracy() {
+        #expect(
+            Accuracy.game(
+                whiteWinPercents: [50, 50, 50],
+                moverIsWhite: [true, false],
+                isScored: [false, true]
+            ) == nil
+        )
+    }
+
+    @Test func mismatchedInputLengthsAreRejected() {
+        #expect(
+            Accuracy.game(
+                whiteWinPercents: [50, 50, 50],
+                moverIsWhite: [true],
+                isScored: [true, true]
+            ) == nil
+        )
+    }
+}

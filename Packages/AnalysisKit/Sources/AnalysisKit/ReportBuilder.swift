@@ -20,38 +20,29 @@ public enum ReportBuilder {
             context: ClassificationContext.forGame(input: input, openingBook: openingBook)
         )
 
-        var whiteAccuracies: [Double] = []
-        var blackAccuracies: [Double] = []
         var whiteCounts: [MoveClassification: Int] = [:]
         var blackCounts: [MoveClassification: Int] = [:]
 
         for p in 1...moveCount {
-            let moverIsWhite = whiteToMove[p - 1]
             let classification = classifications[p - 1]
-            if moverIsWhite {
+            if whiteToMove[p - 1] {
                 whiteCounts[classification, default: 0] += 1
             } else {
                 blackCounts[classification, default: 0] += 1
             }
-
-            // Book and forced moves are counted (the player should see them)
-            // but never scored - neither was a decision they made.
-            guard classification.isPlayerDecision else { continue }
-
-            let before = evaluations[p - 1]
-            let after = evaluations[p]
-            let beforeWhiteWinP = WinProbability.whiteWinProbability(scoreCentipawns: before.scoreCentipawns, mateIn: before.mateIn)
-            let afterWhiteWinP = WinProbability.whiteWinProbability(scoreCentipawns: after.scoreCentipawns, mateIn: after.mateIn)
-            let moverBefore = WinProbability.moverWinProbability(whiteWinProbability: beforeWhiteWinP, whiteToMove: moverIsWhite)
-            let moverAfter = WinProbability.moverWinProbability(whiteWinProbability: afterWhiteWinP, whiteToMove: moverIsWhite)
-            let drop = max(0, moverBefore - moverAfter)
-            let accuracy = Accuracy.perMove(drop: drop)
-            if moverIsWhite {
-                whiteAccuracies.append(accuracy)
-            } else {
-                blackAccuracies.append(accuracy)
-            }
         }
+
+        // Book and forced moves stay in the win-probability series, because
+        // they still shape how sharp the game was, but they are not scored -
+        // neither was a decision the player made.
+        let whiteWinPercents = evaluations.map {
+            WinProbability.whiteWinProbability(scoreCentipawns: $0.scoreCentipawns, mateIn: $0.mateIn)
+        }
+        let accuracies = Accuracy.game(
+            whiteWinPercents: whiteWinPercents,
+            moverIsWhite: whiteToMove,
+            isScored: classifications.map(\.isPlayerDecision)
+        )
 
         let opening = buildOpeningFact(input: input, openingBook: openingBook)
 
@@ -88,8 +79,8 @@ public enum ReportBuilder {
             blackName: input.blackName,
             result: input.result,
             chessComUsername: input.chessComUsername,
-            whiteAccuracy: Accuracy.average(whiteAccuracies),
-            blackAccuracy: Accuracy.average(blackAccuracies),
+            whiteAccuracy: accuracies?.white ?? 0,
+            blackAccuracy: accuracies?.black ?? 0,
             whiteClassificationCounts: orderedCounts(whiteCounts),
             blackClassificationCounts: orderedCounts(blackCounts),
             opening: opening,

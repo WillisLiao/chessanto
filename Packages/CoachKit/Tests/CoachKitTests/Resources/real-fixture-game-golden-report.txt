@@ -1,4 +1,4 @@
-MagnusCarlsen (94% accuracy) vs artin10862 (91% accuracy). Result: 1-0.
+MagnusCarlsen (90% accuracy) vs artin10862 (75% accuracy). Result: 1-0.
 
 MagnusCarlsen: 20 best, 1 excellent, 4 good, 1 inaccuracies, 2 book
 artin10862: 16 best, 4 excellent, 2 good, 1 inaccuracies, 1 blunders, 2 book, 1 forced

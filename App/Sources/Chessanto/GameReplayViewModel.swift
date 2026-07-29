@@ -251,8 +251,12 @@ final class GameReplayViewModel: ObservableObject {
         cachedEvaluationsByPly = byPly
         cachedAllRanksByPly = allRanksByPly
         isAnalyzed = !fens.isEmpty && fens.indices.allSatisfy { byPly[$0] != nil }
-        deriveClassifications()
+        // The report is built first because it owns the authoritative
+        // classification and accuracy for this game; the move-list badges
+        // and the accuracy line above the board are then derived from the
+        // same inputs rather than recomputed differently.
         buildReport()
+        deriveClassifications()
     }
 
     private func deriveClassifications() {
@@ -272,7 +276,12 @@ final class GameReplayViewModel: ObservableObject {
         }
 
         let moveUCIs = Array(playedUCIs.dropFirst()).compactMap { $0 }
-        let whiteToMove = (1..<moveIndices.count).map { $0 % 2 == 1 }
+        // Read the mover from each position's own side-to-move field when a
+        // report input is available; ply parity is wrong for a game that
+        // starts from a FEN.
+        let whiteToMove = (1..<moveIndices.count).map { ply in
+            reportInput.map { $0.moverIsWhite(atPly: ply) } ?? (ply % 2 == 1)
+        }
 
         guard moveUCIs.count == moveIndices.count - 1 else {
             classifications = []
@@ -280,33 +289,20 @@ final class GameReplayViewModel: ObservableObject {
         }
 
         classifications = MoveClassifier.classify(
-            positionEvaluations: evaluations, playedUCIs: moveUCIs, whiteToMove: whiteToMove
+            positionEvaluations: evaluations,
+            playedUCIs: moveUCIs,
+            whiteToMove: whiteToMove,
+            // Same exemptions the report applies, so a move shown as "Book"
+            // in the Review is not shown as "Best" in the move list.
+            context: reportInput.map {
+                ClassificationContext.forGame(input: $0, openingBook: OpeningBook.shared)
+            } ?? .none
         )
 
-        var whiteAccuracies: [Double] = []
-        var blackAccuracies: [Double] = []
-        for p in 1..<moveIndices.count {
-            let before = evaluations[p - 1]
-            let after = evaluations[p]
-            let isWhite = whiteToMove[p - 1]
-            let beforeWhiteWinP = WinProbability.whiteWinProbability(
-                scoreCentipawns: before.scoreCentipawns, mateIn: before.mateIn
-            )
-            let afterWhiteWinP = WinProbability.whiteWinProbability(
-                scoreCentipawns: after.scoreCentipawns, mateIn: after.mateIn
-            )
-            let moverBefore = WinProbability.moverWinProbability(whiteWinProbability: beforeWhiteWinP, whiteToMove: isWhite)
-            let moverAfter = WinProbability.moverWinProbability(whiteWinProbability: afterWhiteWinP, whiteToMove: isWhite)
-            let drop = max(0, moverBefore - moverAfter)
-            let accuracy = Accuracy.perMove(drop: drop)
-            if isWhite {
-                whiteAccuracies.append(accuracy)
-            } else {
-                blackAccuracies.append(accuracy)
-            }
-        }
-        whiteAccuracy = whiteAccuracies.isEmpty ? nil : Accuracy.average(whiteAccuracies)
-        blackAccuracy = blackAccuracies.isEmpty ? nil : Accuracy.average(blackAccuracies)
+        // Taken from the report rather than recomputed, so the accuracy line
+        // above the board and the Review's own header can never disagree.
+        whiteAccuracy = report?.whiteAccuracy
+        blackAccuracy = report?.blackAccuracy
     }
 
     /// Builds the M5 coaching report from the cached analysis rows. The app
