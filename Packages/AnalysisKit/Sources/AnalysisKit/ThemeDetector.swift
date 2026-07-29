@@ -56,7 +56,37 @@ public enum ThemeDetector {
         )
     }
 
-    /// Fires when the post-move position's rank-1 PV starts with a capture.
+    /// Fires when the post-move position's rank-1 PV starts with a capture
+    /// that actually wins material.
+    ///
+    /// Two things this deliberately does not do, because it used to and
+    /// they were wrong:
+    ///
+    /// A capture opening the PV is not by itself a punishment. Most
+    /// captures are ordinary trades, and firing on all of them produced
+    /// "This also left the pawn on d5 hanging: exd5." for an even pawn
+    /// exchange. That false fact did not stay in the report either - it fed
+    /// the "Material left en prise" practice theme, the Player Brief's
+    /// "Loose pieces" motif, and the takeaway rule that triggers on two or
+    /// more punishments, so a routine trade became evidence about how the
+    /// player plays.
+    ///
+    /// Material is also not measured at the end of the stored PV. The PV
+    /// starts with the opponent's move, so an odd-length line ends right
+    /// after the opponent takes something and before the recapture, which
+    /// reads as a free piece whenever the line happens to be truncated
+    /// there.
+    ///
+    /// So the board is asked directly rather than inferred from the line's
+    /// length: replay the capture, then see whether the side that just lost
+    /// the piece can take back on that square. If it cannot, the piece was
+    /// undefended and the material is simply won, however short the PV. If
+    /// it can, this is an exchange, and it only counts once it has settled
+    /// - measured over the longest even-length prefix, where both sides
+    /// have had their say.
+    ///
+    /// A line ending in checkmate bypasses all of it. There is no recapture
+    /// to wait for and the material is beside the point.
     public static func punishment(input: ReportInput, ply p: Int) -> PunishmentFact? {
         guard p >= 0, p < input.plies.count else { return nil }
         let postMove = input.plies[p]
@@ -72,17 +102,42 @@ public enum ThemeDetector {
         let moverColor: PieceColor = moverIsWhite ? .white : .black
         let opponentColor = moverColor.opposite
 
-        let postMaterial = ChessGame.material(fen: postMove.fen)
-        let finalFEN = replayed.last?.resultingFEN ?? postMove.fen
-        let finalMaterial = ChessGame.material(fen: finalFEN)
-
         func balance(_ material: (white: Int, black: Int), favoring color: PieceColor) -> Int {
             let mine = color == .white ? material.white : material.black
             let theirs = color == .white ? material.black : material.white
             return mine - theirs
         }
 
-        let netGainForOpponent = balance(finalMaterial, favoring: opponentColor) - balance(postMaterial, favoring: opponentColor)
+        let netGainForOpponent: Int
+        if replayed.last?.isCheckmate == true {
+            netGainForOpponent = settledNetGain(
+                replayed: replayed,
+                plyCount: replayed.count,
+                postMoveFEN: postMove.fen,
+                opponentColor: opponentColor,
+                balance: balance
+            )
+        } else if !ChessGame.hasLegalMove(
+            fen: refutingMove.resultingFEN,
+            endingOn: refutingMove.endSquare
+        ) {
+            // Nothing can take back: the captured piece was undefended, so
+            // its full value is won regardless of how far the PV runs.
+            netGainForOpponent = pieceValue(capturedKind)
+        } else {
+            let settledPlyCount = replayed.count - (replayed.count % 2)
+            guard settledPlyCount >= 2 else { return nil }
+            let gain = settledNetGain(
+                replayed: replayed,
+                plyCount: settledPlyCount,
+                postMoveFEN: postMove.fen,
+                opponentColor: opponentColor,
+                balance: balance
+            )
+            guard gain > 0 else { return nil }
+            netGainForOpponent = gain
+        }
+
         let playedDestination = String(playedUCI.dropFirst(2).prefix(2))
 
         return PunishmentFact(
@@ -93,6 +148,31 @@ public enum ThemeDetector {
             capturesJustMovedPiece: refutingMove.endSquare == playedDestination,
             netMaterialGainForOpponent: netGainForOpponent
         )
+    }
+
+    /// Material the opponent nets across the first `plyCount` moves of a
+    /// replayed line, relative to the position the line starts from.
+    private static func settledNetGain(
+        replayed: [ReplayedMove],
+        plyCount: Int,
+        postMoveFEN: String,
+        opponentColor: PieceColor,
+        balance: ((white: Int, black: Int), PieceColor) -> Int
+    ) -> Int {
+        guard plyCount >= 1 else { return 0 }
+        let settledFEN = replayed[plyCount - 1].resultingFEN
+        return balance(ChessGame.material(fen: settledFEN), opponentColor)
+            - balance(ChessGame.material(fen: postMoveFEN), opponentColor)
+    }
+
+    private static func pieceValue(_ kind: PieceKind) -> Int {
+        switch kind {
+        case .pawn: return 1
+        case .knight, .bishop: return 3
+        case .rook: return 5
+        case .queen: return 9
+        case .king: return 0
+        }
     }
 
     /// True when `record.mateIn` (white-perspective) is a forced mate that

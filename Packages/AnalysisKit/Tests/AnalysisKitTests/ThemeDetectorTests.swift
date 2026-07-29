@@ -53,9 +53,15 @@ private func line(rank: Int, cp: Int?, mate: Int?, pv: [String], depth: Int = 20
     #expect(fact?.netMaterialGainForOpponent == 3)
 }
 
-@Test func punishmentFactMaterialClauseDoesNotFireOnFairTrade() {
-    // A knight on d5, defended by another knight on b6, is "captured" by a
-    // bishop, then recaptured - equal-value trade, net material change 0.
+@Test func punishmentFactDoesNotFireOnAFairTrade() {
+    // A knight on d5, defended by another knight on b6, is captured by a
+    // bishop and recaptured: an equal trade, netting nothing.
+    //
+    // This used to produce a fact with a zero material gain, which rendered
+    // as "This also left the knight on d5 hanging: Bxd5." for an ordinary
+    // exchange - and then fed the "Material left en prise" practice theme
+    // and the Player Brief's "Loose pieces" motif, turning a routine trade
+    // into evidence about the player.
     let input = ReportInput(
         plies: [
             PlyRecord(fen: "4k3/8/1n6/8/8/8/6B1/4K3 b - - 0 1", lines: [], playedUCI: nil),
@@ -67,9 +73,45 @@ private func line(rank: Int, cp: Int?, mate: Int?, pv: [String], depth: Int = 20
         ],
         whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
     )
+    #expect(ThemeDetector.punishment(input: input, ply: 1) == nil)
+}
+
+@Test func punishmentFactDoesNotFireOnATradeTruncatedBeforeTheRecapture() {
+    // The same defended knight, but the stored PV stops after the capture.
+    // Measuring material at the end of the line would read as a free piece
+    // purely because the line was cut there; the recapture decides it.
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/1n6/8/8/8/6B1/4K3 b - - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(
+                fen: "4k3/8/1n6/3n4/8/8/6B1/4K3 w - - 0 1",
+                lines: [line(rank: 1, cp: 0, mate: nil, pv: ["g2d5"])],
+                playedUCI: "f6d5"
+            ),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.punishment(input: input, ply: 1) == nil)
+}
+
+@Test func punishmentFactFiresOnAnUndefendedPieceEvenFromASingleMovePV() {
+    // The same shape as the trade above with the defender removed, so the
+    // knight really is hanging. A one-move PV is enough here, because the
+    // test is whether anything can take back, not how long the line is.
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/8/8/8/8/6B1/4K3 b - - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(
+                fen: "4k3/8/8/3n4/8/8/6B1/4K3 w - - 0 1",
+                lines: [line(rank: 1, cp: 0, mate: nil, pv: ["g2d5"])],
+                playedUCI: "f6d5"
+            ),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
     let fact = ThemeDetector.punishment(input: input, ply: 1)
-    #expect(fact != nil)
-    #expect(fact?.netMaterialGainForOpponent == 0)
+    #expect(fact?.refutingSAN == "Bxd5")
+    #expect(fact?.netMaterialGainForOpponent == 3)
 }
 
 @Test func punishmentFactDoesNotFireWithoutACapturingPV() {

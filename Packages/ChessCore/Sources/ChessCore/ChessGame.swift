@@ -362,6 +362,24 @@ extension ChessGame {
             }
     }
 
+    /// Whether the side to move in `fen` has any legal move ending on
+    /// `square` (given in algebraic notation, e.g. `"d2"`).
+    ///
+    /// Used to tell a free capture from an exchange: replay the capture,
+    /// then ask whether the side that just lost the piece can take back on
+    /// that square. If it cannot, the material is simply won.
+    public static func hasLegalMove(fen: String, endingOn square: String) -> Bool {
+        guard let position = Position(fen: fen) else { return false }
+        let board = Board(position: position)
+        let sideToMove: Piece.Color = fen.split(separator: " ").count > 1
+            && fen.split(separator: " ")[1] == "b"
+            ? .black : .white
+        let target = Square(square)
+        return position.pieces
+            .filter { $0.color == sideToMove }
+            .contains { board.legalMoves(forPieceAt: $0.square).contains(target) }
+    }
+
     /// Whether `fen` parses as a valid position - `ChessGame.init(startingFEN:)`
     /// silently falls back to the starting position on an invalid FEN, so
     /// callers that must distinguish "invalid" from "valid" (the coach's

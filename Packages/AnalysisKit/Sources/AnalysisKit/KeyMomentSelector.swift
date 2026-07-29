@@ -5,15 +5,32 @@ import Foundation
 /// by mover win-probability drop, fill to at least 3 (when available) and
 /// cap at 8, then present chronologically. An empty result is a legitimate
 /// outcome (a clean game).
+///
+/// When the report knows which player the user is, only that player's moves
+/// are candidates. This is a review-your-own-games app: the opponent's
+/// mistakes competed for the same eight slots, so a user's own third-worst
+/// move could be pushed out by a move they did not play. It also made the
+/// report disagree with itself, because `TrainingCardFactory` already
+/// filtered to the user's side afterwards - the register would list eight
+/// moments and Practice would then offer three cards with no explanation.
 public enum KeyMomentSelector {
     public static func selectPlies(classifications: [MoveClassification], input: ReportInput) -> [Int] {
         let candidateKinds: Set<MoveClassification> = [.inaccuracy, .mistake, .blunder, .missedWin]
         let mustInclude: Set<MoveClassification> = [.blunder, .missedWin]
 
+        let userIsWhite: Bool? = if input.isUser(isWhite: true) {
+            true
+        } else if input.isUser(isWhite: false) {
+            false
+        } else {
+            nil
+        }
+
         var drops: [(ply: Int, drop: Double, classification: MoveClassification)] = []
         for (offset, classification) in classifications.enumerated() {
             let ply = offset + 1
             guard candidateKinds.contains(classification) else { continue }
+            if let userIsWhite, input.moverIsWhite(atPly: ply) != userIsWhite { continue }
             guard let fact = ThemeDetector.evalSwing(input: input, ply: ply, classification: classification) else { continue }
             let drop = fact.moverWinProbabilityBefore - fact.moverWinProbabilityAfter
             drops.append((ply, drop, classification))

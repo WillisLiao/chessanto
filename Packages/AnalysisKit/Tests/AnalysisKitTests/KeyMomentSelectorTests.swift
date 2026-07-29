@@ -118,3 +118,55 @@ private func makeWhiteDropsInput(whiteDrops: [Double], whiteClassifications: [Mo
     #expect(selected == selected.sorted())
     #expect(selected == [1, 3, 5])
 }
+
+// MARK: - Whose moves are candidates
+
+/// Two blunders, one by each side, in a game where the FEN's side-to-move
+/// field alternates normally. `chessComUsername` decides whose count.
+private func makeBothSidesBlunderInput(chessComUsername: String?) -> (ReportInput, [MoveClassification]) {
+    // White's win probability: 50 -> 10 (White blunders on ply 1) -> 50
+    // (Black blunders it back on ply 2).
+    let whiteCentipawns = [0, -600, 0]
+    var plies: [PlyRecord] = []
+    for (index, cp) in whiteCentipawns.enumerated() {
+        let sideToMove = index % 2 == 0 ? "w" : "b"
+        let fen = "4k3/p7/8/8/8/8/P7/4K3 \(sideToMove) - - 0 1"
+        plies.append(
+            PlyRecord(
+                fen: fen,
+                lines: [RankedLine(rank: 1, scoreCentipawns: cp, mateIn: nil, principalVariationUCI: ["b2b3"], depth: 10)],
+                playedUCI: index == 0 ? nil : (index == 1 ? "a2a3" : "a7a6")
+            )
+        )
+    }
+    let input = ReportInput(
+        plies: plies,
+        whiteName: "WhitePlayer",
+        blackName: "BlackPlayer",
+        result: "*",
+        chessComUsername: chessComUsername
+    )
+    return (input, [.blunder, .blunder])
+}
+
+@Test func bothSidesAreCandidatesWhenTheUserIsUnknown() {
+    let (input, classifications) = makeBothSidesBlunderInput(chessComUsername: nil)
+    let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input)
+    #expect(selected == [1, 2])
+}
+
+@Test func onlyTheUsersOwnMovesAreCandidatesWhenTheUserIsKnown() {
+    let (whiteInput, classifications) = makeBothSidesBlunderInput(chessComUsername: "WhitePlayer")
+    #expect(KeyMomentSelector.selectPlies(classifications: classifications, input: whiteInput) == [1])
+
+    let (blackInput, blackClassifications) = makeBothSidesBlunderInput(chessComUsername: "blackplayer")
+    #expect(KeyMomentSelector.selectPlies(classifications: blackClassifications, input: blackInput) == [2])
+}
+
+/// The register and the practice queue are built from the same selection,
+/// so they cannot disagree about how many moments the user has to work on.
+@Test func theRegisterAndTheTrainingCardsCoverTheSameMoments() {
+    let (input, classifications) = makeBothSidesBlunderInput(chessComUsername: "WhitePlayer")
+    let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input)
+    #expect(selected.allSatisfy { input.moverIsWhite(atPly: $0) })
+}

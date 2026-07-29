@@ -114,6 +114,10 @@ public enum ReportText {
     }
 
     private static func punishmentSentence(_ fact: PunishmentFact) -> String {
+        // A `PunishmentFact` exists only when the opponent nets material
+        // over a settled exchange, or when the refuting line ends in
+        // checkmate. The mating case can net nothing (or even give material
+        // up), and needs no material clause: the SAN already ends in "#".
         let pieceValue = value(of: fact.capturedPieceKind)
         let materialClause: String
         if fact.netMaterialGainForOpponent >= pieceValue {
