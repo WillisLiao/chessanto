@@ -3,6 +3,11 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Next up
+
+`handoffs/NEXT-SESSION-BOARD.md` - Priority 3 of the product review (drag and drop, the promotion picker and its confirmed grading bug, animation, sounds, annotation arrows).
+Self-contained: no engine, analysis, or schema work.
+
 ## Current state (2026-07-30)
 
 - **Priority 1 of the product review is implemented (2026-07-30): analysis correctness.**
