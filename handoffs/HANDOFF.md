@@ -5,6 +5,31 @@ Read this first at session start; update it at session end.
 
 ## Current state (2026-07-30)
 
+- **Priority 1 of the product review is implemented (2026-07-30): analysis correctness.**
+  - Commits `6939582`, `abf0876`, `43483da`, `b11eb61`. Full narrative in `devlogs/2026-07-30.md`.
+  - **Analysis is budgeted by depth, not movetime.** Presets are depth 12/16/20 with 5s/20s/60s ceilings.
+    The numbers are measured, not chosen: depth 18 with a 4s ceiling reached 18 on only 14% of a 50-position game, with the ceiling binding as the norm, which is the machine-dependent spread the scheme exists to remove.
+    After retuning, 41 of 50 positions reached depth 16 and 9 reached 15, against 7 to 14 before any of this work.
+    Do not combine depth and movetime in one UCI `go` - Stockfish reports one iteration fewer - so the ceiling is enforced with an explicit `stop`.
+  - **Analysis reuse now requires the stored depth to meet the requested depth**, not just a matching preset label, and the UI reports the shallowest depth actually stored rather than the preset's nominal figure.
+    Without this, rows written when "standard" meant 350ms would be kept under a preset that now promises a depth; the real library had a game stored as "standard" whose rank-one depths ran 8 to 17.
+  - **`.book` and `.forced` classifications** exempt theory and single-legal-move plies from scoring while still showing them.
+    `ClassificationContext.forGame` is the single source of truth, so the phone companion cannot label a move "Best" that the Mac calls "Book".
+  - **Punishment facts are decided by the board**, not by the shape of the principal variation: replay the capture, then ask whether the piece can be taken back.
+    Ordinary trades no longer render as hanging pieces or feed the practice themes and Player Brief motifs.
+  - **Key moments are filtered to the user's own side** when the report knows who the user is, so the register and the practice card count stop disagreeing.
+  - **Accuracy follows Lichess's volatility-weighted plus harmonic combination**, fetched from `lichess-org/lila` rather than reconstructed from memory.
+    Fixture game: White 94 to 90, Black 91 to 75.
+  - **Training grading searches at the card's own reference depth**, instead of comparing a 500ms search against a stored deep one.
+  - All suites pass: ChessCore 26, AnalysisKit 78, CoachKit 74, EngineKit 1, Persistence 41, ChessComKit 4, CompanionKit 32, app 107 across 27 suites, plus `engine-smoke` against live Stockfish.
+  - Native end-to-end QA ran the Release build against an isolated copy of the library database and confirmed the Pirc game's first four plies read `Book`, the header reports the real stored depth, and a fresh 50-position analysis completes in about 260 seconds.
+    The live database was verified byte-identical afterwards at SHA-256 `e9947babbf767d66d5164d28b86af9c843f6973231b0351bb82e84d5921b027b`.
+  - **Two claims in the review document below were disproved while implementing them.** They are corrected here; the bootstrap document is superseded on these two points only.
+    - Moves made in an already-mated position do *not* flood the report with blunders. The mover's win probability is pinned at 0, so the drop is 0 and they grade `.excellent`. The real defect in that area was narrower: forced moves graded `.best`.
+    - A depth-`N` search reporting depth `N-1` is *not* a delivery race. `engine-smoke` drains everything still in flight and the depth never improves, so the line is never emitted and no consumer-side wait can recover it. The ±1 ply is inherent to Stockfish under MultiPV with multiple threads. An earlier grace-window fix built on the wrong diagnosis was removed.
+  - **Not done from Priority 1:** `brilliant` is still assigned nowhere. It is a feature rather than a correctness fix and belongs with the teaching-depth work.
+  - **Found while verifying, not fixed:** one game in the library fails to parse with `ChessKit.PGNParser.Error error 2`, and its modal "Load error" alert silently swallows clicks on the window beneath it.
+
 - **Player-lens product review complete (2026-07-30). Review only, no code changed.**
   - Reviewed the whole product twice, once as an intermediate 1800-rated club player and once as a 300 to 600 rated beginner, covering flow, UI, UX, chess theory, teaching method, analysis correctness, learning science, and attention design.
   - Findings and a prioritized plan are in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`.

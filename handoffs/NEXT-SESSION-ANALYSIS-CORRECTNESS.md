@@ -4,7 +4,17 @@ Bootstrap document for unstarted work.
 Produced by the 2026-07-30 player-lens review session, which read the codebase and ran the Release build but changed no code.
 
 Read this together with `handoffs/HANDOFF.md`.
-Nothing in this document has been implemented.
+
+**Status: Priority 1 is implemented (2026-07-30), except P1.6 (`brilliant`).**
+Priorities 2 through 5 are still unstarted and remain the plan.
+
+Two items in Priority 1 were disproved while being implemented, and this document is superseded on those two points only.
+See `handoffs/HANDOFF.md` and `devlogs/2026-07-30.md` for the corrections:
+
+- P1.3's "already-decided positions" half is wrong. Moves in an already-mated position grade `.excellent`, not `.blunder`, because the mover's win probability is pinned at 0 and the drop is therefore 0. Only the forced-move half was a real defect.
+- P1.1's implementation notes describe a delivery race between the final `info` line and the terminating `bestmove`. There is no such race: the line is never emitted at all, and the ±1 ply is inherent to Stockfish under MultiPV.
+
+The rest of this document stands as written.
 
 ## What this session did
 
