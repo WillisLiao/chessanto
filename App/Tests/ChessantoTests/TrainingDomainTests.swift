@@ -6,35 +6,43 @@ import Testing
 @testable import Chessanto
 
 struct TrainingDomainTests {
+    /// Games here start from a bare king-and-pawn position rather than the
+    /// standard array. Every legal first move from the standard array is a
+    /// named opening in the bundled book, so a move-one key moment there is
+    /// classified `.book` and correctly never becomes a training card -
+    /// which would make these fixtures test the book exemption instead of
+    /// the card factory.
+    private static let outOfBookStartFEN = "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"
+
     @Test
     func cardFactoryCanRepresentAnAuditedFirstMove() throws {
         let input = ReportInput(
             plies: [
                 PlyRecord(
-                    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    fen: Self.outOfBookStartFEN,
                     lines: [
                         RankedLine(
                             rank: 1,
                             scoreCentipawns: 0,
                             mateIn: nil,
-                            principalVariationUCI: ["e2e4"],
+                            principalVariationUCI: ["e1e2"],
                             depth: 16
                         )
                     ],
                     playedUCI: nil
                 ),
                 PlyRecord(
-                    fen: "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+                    fen: "4k3/8/8/8/8/4P3/8/4K3 b - - 0 1",
                     lines: [
                         RankedLine(
                             rank: 1,
                             scoreCentipawns: -500,
                             mateIn: nil,
-                            principalVariationUCI: ["e7e5"],
+                            principalVariationUCI: ["e8d7"],
                             depth: 16
                         )
                     ],
-                    playedUCI: "f2f3"
+                    playedUCI: "e2e3"
                 )
             ],
             whiteName: "White",
@@ -56,17 +64,17 @@ struct TrainingDomainTests {
 
     @Test
     func cardFactoryUsesThePositionImmediatelyBeforeTheMissedMove() throws {
-        let preMoveFEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        let preMoveFEN = "4k3/8/8/8/8/4P3/8/4K3 b - - 0 1"
         let input = ReportInput(
             plies: [
                 PlyRecord(
-                    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    fen: Self.outOfBookStartFEN,
                     lines: [
                         RankedLine(
                             rank: 1,
                             scoreCentipawns: 0,
                             mateIn: nil,
-                            principalVariationUCI: ["e2e4"],
+                            principalVariationUCI: ["e1e2"],
                             depth: 16
                         )
                     ],
@@ -79,24 +87,24 @@ struct TrainingDomainTests {
                             rank: 1,
                             scoreCentipawns: 0,
                             mateIn: nil,
-                            principalVariationUCI: ["e7e5"],
+                            principalVariationUCI: ["e8d7"],
                             depth: 16
                         )
                     ],
-                    playedUCI: "e2e4"
+                    playedUCI: "e2e3"
                 ),
                 PlyRecord(
-                    fen: "rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                    fen: "8/4k3/8/8/8/4P3/8/4K3 w - - 1 2",
                     lines: [
                         RankedLine(
                             rank: 1,
                             scoreCentipawns: 500,
                             mateIn: nil,
-                            principalVariationUCI: ["d2d4"],
+                            principalVariationUCI: ["e1e2"],
                             depth: 16
                         )
                     ],
-                    playedUCI: "f7f6"
+                    playedUCI: "e8e7"
                 )
             ],
             whiteName: "White",
@@ -116,7 +124,7 @@ struct TrainingDomainTests {
         #expect(draft.sourcePly == 2)
         #expect(draft.preMoveFEN == preMoveFEN)
         #expect(draft.sideToMove == .black)
-        #expect(draft.rankedLines.first?.principalVariationUCI.first == "e7e5")
+        #expect(draft.rankedLines.first?.principalVariationUCI.first == "e8d7")
 
         let whitePlayerInput = ReportInput(
             plies: input.plies,

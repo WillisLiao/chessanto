@@ -151,6 +151,85 @@ Task.detached {
     }
     log("go(movetime: 300ms): cp \(movetimeInfo?.scoreCentipawns.map(String.init) ?? "nil"), bestmove \(movetimeBestMove!)")
 
+    // 4b. A depth-limited search reports exactly the depth it was asked for.
+    //     Batch game analysis is budgeted by depth precisely so the same
+    //     position re-analyzed yields the same evaluation, which only holds
+    //     if the limit is honoured exactly.
+    //
+    //     Do not "improve" this by sending depth and movetime in one `go`:
+    //     Stockfish then reports one iteration fewer (depth 12 with a 20s
+    //     ceiling terminates having reported 11). EngineService bounds a
+    //     depth search with an explicit `stop` instead, which 4c covers.
+    // A depth-limited search terminates, and the depth it reports by the
+    // time the bestmove is seen is at most the depth requested and never
+    // more than one short of it.
+    //
+    // The "one short" allowance is not slack, it is a measured property of
+    // the transport: Stockfish always completes the requested iteration,
+    // but chesskit-engine dispatches every response through its own
+    // unstructured `Task`, so that iteration's `info` lines and the
+    // terminating `bestmove` race. Eight runs at depth 12 here reported
+    // [11, 11, 11, 12, 12, 11, 12, 11].
+    //
+    // A consumer that resolves on the bestmove alone therefore stores a
+    // nondeterministically shallower evaluation, which is precisely what
+    // depth budgeting exists to prevent. `BoundedSearchSession` closes that
+    // window by staying open until the requested depth lands (bounded by
+    // `EngineService.finalDepthGraceMilliseconds`); `BoundedSearchTests`
+    // covers it deterministically, since a live engine cannot be driven
+    // under XCTest.
+    let requestedDepth = 12
+    var observedDepths: [Int] = []
+    for _ in 1...8 {
+        let budgeted = await search(fen: startpos, depth: requestedDepth)
+        observedDepths.append(budgeted.rank1Info?.depth ?? -1)
+    }
+    log("go(depth: \(requestedDepth)) x8 depths at bestmove: \(observedDepths)")
+    guard observedDepths.allSatisfy({ $0 == requestedDepth || $0 == requestedDepth - 1 }) else {
+        fail(
+            "go(depth: \(requestedDepth)) reported unexpected depths \(observedDepths) - the depth limit is not being honoured"
+        )
+    }
+    guard observedDepths.contains(requestedDepth) else {
+        fail(
+            "go(depth: \(requestedDepth)) never once delivered the requested depth across 8 runs \(observedDepths) - Stockfish is not completing the iteration at all, and the grace window cannot rescue it"
+        )
+    }
+
+    // 4c. `stop` during a deep search still terminates with a real bestmove
+    //     and leaves the partial lines usable. This is the mechanism
+    //     EngineService's movetime ceiling relies on: it starts a
+    //     depth-limited search and sends `stop` if the ceiling elapses
+    //     first, so a pathological position degrades to a shallower real
+    //     evaluation rather than to a thrown error.
+    let generation4c = await engine.setPosition(fen: startpos)
+    await engine.go(depth: 60)
+    var stoppedDepth = 0
+    var stoppedBestMove: String?
+    var stopSent = false
+    stoppedLoop: while let update = await iterator.next() {
+        switch update {
+        case let .info(info):
+            guard info.generation == generation4c, info.multiPVRank ?? 1 == 1 else { continue }
+            stoppedDepth = max(stoppedDepth, info.depth ?? 0)
+            if !stopSent, stoppedDepth >= 10 {
+                stopSent = true
+                await engine.stop()
+            }
+        case let .bestMove(gen, move):
+            guard gen == generation4c else { continue }
+            stoppedBestMove = move
+            break stoppedLoop
+        }
+    }
+    guard let stoppedBestMove else {
+        fail("stop() during a depth-60 search never produced a terminating bestmove")
+    }
+    guard stoppedDepth >= 10, stoppedDepth < 60 else {
+        fail("stop() during a depth-60 search ended at depth \(stoppedDepth), expected a partial depth")
+    }
+    log("stop() mid-search: terminated at depth \(stoppedDepth), bestmove \(stoppedBestMove)")
+
     // 5. Generation isolation under rapid position switching: run a normal
     //    midgame search immediately followed by a bounded search on a
     //    stalemate position with no legal moves. F2 diagnosis: the listener

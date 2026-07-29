@@ -342,6 +342,26 @@ extension ChessGame {
         return (white, black)
     }
 
+    /// How many legal moves the side to move has in `fen`, counting each
+    /// promotion of the same pawn to the same square once.
+    ///
+    /// A position with exactly one legal move gives its player no choice,
+    /// so grading that move against the engine's preference measures
+    /// nothing about the player. Returns 0 for an unparseable FEN, which
+    /// callers should treat as "unknown", not as stalemate.
+    public static func legalMoveCount(fen: String) -> Int {
+        guard let position = Position(fen: fen) else { return 0 }
+        let board = Board(position: position)
+        let sideToMove: Piece.Color = fen.split(separator: " ").count > 1
+            && fen.split(separator: " ")[1] == "b"
+            ? .black : .white
+        return position.pieces
+            .filter { $0.color == sideToMove }
+            .reduce(0) { total, piece in
+                total + board.legalMoves(forPieceAt: piece.square).count
+            }
+    }
+
     /// Whether `fen` parses as a valid position - `ChessGame.init(startingFEN:)`
     /// silently falls back to the starting position on an invalid FEN, so
     /// callers that must distinguish "invalid" from "valid" (the coach's

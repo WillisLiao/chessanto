@@ -201,6 +201,17 @@ public actor AnalysisEngine {
         await engine.send(command: .go(movetime: movetimeMilliseconds))
     }
 
+    /// Note on combining `depth` with `movetime` in a single UCI `go`:
+    /// don't. Stockfish accepts `go depth N movetime M`, but with both
+    /// limits set it reports one iteration fewer than `go depth N` alone
+    /// does (verified live via `engine-smoke`: `depth 12` plus a 20s
+    /// ceiling terminates having reported depth 11, while `depth 14` alone
+    /// reports 14). Callers that want a wall-clock ceiling on a
+    /// depth-limited search should send `go(depth:)` and then `stop()` when
+    /// the ceiling elapses - Stockfish answers `stop` with a normal
+    /// `bestmove`, so the partial result is still usable, which a combined
+    /// limit would not make any easier.
+
     public func stop() async {
         await engine.send(command: .stop)
     }

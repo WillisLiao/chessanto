@@ -158,11 +158,17 @@ enum PortableReportAssembler {
         }
         let playedUCIs = input.plies.dropFirst().compactMap(\.playedUCI)
         guard playedUCIs.count + 1 == input.plies.count else { return [] }
-        let whiteToMove = (1..<input.plies.count).map { $0 % 2 == 1 }
+        // Read the mover from the position's own side-to-move field rather
+        // than from ply parity, which is wrong for a game starting from a
+        // FEN - same rule the desktop report uses.
+        let whiteToMove = (1..<input.plies.count).map { input.moverIsWhite(atPly: $0) }
         return MoveClassifier.classify(
             positionEvaluations: evaluations,
             playedUCIs: playedUCIs,
-            whiteToMove: whiteToMove
+            whiteToMove: whiteToMove,
+            // Same context as the desktop report, so the phone cannot label
+            // a move "Best" that the Mac calls "Book" or "Forced".
+            context: ClassificationContext.forGame(input: input, openingBook: OpeningBook.shared)
         )
     }
 
@@ -186,6 +192,9 @@ enum PortableReportAssembler {
         case .brilliant, .best:
             return .delighted
         case .excellent, .good:
+            return .instructive
+        case .book, .forced:
+            // Neither a decision nor a mistake, so the coach stays neutral.
             return .instructive
         }
     }

@@ -5,6 +5,28 @@ import EngineKit
 import Foundation
 import Persistence
 
+/// One bounded search's budget: search to `depth`, spending no more than
+/// `movetimeCeilingMilliseconds` on it.
+///
+/// A depth of 0 means "no depth limit", which is how the interactive
+/// searches (the coach's `evaluate` tool, practice-move grading) express a
+/// pure movetime budget - those are latency-bound, not reproducibility-bound.
+public struct SearchBudget: Sendable, Equatable {
+    public let depth: Int
+    public let movetimeCeilingMilliseconds: Int
+
+    public init(depth: Int, movetimeCeilingMilliseconds: Int) {
+        self.depth = depth
+        self.movetimeCeilingMilliseconds = movetimeCeilingMilliseconds
+    }
+
+    /// A pure movetime budget, for interactive searches where a bounded
+    /// wait matters more than a reproducible depth.
+    public static func movetime(_ milliseconds: Int) -> SearchBudget {
+        SearchBudget(depth: 0, movetimeCeilingMilliseconds: milliseconds)
+    }
+}
+
 public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
     case fast, standard, deep
 
@@ -18,12 +40,44 @@ public enum AnalysisQuality: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    var movetimeMilliseconds: Int {
+    /// The label with the search depth it stands for, so "Standard" is not
+    /// an opaque brand name and two reports analyzed at different presets
+    /// are visibly not the same measurement.
+    public var labelWithDepth: String {
+        "\(label) · depth \(depth)"
+    }
+
+    /// The search depth every position in a batch is analyzed to.
+    ///
+    /// Game analysis is budgeted by depth, not by movetime. The classifier
+    /// resolves a 9-point mover win-probability drop from an 11-point one,
+    /// and a fixed-movetime search does not hold its evaluation steady to
+    /// anywhere near that precision: the reached depth varies with machine
+    /// load, so the same game re-analyzed produces different
+    /// classifications, different key moments, and a churning practice
+    /// queue. Depth is reproducible; these numbers are set against Lichess
+    /// server analysis, which runs at roughly depth 20.
+    var depth: Int {
         switch self {
-        case .fast: return 100
-        case .standard: return 350
-        case .deep: return 2000
+        case .fast: return 14
+        case .standard: return 18
+        case .deep: return 22
         }
+    }
+
+    /// The wall-clock ceiling on any single position's search, so one
+    /// pathological position cannot stall a whole-game batch. Reaching the
+    /// ceiling before the depth is the exceptional case, not the plan.
+    var movetimeCeilingMilliseconds: Int {
+        switch self {
+        case .fast: return 1500
+        case .standard: return 4000
+        case .deep: return 15000
+        }
+    }
+
+    var searchBudget: SearchBudget {
+        SearchBudget(depth: depth, movetimeCeilingMilliseconds: movetimeCeilingMilliseconds)
     }
 
     var provenance: AnalysisQualityProvenance {
@@ -283,7 +337,7 @@ public final class EngineService: ObservableObject {
         fen: String,
         quality: AnalysisQuality
     ) async throws -> [AnalysisRecord] {
-        let infos = try await searchOneShot(fen: fen, movetimeMilliseconds: quality.movetimeMilliseconds)
+        let infos = try await searchOneShot(fen: fen, budget: quality.searchBudget)
         return infos.map { info in
             AnalysisRecord(
                 gameId: gameId,
@@ -313,26 +367,69 @@ public final class EngineService: ObservableObject {
     /// for it - cannot happen: the session latches completion regardless of
     /// arrival order).
     ///
-    /// Every search carries a deadline derived from its movetime:
+    /// Every search carries a deadline derived from its movetime ceiling:
     /// `deadlineMultiplier` absorbs a loaded machine, `deadlineFloorMilliseconds`
-    /// absorbs process scheduling. Yields 3400/4400/11000ms for
-    /// `.fast`/`.standard`/`.deep` and 5000ms for the 500ms coach/training
-    /// search. On timeout or cancellation the session is failed with a typed
-    /// error, the engine is told to stop, and the active session is cleared
-    /// so any later, now-irrelevant update is dropped by `route`.
+    /// absorbs process scheduling. The deadline is a backstop against the
+    /// engine never terminating at all - the search's own ceiling is what
+    /// normally bounds it. On timeout or cancellation the session is failed
+    /// with a typed error, the engine is told to stop, and the active
+    /// session is cleared so any later, now-irrelevant update is dropped by
+    /// `route`.
     private static let deadlineMultiplier = 4
     private static let deadlineFloorMilliseconds = 3000
 
-    func searchOneShot(fen: String, movetimeMilliseconds: Int) async throws -> [AnalysisEngine.EngineInfo] {
-        let generation = await engine.setPosition(fen: fen)
-        let session = BoundedSearchSession(generation: generation)
-        activeSearch = session
-        await engine.go(movetimeMilliseconds: movetimeMilliseconds)
+    /// How long `searchOneShot` will wait, after the terminating bestmove,
+    /// for the final iteration's own info lines to be delivered. They are
+    /// normally already in hand or arrive within a frame; this only bounds
+    /// the case where they are lost entirely.
+    private static let finalDepthGraceMilliseconds = 250
 
-        let deadlineMilliseconds = movetimeMilliseconds * Self.deadlineMultiplier + Self.deadlineFloorMilliseconds
+    func searchOneShot(fen: String, budget: SearchBudget) async throws -> [AnalysisEngine.EngineInfo] {
+        let generation = await engine.setPosition(fen: fen)
+        let session = BoundedSearchSession(generation: generation, targetDepth: budget.depth)
+        activeSearch = session
+        let engineRef = engine
+        // A depth-limited search is bounded by `stop` at the ceiling rather
+        // than by a combined UCI limit, because combining the two costs an
+        // iteration (see `AnalysisEngine.go(depth:)`'s note). Stockfish
+        // answers `stop` with a normal `bestmove`, so a ceiling hit resolves
+        // the session with the deepest lines it did finish instead of
+        // throwing away the position's analysis entirely.
+        let ceilingTask: Task<Void, Never>?
+        if budget.depth > 0 {
+            await engine.go(depth: budget.depth)
+            ceilingTask = Task {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(budget.movetimeCeilingMilliseconds) * 1_000_000
+                )
+                guard !Task.isCancelled else { return }
+                await engineRef.stop()
+            }
+        } else {
+            await engine.go(movetimeMilliseconds: budget.movetimeCeilingMilliseconds)
+            ceilingTask = nil
+        }
+
+        let deadlineMilliseconds =
+            budget.movetimeCeilingMilliseconds * Self.deadlineMultiplier
+            + Self.deadlineFloorMilliseconds
         let deadlineTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(deadlineMilliseconds) * 1_000_000)
             session.fail(.timedOut(milliseconds: deadlineMilliseconds))
+        }
+
+        // Bounds the post-bestmove wait for the final iteration's info
+        // lines (see `BoundedSearchSession.complete`). Harmless when they
+        // arrive on time, which is the usual case: `settle()` is a no-op on
+        // an already-resolved session.
+        let graceTask = Task { [session] in
+            while !Task.isCancelled {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(Self.finalDepthGraceMilliseconds) * 1_000_000
+                )
+                guard !Task.isCancelled else { return }
+                await MainActor.run { session.settle() }
+            }
         }
 
         do {
@@ -341,13 +438,16 @@ public final class EngineService: ObservableObject {
             } onCancel: {
                 Task { @MainActor in session.fail(.cancelled) }
             }
+            graceTask.cancel()
+            ceilingTask?.cancel()
             deadlineTask.cancel()
             clearActiveSearch(session)
             return infos
         } catch {
+            graceTask.cancel()
+            ceilingTask?.cancel()
             deadlineTask.cancel()
             clearActiveSearch(session)
-            let engineRef = engine
             Task { await engineRef.stop() }
             throw error
         }
@@ -364,9 +464,9 @@ public final class EngineService: ObservableObject {
     /// `evaluateTrainingPosition`.
     private func searchRankOne(
         resultingFEN: String,
-        movetimeMilliseconds: Int
+        budget: SearchBudget
     ) async throws -> (info: AnalysisEngine.EngineInfo, scoreCentipawns: Int?, mateIn: Int?) {
-        let infos = try await searchOneShot(fen: resultingFEN, movetimeMilliseconds: movetimeMilliseconds)
+        let infos = try await searchOneShot(fen: resultingFEN, budget: budget)
         guard let rank1 = infos.first(where: { ($0.multiPVRank ?? 1) == 1 }) ?? infos.first else {
             throw EngineToolArgumentError("engine returned no analysis for \(resultingFEN)")
         }
@@ -374,6 +474,16 @@ public final class EngineService: ObservableObject {
         let mateIn = EngineScoreNormalizer.whitePerspectiveMate(rank1.mateIn, fen: resultingFEN)
         return (rank1, scoreCentipawns, mateIn)
     }
+
+    /// The coach's `evaluate` tool runs inside an LLM tool loop, so it is
+    /// latency-sensitive, but a cited evaluation that disagrees with the
+    /// stored analysis it sits beside reads as the coach contradicting the
+    /// report. A depth limit close to `.standard` keeps the two comparable
+    /// without an unbounded wait.
+    private static let coachEvaluateBudget = SearchBudget(
+        depth: 16,
+        movetimeCeilingMilliseconds: 2500
+    )
 
     // MARK: - EngineToolExecutor (the coach's `evaluate` tool, Layer 3)
 
@@ -443,7 +553,7 @@ public final class EngineService: ObservableObject {
 
         let (rank1, scoreCentipawns, mateIn) = try await searchRankOne(
             resultingFEN: resultingFEN,
-            movetimeMilliseconds: 500
+            budget: Self.coachEvaluateBudget
         )
         return EngineToolResult(
             resultingFEN: resultingFEN,
@@ -483,18 +593,35 @@ public final class EngineService: ObservableObject {
             throw EngineToolArgumentError("a batch analysis is already running")
         }
 
+        let budget = Self.trainingBudget(referenceDepth: request.referenceDepth)
         return try await runOnFIFOTail {
-            try await self.runTrainingEvaluationSearch(resultingFEN: resultingFEN)
+            try await self.runTrainingEvaluationSearch(
+                resultingFEN: resultingFEN,
+                budget: budget
+            )
         }
     }
 
-    private func runTrainingEvaluationSearch(resultingFEN: String) async throws -> WhitePerspectiveScore {
+    /// One ply shallower than the card's own stored search, floored so a
+    /// card carrying a missing or nonsensical depth still gets a usable
+    /// search rather than an instant one.
+    private static func trainingBudget(referenceDepth: Int) -> SearchBudget {
+        SearchBudget(
+            depth: max(referenceDepth - 1, 12),
+            movetimeCeilingMilliseconds: 6000
+        )
+    }
+
+    private func runTrainingEvaluationSearch(
+        resultingFEN: String,
+        budget: SearchBudget
+    ) async throws -> WhitePerspectiveScore {
         stopLive()
         defer { resumeLiveIfPending() }
 
         let (_, scoreCentipawns, mateIn) = try await searchRankOne(
             resultingFEN: resultingFEN,
-            movetimeMilliseconds: 500
+            budget: budget
         )
         guard let score = WhitePerspectiveScore(scoreCentipawns: scoreCentipawns, mateIn: mateIn) else {
             throw EngineSearchError.noAnalysis

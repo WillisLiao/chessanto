@@ -8,7 +8,11 @@ struct GameReplayViewModelTrainingTests {
     @Test
     func analyzedReportBecomesReadyWithItsExactLearnerOwnedPreMovePosition() async throws {
         let store = try GameStore()
-        let pgn = "1. f3 f6 *"
+        // The key moment is White's third ply, not the first: every legal
+        // first move from the standard array is a named opening in the
+        // bundled book, so a move-one mistake is classified `.book` and
+        // correctly produces no training card.
+        let pgn = "1. f3 f6 2. Kf2 *"
         let record = try #require(
             try store.save(
                 GameRecord(
@@ -28,8 +32,11 @@ struct GameReplayViewModelTrainingTests {
         let fens = try indices.map { index in
             try #require(game.fen(at: index))
         }
-        let lines = ["e2e4", "e7e5", "d2d4"]
-        let scores = [0, -500, 500]
+        // Ply 1 is book. Ply 2 is graded but level, so it is not a key
+        // moment. Ply 3 collapses from level to -500, which is the blunder
+        // this test expects to become the single training card.
+        let lines = ["e2e4", "e7e5", "d2d4", "d7d5"]
+        let scores = [0, 0, 0, -500]
         for ply in fens.indices {
             try await store.saveAnalysis(
                 [
@@ -57,12 +64,12 @@ struct GameReplayViewModelTrainingTests {
         }
 
         #expect(viewModel.trainingCardCount == 1)
-        #expect(viewModel.trainingCardSourcePlies == [1])
+        #expect(viewModel.trainingCardSourcePlies == [3])
         #expect(viewModel.trainingCardError == nil)
 
         let cards = try await viewModel.trainingCards()
-        #expect(cards.map { $0.sourcePly } == [1])
-        #expect(cards.first?.preMoveFEN == fens[0])
+        #expect(cards.map { $0.sourcePly } == [3])
+        #expect(cards.first?.preMoveFEN == fens[2])
     }
 
     @Test

@@ -18,6 +18,9 @@ extension MoveClassification {
         case .blunder: return Color(NSColor(hex: "#D14B4B"))
         case .missedWin: return Color(NSColor(hex: "#9B6FD1"))
         case .brilliant: return Color(NSColor(hex: "#26C1B6"))
+        // Book and forced moves are context, not quality, so they stay off
+        // the move-quality spectrum entirely and read as secondary text.
+        case .book, .forced: return DesignColors.textSecondary
         }
     }
 
@@ -31,6 +34,8 @@ extension MoveClassification {
         case .mistake: return "Mistake"
         case .blunder: return "Blunder"
         case .missedWin: return "Missed Win"
+        case .book: return "Book"
+        case .forced: return "Forced"
         }
     }
 
@@ -46,6 +51,8 @@ extension MoveClassification {
         case .mistake: return .text("?")
         case .blunder: return .text("??")
         case .missedWin: return .systemImage("xmark")
+        case .book: return .systemImage("book.closed")
+        case .forced: return .systemImage("arrow.turn.down.right")
         }
     }
 }

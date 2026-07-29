@@ -43,6 +43,10 @@ enum CoachStageText {
             return "That idea deserves a closer look."
         case .best, .excellent, .good:
             return "This move kept the position on course."
+        case .book:
+            return "This was still opening theory."
+        case .forced:
+            return "There was nothing else to play."
         }
     }
 

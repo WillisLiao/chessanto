@@ -157,4 +157,80 @@ struct MoveClassifierTests {
         )
         #expect(result == [.blunder])
     }
+
+    // MARK: - Moves that were not the player's decision
+
+    @Test func pliesInsideTheOpeningBookAreNotGraded() {
+        // Three plies whose evaluations would otherwise grade as a blunder,
+        // an excellent, and a mistake. The first two are still theory.
+        let evals = [
+            eval(cp: 20, best: "z0z0"),
+            eval(cp: -400),
+            eval(cp: -390, best: "z0z0"),
+            eval(cp: 10),
+        ]
+        let result = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["e2e4", "e7e5", "g1f3"],
+            whiteToMove: [true, false, true],
+            context: ClassificationContext(deepestBookPly: 2)
+        )
+        #expect(result[0] == .book)
+        #expect(result[1] == .book)
+        #expect(result[2] != .book)
+    }
+
+    @Test func aMoveWithNoAlternativeIsForcedNotBest() {
+        // Without the context this is `.best` (the played UCI matches the
+        // engine's), which inflates both accuracy and the best-move count
+        // for a move the player had no choice about.
+        let evals = [eval(cp: 30, best: "e2e4"), eval(cp: 30)]
+        let graded = MoveClassifier.classify(
+            positionEvaluations: evals, playedUCIs: ["e2e4"], whiteToMove: [true]
+        )
+        #expect(graded == [.best])
+
+        let forced = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["e2e4"],
+            whiteToMove: [true],
+            context: ClassificationContext(forcedPlies: [1])
+        )
+        #expect(forced == [.forced])
+    }
+
+    @Test func theoryWinsOverForcedWhenAPlyIsBoth() {
+        let evals = [eval(cp: 30, best: "e2e4"), eval(cp: 30)]
+        let result = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["e2e4"],
+            whiteToMove: [true],
+            context: ClassificationContext(deepestBookPly: 1, forcedPlies: [1])
+        )
+        #expect(result == [.book])
+    }
+
+    @Test func onlyBookAndForcedAreExemptFromScoring() {
+        let exempt = MoveClassification.allCases.filter { !$0.isPlayerDecision }
+        #expect(Set(exempt) == Set([.book, .forced]))
+    }
+
+    /// Guards a claim that turned out to be false when checked: moves made
+    /// in an already-mated position do *not* flood the report with
+    /// blunders. Once the mover's win probability is pinned at 0 the drop
+    /// is 0, so they grade as `.excellent`. Recorded as a test so the
+    /// behaviour is deliberate rather than incidental.
+    @Test func movesInAnAlreadyLostPositionDoNotGradeAsBlunders() {
+        let evals = [
+            eval(mate: -5, best: "a1a2"),
+            eval(mate: -4, best: "b1b2"),
+            eval(mate: -3),
+        ]
+        let result = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["h1h2", "g1g2"],
+            whiteToMove: [true, false]
+        )
+        #expect(result.allSatisfy { $0 != .blunder && $0 != .mistake })
+    }
 }

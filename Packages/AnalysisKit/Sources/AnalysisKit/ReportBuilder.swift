@@ -14,7 +14,10 @@ public enum ReportBuilder {
         let whiteToMove: [Bool] = (1...moveCount).map { input.moverIsWhite(atPly: $0) }
 
         let classifications = MoveClassifier.classify(
-            positionEvaluations: evaluations, playedUCIs: playedUCIs, whiteToMove: whiteToMove
+            positionEvaluations: evaluations,
+            playedUCIs: playedUCIs,
+            whiteToMove: whiteToMove,
+            context: ClassificationContext.forGame(input: input, openingBook: openingBook)
         )
 
         var whiteAccuracies: [Double] = []
@@ -30,6 +33,10 @@ public enum ReportBuilder {
             } else {
                 blackCounts[classification, default: 0] += 1
             }
+
+            // Book and forced moves are counted (the player should see them)
+            // but never scored - neither was a decision they made.
+            guard classification.isPlayerDecision else { continue }
 
             let before = evaluations[p - 1]
             let after = evaluations[p]

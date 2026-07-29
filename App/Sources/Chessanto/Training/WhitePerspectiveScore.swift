@@ -40,4 +40,15 @@ enum WhitePerspectiveScore: Sendable, Equatable {
 struct TrainingPositionRequest: Sendable, Equatable {
     let preMoveFEN: String
     let attemptedMoveUCI: String
+    /// The depth the card's own stored lines were searched to.
+    ///
+    /// Grading compares this attempt's score against the card's cached
+    /// rank-one score, so the two searches have to be comparable. The
+    /// attempt is scored from the position *after* the move, one ply
+    /// deeper into the game than the stored pre-move search, so the
+    /// equivalent budget is one ply shallower. Searching the attempt at a
+    /// fixed short movetime instead - as this did before - meant a shallow
+    /// evaluation was subtracted from a deep one, and the difference showed
+    /// up as engine loss the learner never actually caused.
+    let referenceDepth: Int
 }

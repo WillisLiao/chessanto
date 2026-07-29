@@ -409,6 +409,8 @@ struct GameReplayView: View {
             return .delighted
         case .best, .excellent, .good:
             return .instructive
+        case .book, .forced:
+            return .instructive
         }
     }
 
@@ -562,7 +564,7 @@ struct GameReplayView: View {
                         Image(systemName: "checkmark")
                             .font(.dsSecondary.weight(.semibold))
                             .foregroundStyle(DesignColors.accentText)
-                        Text("Analyzed · \(quality.label)")
+                        Text("Analyzed · \(quality.labelWithDepth)")
                             .font(.dsSecondary.weight(.semibold))
                             .foregroundStyle(DesignColors.textPrimary)
                         Spacer()

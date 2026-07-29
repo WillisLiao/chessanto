@@ -1,7 +1,7 @@
 MagnusCarlsen (94% accuracy) vs artin10862 (91% accuracy). Result: 1-0.
 
-MagnusCarlsen: 21 best, 2 excellent, 4 good, 1 inaccuracies
-artin10862: 18 best, 4 excellent, 3 good, 1 inaccuracies, 1 blunders
+MagnusCarlsen: 20 best, 1 excellent, 4 good, 1 inaccuracies, 2 book
+artin10862: 16 best, 4 excellent, 2 good, 1 inaccuracies, 1 blunders, 2 book, 1 forced
 
 Opening: Pirc Defense (B00). White left book on move 3. with Nc3.
 

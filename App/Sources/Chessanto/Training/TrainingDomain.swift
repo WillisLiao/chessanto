@@ -53,6 +53,12 @@ struct TrainingCard: Identifiable, Equatable, Sendable {
         guard let bestMoveUCI else { return nil }
         return ChessGame.replayLine(fromUCI: [bestMoveUCI], startingFEN: preMoveFEN).first?.san
     }
+
+    /// The depth this card's stored lines were searched to, which is the
+    /// budget an attempted move has to be graded against to be comparable.
+    var referenceDepth: Int {
+        rankedLines.sorted { $0.rank < $1.rank }.first?.depth ?? 0
+    }
 }
 
 extension TrainingCard {
@@ -323,7 +329,11 @@ struct DefaultTrainingMoveEvaluator: TrainingMoveEvaluator {
             return cachedScore
         }
         return try await evaluateAttemptedMove(
-            TrainingPositionRequest(preMoveFEN: card.preMoveFEN, attemptedMoveUCI: attemptedUCI)
+            TrainingPositionRequest(
+                preMoveFEN: card.preMoveFEN,
+                attemptedMoveUCI: attemptedUCI,
+                referenceDepth: card.referenceDepth
+            )
         )
     }
 

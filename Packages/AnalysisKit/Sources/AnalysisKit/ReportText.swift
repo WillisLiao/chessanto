@@ -58,6 +58,8 @@ public enum ReportText {
         case .mistake: return "mistakes"
         case .blunder: return "blunders"
         case .missedWin: return "missed wins"
+        case .book: return "book"
+        case .forced: return "forced"
         }
     }
 

@@ -23,6 +23,8 @@ enum ChessGlossary {
         .mistake: "a clear error that gives up real advantage",
         .blunder: "a serious error that loses significant advantage",
         .missedWin: "a winning continuation was available and was not played",
+        .book: "a known opening move, still following published theory rather than a choice made at the board",
+        .forced: "the only legal move in the position, so there was nothing to choose between",
     ]
 
     /// Returns the gloss for whichever known term appears in `text`, or
