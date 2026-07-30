@@ -439,6 +439,80 @@ struct PracticeSessionViewModelTests {
 
         #expect(viewModel.linePreview == nil)
     }
+
+    /// The end-user path for a promotion card: click the pawn, click the
+    /// promotion square. The engine's own best move is `b7b8q`, so the
+    /// square pair alone (`b7b8`) cannot name it - the session has to ask
+    /// which piece before it can grade the learner's answer.
+    @Test
+    func promotingByClickingTheBackRankGradesTheEngineMoveAsStrong() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "8/1P6/8/7k/8/8/8/4K3 w - - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "b7b8q",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":900,"principalVariationUCI":["b7b8q"],"depth":16}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(-9999) }
+        )
+
+        await viewModel.load()
+        viewModel.select(square: try #require(BoardSquare(algebraic: "b7")))
+        viewModel.select(square: try #require(BoardSquare(algebraic: "b8")))
+
+        #expect(viewModel.pendingPromotion?.from.algebraic == "b7")
+        #expect(viewModel.pendingPromotion?.to.algebraic == "b8")
+
+        await viewModel.completePromotion(with: .queen)
+
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected feedback state, got \(viewModel.state)")
+            return
+        }
+        #expect(feedback.outcome == .strong)
+        #expect(feedback.attemptedUCI == "b7b8q")
+        #expect(feedback.attemptedMoveSAN == "b8=Q")
+    }
+
+    @Test
+    func cancellingThePromotionPickerLeavesTheCardUnanswered() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "8/1P6/8/7k/8/8/8/4K3 w - - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "b7b8q",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":900,"principalVariationUCI":["b7b8q"],"depth":16}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(-9999) }
+        )
+
+        await viewModel.load()
+        viewModel.select(square: try #require(BoardSquare(algebraic: "b7")))
+        viewModel.select(square: try #require(BoardSquare(algebraic: "b8")))
+        viewModel.cancelPromotion()
+
+        #expect(viewModel.pendingPromotion == nil)
+        #expect(viewModel.state == .prompt)
+        #expect(try await store.trainingAttempts(cardId: card.id!).isEmpty)
+    }
 }
 
 private actor TrainingTimeoutState {

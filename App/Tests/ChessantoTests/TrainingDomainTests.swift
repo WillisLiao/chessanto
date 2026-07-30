@@ -399,6 +399,87 @@ struct TrainingDomainTests {
         #expect(result.lossCentipawns == nil)
     }
 
+    /// The board hands the evaluator whatever UCI the interaction produced.
+    /// A promotion's engine UCI is five characters (`b7b8q`), so a card whose
+    /// rank-one line is a promotion can only be answered correctly if the
+    /// attempted move carries its promotion piece too.
+    ///
+    /// Position: white pawn b7, kings on e1 and h5. Promoting is neither
+    /// check nor stalemate, so nothing terminal short-circuits the grading
+    /// and the cached-line path is the one under test.
+    private static let promotionFEN = "8/1P6/8/7k/8/8/8/4K3 w - - 0 1"
+
+    @Test
+    func promotionMatchesItsCachedRankOneLineWithoutEngineSearch() async throws {
+        let probe = SearchProbe()
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            await probe.markSearched()
+            return .centipawns(-9999)
+        }
+
+        let result = try await evaluator.evaluate(
+            card: card(
+                fen: Self.promotionFEN,
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: 900, mateIn: nil, principalVariationUCI: ["b7b8q"], depth: 16)
+                ]
+            ),
+            attemptedUCI: "b7b8q"
+        )
+
+        #expect(result.outcome == .strong)
+        #expect(result.lossCentipawns == 0)
+        #expect(result.attemptedMoveSAN == "b8=Q")
+        #expect(await probe.wasSearched == false)
+    }
+
+    @Test
+    func underpromotionIsReplayedAsTheChosenPieceRatherThanAQueen() async throws {
+        let evaluator = DefaultTrainingMoveEvaluator { _ in .centipawns(300) }
+
+        let result = try await evaluator.evaluate(
+            card: card(
+                fen: Self.promotionFEN,
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: 900, mateIn: nil, principalVariationUCI: ["b7b8q"], depth: 16)
+                ]
+            ),
+            attemptedUCI: "b7b8n"
+        )
+
+        #expect(result.attemptedMoveSAN == "b8=N")
+        #expect(result.outcome == .incorrect)
+        #expect(result.lossCentipawns == 600)
+    }
+
+    /// A square pair cannot name a promotion, and the evaluator must not
+    /// pretend otherwise. Before `replayLine` learned to reject it, `b7b8`
+    /// replayed into a position with a *pawn on b8* and that illegal
+    /// position was then sent to the engine to be scored. It is now refused
+    /// outright, like any other move that cannot be played.
+    @Test
+    func squarePairUCIIsRefusedRatherThanScoredAsAnIllegalPosition() async throws {
+        let probe = SearchProbe()
+        let evaluator = DefaultTrainingMoveEvaluator { _ in
+            await probe.markSearched()
+            return .centipawns(-9999)
+        }
+
+        let result = try await evaluator.evaluate(
+            card: card(
+                fen: Self.promotionFEN,
+                rankedLines: [
+                    RankedLine(rank: 1, scoreCentipawns: 900, mateIn: nil, principalVariationUCI: ["b7b8q"], depth: 16)
+                ]
+            ),
+            attemptedUCI: "b7b8"
+        )
+
+        #expect(result.outcome == .incorrect)
+        #expect(result.attemptedMoveSAN == nil)
+        #expect(await probe.wasSearched == false)
+    }
+
     @Test
     func deterministicScheduleTransitionsToMasteredAfterThreeStrongRecalls() {
         let scheduler = DeterministicReviewScheduler()

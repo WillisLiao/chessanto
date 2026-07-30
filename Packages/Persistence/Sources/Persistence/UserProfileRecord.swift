@@ -16,6 +16,10 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
     public var analysisQuality: String
     public var boardTheme: String
     public var moveNotationStyle: String
+    /// Board move/capture sounds. Defaults on, matching every mainstream
+    /// chess board - a learner tracking what just happened is the reason
+    /// the sounds exist.
+    public var boardSoundsEnabled: Bool
 
     public init(
         id: Int64 = 1,
@@ -27,7 +31,8 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
         hasCompletedOnboarding: Bool = false,
         analysisQuality: String = "standard",
         boardTheme: String = "classic",
-        moveNotationStyle: String = "standard"
+        moveNotationStyle: String = "standard",
+        boardSoundsEnabled: Bool = true
     ) {
         self.id = id
         self.chessComUsername = chessComUsername
@@ -39,5 +44,6 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
         self.analysisQuality = analysisQuality
         self.boardTheme = boardTheme
         self.moveNotationStyle = moveNotationStyle
+        self.boardSoundsEnabled = boardSoundsEnabled
     }
 }

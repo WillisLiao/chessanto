@@ -123,8 +123,26 @@ final class GameReplayViewModel: ObservableObject {
     }
 
     func jump(to index: MoveIndex) {
+        let previousIndex = currentIndex
         currentIndex = index
         refreshPosition()
+        // Sound follows what the board now shows, so stepping forward,
+        // clicking a move in the ledger, and playing a variation move all
+        // sound the same. Stepping *backwards* is silent: unplaying a move
+        // is not a move being made, and announcing it makes scrubbing back
+        // through a game unpleasant.
+        if index != previousIndex, !isStepBackwards(from: previousIndex, to: index),
+            let detail = chessGame?.moveDetail(at: index)
+        {
+            BoardSounds.shared.play(for: detail)
+        }
+    }
+
+    /// Whether `index` is the position `previousIndex` came from - the one
+    /// navigation that undoes a move rather than making one.
+    private func isStepBackwards(from previousIndex: MoveIndex, to index: MoveIndex) -> Bool {
+        guard let chessGame else { return false }
+        return chessGame.previous(before: previousIndex) == index
     }
 
     func stepForward() {
@@ -544,6 +562,14 @@ final class GameReplayViewModel: ObservableObject {
     func legalDestinations(from square: SquareCoordinate) -> [SquareCoordinate] {
         guard let chessGame else { return [] }
         return chessGame.legalMoves(from: square, at: currentIndex)
+    }
+
+    /// Whether moving from `start` to `end` in the currently displayed
+    /// position promotes a pawn, so the board knows to ask for a piece
+    /// before playing anything.
+    func isPromotion(from start: SquareCoordinate, to end: SquareCoordinate) -> Bool {
+        guard let chessGame else { return false }
+        return chessGame.isPromotion(from: start, to: end, at: currentIndex)
     }
 
     /// Attempts to play a legal move at the currently displayed position.

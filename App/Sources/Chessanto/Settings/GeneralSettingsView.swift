@@ -8,6 +8,7 @@ struct GeneralSettingsView: View {
     @State private var quality: AnalysisQuality = .standard
     @State private var theme: BoardTheme = .classic
     @State private var notationStyle: MoveNotationStyle = .standard
+    @State private var soundsEnabled = true
     @State private var username: String = ""
 
     var body: some View {
@@ -35,6 +36,19 @@ struct GeneralSettingsView: View {
                     }
                 }
                 .padding(.vertical, DesignSpacing.xs)
+
+                Toggle("Play move and capture sounds", isOn: $soundsEnabled)
+                    .onChange(of: soundsEnabled) { _, newValue in
+                        library.saveBoardSoundsEnabled(newValue)
+                        // Sound the change so the toggle demonstrates what it
+                        // controls instead of only describing it.
+                        if newValue { BoardSounds.shared.play(.move) }
+                    }
+
+                Text("Captures sound different from quiet moves, so you can hear what happened while stepping through a game.")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Move notation") {
@@ -82,6 +96,7 @@ struct GeneralSettingsView: View {
             quality = library.analysisQuality
             theme = library.boardTheme
             notationStyle = library.moveNotationStyle
+            soundsEnabled = library.boardSoundsEnabled
             username = library.chessComUsername
         }
     }

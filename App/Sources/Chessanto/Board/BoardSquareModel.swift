@@ -9,7 +9,7 @@ enum PieceKind: String, Sendable {
     case pawn, knight, bishop, rook, queen, king
 }
 
-struct DisplayPiece: Identifiable, Sendable {
+struct DisplayPiece: Identifiable, Equatable, Sendable {
     let color: PieceColor
     let kind: PieceKind
     var id: String { "\(color.rawValue)-\(kind.rawValue)" }
@@ -48,7 +48,7 @@ struct BoardSquare: Hashable, Sendable {
 
 /// A snapshot of a position, ready for rendering. Built from ChessCore's
 /// position type by the replay view model.
-struct BoardPosition: Sendable {
+struct BoardPosition: Equatable, Sendable {
     var pieces: [BoardSquare: DisplayPiece]
 
     static let empty = BoardPosition(pieces: [:])

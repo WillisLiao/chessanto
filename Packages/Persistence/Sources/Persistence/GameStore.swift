@@ -93,7 +93,7 @@ public final class GameStore: Sendable {
             return try GameStore(path: databaseURL.path)
         }
 
-        if environment["XCTestConfigurationFilePath"]?.isEmpty == false {
+        if isRunningUnderTests(environment: environment) {
             let runID = environment["CHESSANTO_TEST_RUN_ID"]
                 ?? String(ProcessInfo.processInfo.processIdentifier)
             let directory = FileManager.default.temporaryDirectory
@@ -120,6 +120,37 @@ public final class GameStore: Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let dbURL = directory.appendingPathComponent("chessanto.sqlite")
         return try GameStore(path: dbURL.path)
+    }
+
+    /// Whether this process is a test run, and therefore must never be
+    /// allowed near the user's real database.
+    ///
+    /// The environment variable alone was not enough. `xcodebuild test` on
+    /// the app scheme launches the real app as the test host, and that host
+    /// builds a `GameLibrary` - and therefore a `defaultStore()` - during
+    /// SwiftUI's own startup, before the variable is observable here. The
+    /// consequence was silent and serious: running the app's unit tests
+    /// applied any new migration to the live database.
+    ///
+    /// The reliable signal is a loaded test bundle, which is present in both
+    /// shapes this project runs tests in - the injected `ChessantoTests`
+    /// bundle in the app host, and the `…PackageTests.xctest` bundle under
+    /// SwiftPM, where XCTest itself is never loaded because these are
+    /// swift-testing suites.
+    static func isRunningUnderTests(environment: [String: String]) -> Bool {
+        if environment["XCTestConfigurationFilePath"]?.isEmpty == false { return true }
+        if environment["XCTestBundlePath"]?.isEmpty == false { return true }
+        if environment["XCTestSessionIdentifier"]?.isEmpty == false { return true }
+        if NSClassFromString("XCTestCase") != nil { return true }
+        if Bundle.allBundles.contains(where: { $0.bundlePath.hasSuffix(".xctest") }) { return true }
+        // SwiftPM runs swift-testing suites out of its own helper binary,
+        // where none of the signals above exist.
+        let executablePath = Bundle.main.executablePath
+            ?? ProcessInfo.processInfo.arguments.first
+            ?? ""
+        return executablePath.contains(".xctest")
+            || executablePath.hasSuffix("swiftpm-testing-helper")
+            || executablePath.hasSuffix("xctest")
     }
 
     @discardableResult

@@ -153,6 +153,28 @@ private let samplePGN = """
     #expect(replayed[0].isCheck)
 }
 
+@Test func replayLineHandlesUnderpromotion() {
+    let fen = "4k3/P7/8/8/8/8/8/4K3 w - - 0 1"
+    let replayed = ChessGame.replayLine(fromUCI: ["a7a8n"], startingFEN: fen)
+    #expect(replayed.count == 1)
+    #expect(replayed[0].san == "a8=N")
+    #expect(replayed[0].resultingFEN.hasPrefix("N3k3/"))
+}
+
+/// A square-pair UCI cannot name a promotion. Replaying it as-is would put a
+/// pawn on the back rank - an illegal position that callers then hand to the
+/// engine - so the replay stops instead.
+@Test func replayLineRejectsAPromotionMissingItsPiece() {
+    let fen = "4k3/P7/8/8/8/8/8/4K3 w - - 0 1"
+    #expect(ChessGame.replayLine(fromUCI: ["a7a8"], startingFEN: fen).isEmpty)
+}
+
+@Test func replayLineStopsWhenALaterMoveIsAPromotionMissingItsPiece() {
+    let fen = "4k3/P7/8/8/8/8/8/4K3 w - - 0 1"
+    let replayed = ChessGame.replayLine(fromUCI: ["e1e2", "e8e7", "a7a8"], startingFEN: fen)
+    #expect(replayed.map(\.san) == ["Ke2", "Ke7"])
+}
+
 private let startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 @Test func replayLineStopsAtFirstUnplayableMove() {

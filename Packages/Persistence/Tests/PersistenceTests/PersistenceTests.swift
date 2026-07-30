@@ -45,6 +45,28 @@ struct PersistenceTests {
         #expect(databasePath?.contains("Application Support/Chessanto") == false)
     }
 
+    /// `xcodebuild test` on the app scheme runs the real app as its test
+    /// host, and that host reaches `defaultStore()` during SwiftUI startup
+    /// without `XCTestConfigurationFilePath` being observable yet. Before
+    /// this guard existed, running the app's unit tests applied every new
+    /// migration to the user's real database.
+    @Test func defaultStoreIsolatesATestHostWithNoTestEnvironmentVariables() throws {
+        #expect(GameStore.isRunningUnderTests(environment: [:]))
+
+        let store = try GameStore.defaultStore(environment: [
+            "CHESSANTO_TEST_RUN_ID": UUID().uuidString
+        ])
+        let databasePath = try store.dbQueue.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT file FROM pragma_database_list WHERE name = 'main'"
+            )
+        }
+
+        #expect(databasePath?.contains("/ChessantoTests/") == true)
+        #expect(databasePath?.contains("Application Support/Chessanto") == false)
+    }
+
     @Test func trainingReconciliationErrorsExplainTheInvalidPracticeData() {
         #expect(
             TrainingCardReconciliationError.invalidFEN.localizedDescription
@@ -832,7 +854,7 @@ struct PersistenceTests {
         #expect(result.1?.hintCount == 1)
         #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
         #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
-        #expect(result.3.last == "v9_analysisProvenance")
+        #expect(result.3.last == "v10_boardSounds")
         #expect(result.4.isEmpty)
     }
 
@@ -932,6 +954,36 @@ struct PersistenceTests {
         }
 
         #expect(profile?.moveNotationStyle == "standard")
-        #expect(migrations.last == "v9_analysisProvenance")
+        #expect(migrations.last == "v10_boardSounds")
+    }
+
+    @Test func v10MigrationTurnsBoardSoundsOnForExistingProfiles() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v9_analysisProvenance")
+
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO userProfile (
+                        id, chessComUsername, isChessComAccountConfirmed,
+                        ratingBand, coachEnabled, hasCompletedOnboarding,
+                        analysisQuality, boardTheme, moveNotationStyle
+                    ) VALUES (
+                        1, 'learner', 1, 'adaptive', 0, 1,
+                        'standard', 'classic', 'standard'
+                    )
+                    """
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let profile = try queue.read { db in
+            try UserProfileRecord.fetchOne(db, key: 1)
+        }
+
+        #expect(profile?.boardSoundsEnabled == true)
+        #expect(profile?.chessComUsername == "learner")
+        #expect(profile?.moveNotationStyle == "standard")
     }
 }

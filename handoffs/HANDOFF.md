@@ -5,10 +5,37 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-`handoffs/NEXT-SESSION-BOARD.md` - Priority 3 of the product review (drag and drop, the promotion picker and its confirmed grading bug, animation, sounds, annotation arrows).
-Self-contained: no engine, analysis, or schema work.
+Priority 2 of the product review - flow - in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`, expanded into `handoffs/NEXT-SESSION-FLOW.md`.
+Before anything else, run the four board items listed as unverified below through a real visible window; `scripts/axdrag.swift` is committed and ready.
 
 ## Current state (2026-07-30)
+
+- **Priority 3 of the product review is implemented (2026-07-30): the board.**
+  Full narrative in `devlogs/2026-07-30.md` under "Priority 3: the board".
+  - **The promotion bug was real but not where the review placed it.** The evaluator already handled `b7b8q` correctly; the UI could only ever produce a square pair.
+    Reproducing that square pair found the worse half: `replayLine(fromUCI: ["b7b8"])` returned a position with **a white pawn standing on b8**, and that illegal position was being sent to Stockfish to be scored.
+    `ChessGame.replayLine` now stops at a back-rank pawn move that names no promotion piece, rather than leaving an illegal position or inventing a queen.
+  - **`BoardInteraction` is the single select-then-move state machine**, replacing the two drifting copies in `GameReplayView` and `PracticeSessionViewModel`.
+    It is a pure value type; the board's knowledge arrives per call through a `Context` of closures.
+    `BoardInteraction.Move.uci` is the one place a promotion becomes five characters.
+    This was built before the promotion picker rather than after, so the picker only had to be written once.
+  - **The promotion picker** is an in-board column of the four pieces on the promotion file, using the real cburnett artwork, over a dismissing scrim. Underpromotion is reachable for the first time.
+  - **Drag and drop** runs as a `simultaneousGesture` alongside the per-square buttons, so tap-to-move survives as the accessible path and all 64 `square-<algebraic>` identifiers the QA scripts drive are intact. 4pt threshold.
+  - **Animation** moves the arriving piece by animating a scalar inside the piece layer, never the board's geometry, so the column cannot reflow and resize the board. 180ms ease-out, skipped under Reduce Motion.
+  - **Sounds** are synthesized by `scripts/generate-sounds.py`, so no third-party licence rides alongside the GPLv3 build. `BoardSounds.isEnabled` starts false until `GameLibrary` has read the stored preference. New `v10_boardSounds` migration and a General settings toggle, on by default.
+  - **Coordinates** went 16% to 22% of the square with an 11pt floor and bold weight, and are now `accessibilityHidden` since each square's button already carries its name.
+  - **Annotations are deliberately not persisted.** Right-drag arrows and circles clear when the position changes, as on lichess and chess.com. Persisting them needs a position-keyed table plus a lifecycle answer for re-analysis and variation deletion, which is its own session. Right-drag comes from `RightDragCatcher`, which claims hit tests only during right-mouse events so left clicks pass through.
+  - **A pre-existing data-safety defect was found and fixed.** `xcodebuild test` on the app scheme launches the real app as its test host, which reaches `GameStore.defaultStore()` during SwiftUI startup; the `XCTestConfigurationFilePath` guard did not catch it, so the test run applied `v10_boardSounds` to the **live** database.
+    Confirmed with a throwaway probe migration, fixed in `GameStore.isRunningUnderTests` (loaded XCTest runtime, loaded `.xctest` bundle, SwiftPM's `swiftpm-testing-helper`), and re-probed to confirm the live database is now untouched.
+    Harmless until now only because no earlier session added a migration while testing.
+  - Suites: app 138 across 29 (was 107 across 27), ChessCore 29, AnalysisKit 78, CoachKit 74, EngineKit 1, Persistence 43, ChessComKit 4, CompanionKit 32.
+  - Native QA against an isolated copy confirmed the picker, `axb8=N` underpromotion persisting to the variation table, cancel playing nothing, an ordinary `Nf3` through the same machine, the 64 square identifiers, the bundled sounds, and the settings toggle persisting.
+    The QA copy was deleted; the live database passes `PRAGMA integrity_check` with its 15 games, 668 analysis rows, 10 cards and 75 variations at SHA-256 `173a3693267582696c9ce2415d83cf6d3e158089fab9116d6fe550a5ca72c133`.
+    That differs from the `e9947b…` recorded earlier today only by the `v10_boardSounds` column, which the app applies on next launch regardless.
+  - **Not verified in the real app: drag and drop, right-drag annotations, the arrival animation, and coordinate sizing.**
+    All four need a composited window; the display stopped compositing partway through QA (every Chessanto window including its menu bar reported `onscreen=false` while unlocked and on console) and could not be woken from the agent environment.
+    `scripts/axdrag.swift` is committed for exactly this.
+  - **Found, not fixed:** `libc++abi: … mutex lock failed` prints after roughly half of app test runs, always *after* the run reports success. Exit code was 0 and `** TEST SUCCEEDED **` in all 8 sampled runs. Static-destruction ordering in the vendored Stockfish, not a flaky test.
 
 - **Priority 1 of the product review is implemented (2026-07-30): analysis correctness.**
   - Commits `6939582`, `abf0876`, `43483da`, `b11eb61`. Full narrative in `devlogs/2026-07-30.md`.

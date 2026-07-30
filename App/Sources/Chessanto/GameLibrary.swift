@@ -13,6 +13,7 @@ final class GameLibrary: ObservableObject {
     @Published var analysisQuality: AnalysisQuality
     @Published var boardTheme: BoardTheme
     @Published var moveNotationStyle: MoveNotationStyle
+    @Published var boardSoundsEnabled: Bool
     @Published private(set) var hasCompletedOnboarding: Bool
     @Published private(set) var analyzedGameIDs: Set<Int64> = []
     @Published private(set) var openingByGameID: [Int64: String] = [:]
@@ -33,7 +34,12 @@ final class GameLibrary: ObservableObject {
         self.analysisQuality = profile.flatMap { AnalysisQuality(rawValue: $0.analysisQuality) } ?? .standard
         self.boardTheme = profile.flatMap { BoardTheme(rawValue: $0.boardTheme) } ?? .classic
         self.moveNotationStyle = profile.flatMap { MoveNotationStyle(rawValue: $0.moveNotationStyle) } ?? .standard
+        self.boardSoundsEnabled = profile?.boardSoundsEnabled ?? true
         self.hasCompletedOnboarding = profile?.hasCompletedOnboarding ?? false
+        // The board plays sound through a shared player rather than reading
+        // this object, so the stored preference has to be pushed to it once
+        // at launch and again on every change.
+        BoardSounds.shared.isEnabled = self.boardSoundsEnabled
         reload()
     }
 
@@ -77,6 +83,18 @@ final class GameLibrary: ObservableObject {
         do {
             var profile = try store.userProfile()
             profile.moveNotationStyle = style.rawValue
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveBoardSoundsEnabled(_ isEnabled: Bool) {
+        boardSoundsEnabled = isEnabled
+        BoardSounds.shared.isEnabled = isEnabled
+        do {
+            var profile = try store.userProfile()
+            profile.boardSoundsEnabled = isEnabled
             try store.saveUserProfile(profile)
         } catch {
             errorMessage = error.localizedDescription

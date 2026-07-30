@@ -165,6 +165,14 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v10_boardSounds") { db in
+            try db.alter(table: "userProfile") { t in
+                t.add(column: "boardSoundsEnabled", .boolean)
+                    .notNull()
+                    .defaults(to: true)
+            }
+        }
+
         return migrator
     }
 }

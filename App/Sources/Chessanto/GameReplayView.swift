@@ -16,7 +16,7 @@ struct GameReplayView: View {
 
     @State private var quality: AnalysisQuality = .standard
     @State private var analysisTask: Task<Void, Never>?
-    @State private var selectedSquare: BoardSquare?
+    @State private var interaction = BoardInteraction()
     @State private var rightPaneTab: RightPaneTab = .moves
     @State private var flipped = false
     @State private var isCoachOpen = false
@@ -116,7 +116,7 @@ struct GameReplayView: View {
             }
         }
         .onChange(of: viewModel.currentIndex) {
-            selectedSquare = nil
+            interaction.reset()
             if linePreview == nil {
                 showLivePosition()
             }
@@ -185,7 +185,14 @@ struct GameReplayView: View {
                             selectedSquare: selectedSquare,
                             legalDestinations: legalDestinations,
                             arrows: suggestedMoveArrows,
-                            onSquareTapped: handleSquareTapped
+                            pendingPromotion: interaction.pendingPromotion,
+                            onSquareTapped: handleSquareTapped,
+                            onPieceDragStarted: handleDragStarted,
+                            onPieceDropped: handleDrop(from:to:),
+                            onPromotionChosen: { kind in
+                                play(interaction.choosePromotion(kind))
+                            },
+                            onPromotionCancelled: { interaction.cancelPromotion() }
                         )
                         BoardIdentityStripView(info: identityStrips(flipped: flipped).bottom)
                     }
@@ -364,7 +371,7 @@ struct GameReplayView: View {
     private func beginLinePreview(label: String, startingFEN: String, moves: [String], coachPly: Int) {
         linePreview?.pause()
         engineService.stopLive()
-        selectedSquare = nil
+        interaction.reset()
         coachMomentPly = coachPly
         let preview = LinePreviewController(label: label, startingFEN: startingFEN, uciMoves: moves)
         linePreview = preview
@@ -496,37 +503,52 @@ struct GameReplayView: View {
         return [(from: from, to: to)]
     }
 
-    private var legalDestinations: Set<BoardSquare> {
-        guard let selectedSquare else { return [] }
-        return Set(
-            viewModel.legalDestinations(from: SquareCoordinate(notation: selectedSquare.algebraic))
-                .compactMap { BoardSquare(algebraic: $0.notation) }
+    /// The board knowledge the shared interaction machine needs, read off
+    /// the currently displayed position.
+    private var interactionContext: BoardInteraction.Context {
+        BoardInteraction.Context(
+            position: viewModel.position,
+            legalDestinations: { square in
+                Set(
+                    viewModel.legalDestinations(from: SquareCoordinate(notation: square.algebraic))
+                        .compactMap { BoardSquare(algebraic: $0.notation) }
+                )
+            },
+            isPromotion: { from, to in
+                viewModel.isPromotion(
+                    from: SquareCoordinate(notation: from.algebraic),
+                    to: SquareCoordinate(notation: to.algebraic)
+                )
+            }
         )
     }
 
+    private var selectedSquare: BoardSquare? { interaction.selectedSquare }
+
+    private var legalDestinations: Set<BoardSquare> {
+        interaction.legalDestinations(context: interactionContext)
+    }
+
     private func handleSquareTapped(_ square: BoardSquare) {
-        guard let selectedSquare else {
-            if viewModel.position.pieces[square] != nil {
-                self.selectedSquare = square
-            }
-            return
-        }
+        play(interaction.select(square, context: interactionContext))
+    }
 
-        if square == selectedSquare {
-            self.selectedSquare = nil
-            return
-        }
+    private func handleDragStarted(_ square: BoardSquare) {
+        interaction.beginDrag(from: square, context: interactionContext)
+    }
 
-        if legalDestinations.contains(square) {
-            let from = SquareCoordinate(notation: selectedSquare.algebraic)
-            let to = SquareCoordinate(notation: square.algebraic)
-            self.selectedSquare = nil
-            Task { await viewModel.playMove(from: from, to: to) }
-        } else if viewModel.position.pieces[square] != nil {
-            self.selectedSquare = square
-        } else {
-            self.selectedSquare = nil
-        }
+    private func handleDrop(from: BoardSquare, to: BoardSquare) {
+        play(interaction.drop(from: from, to: to, context: interactionContext))
+    }
+
+    /// Plays a settled move. A promotion resolves to
+    /// `.awaitingPromotionPiece` instead and nothing is played until the
+    /// picker is answered.
+    private func play(_ resolution: BoardInteraction.Resolution) {
+        guard case .play(let move) = resolution else { return }
+        let from = SquareCoordinate(notation: move.from.algebraic)
+        let to = SquareCoordinate(notation: move.to.algebraic)
+        Task { await viewModel.playMove(from: from, to: to, promotion: move.promotion ?? .queen) }
     }
 
     /// Analysis controls (quality picker, Analyze/Re-analyze, engine status)

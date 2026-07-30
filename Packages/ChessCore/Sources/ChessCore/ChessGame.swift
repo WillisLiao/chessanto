@@ -285,6 +285,12 @@ extension ChessGame {
     /// at the first move that fails to parse or play. Each returned move
     /// carries the exact board facts (SAN, check/mate flags, captures)
     /// produced by actually playing it, not by inspecting notation strings.
+    ///
+    /// - note: a pawn move onto the back rank must name its promotion piece
+    /// (`"b7b8q"`, not `"b7b8"`). A bare square pair there is treated as
+    /// unplayable and stops the replay, because the alternatives are both
+    /// wrong: leaving the pawn on the back rank yields an illegal position,
+    /// and assuming a queen invents a move the caller never named.
     public static func replayLine(fromUCI moves: [String], startingFEN fen: String) -> [ReplayedMove] {
         guard let position = Position(fen: fen) else { return [] }
         var board = Board(position: position)
@@ -302,6 +308,10 @@ extension ChessGame {
             }
             if let promotedPiece = parsedMove.promotedPiece {
                 playedMove = board.completePromotion(of: playedMove, to: promotedPiece.kind)
+            } else if playedMove.piece.kind == .pawn,
+                playedMove.end.rank.value == 1 || playedMove.end.rank.value == 8
+            {
+                break
             }
             replayed.append(playedMove.asReplayedMove(resultingFEN: board.position.fen))
             color = color.opposite

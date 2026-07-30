@@ -30,7 +30,14 @@ struct PracticeBoardSection: View {
                     legalDestinations: viewModel.legalDestinations,
                     hintSquares: viewModel.hintSquares,
                     arrows: viewModel.revealArrow,
-                    onSquareTapped: viewModel.select(square:)
+                    pendingPromotion: viewModel.pendingPromotion,
+                    onSquareTapped: viewModel.select(square:),
+                    onPieceDragStarted: viewModel.beginDrag(from:),
+                    onPieceDropped: viewModel.drop(from:to:),
+                    onPromotionChosen: { kind in
+                        Task { await viewModel.completePromotion(with: kind) }
+                    },
+                    onPromotionCancelled: viewModel.cancelPromotion
                 )
             }
             BoardIdentityStripView(info: identityStrips.bottom)

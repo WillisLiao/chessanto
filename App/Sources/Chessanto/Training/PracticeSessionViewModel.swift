@@ -25,7 +25,7 @@ final class PracticeSessionViewModel: ObservableObject {
     @Published private(set) var cards: [TrainingCard] = []
     @Published private(set) var currentIndex = 0
     @Published private(set) var hintCount = 0
-    @Published private(set) var selectedSquare: BoardSquare?
+    @Published private var interaction = BoardInteraction()
     @Published private(set) var completedEvaluations: [TrainingEvaluation] = []
     @Published private(set) var firstAttemptSuccesses = 0
     @Published private(set) var linePreview: LinePreviewController?
@@ -119,17 +119,43 @@ final class PracticeSessionViewModel: ObservableObject {
         return "\(theme) - \(gloss)"
     }
 
+    var selectedSquare: BoardSquare? { interaction.selectedSquare }
+
+    var pendingPromotion: BoardInteraction.PendingPromotion? { interaction.pendingPromotion }
+
     var legalDestinations: Set<BoardSquare> {
-        guard let selectedSquare, let card = currentCard else { return [] }
-        let game = ChessGame(startingFEN: card.preMoveFEN)
-        return Set(
-            game.legalMoves(from: SquareCoordinate(notation: selectedSquare.algebraic), at: game.startIndex)
-                .compactMap { BoardSquare(algebraic: $0.notation) }
+        interaction.legalDestinations(context: interactionContext)
+    }
+
+    /// The board knowledge the shared interaction machine needs, read off
+    /// the current card's own pre-move position.
+    private var interactionContext: BoardInteraction.Context {
+        let fen = currentCard?.preMoveFEN
+        return BoardInteraction.Context(
+            position: position,
+            legalDestinations: { square in
+                guard let fen else { return [] }
+                let game = ChessGame(startingFEN: fen)
+                return Set(
+                    game.legalMoves(from: SquareCoordinate(notation: square.algebraic), at: game.startIndex)
+                        .compactMap { BoardSquare(algebraic: $0.notation) }
+                )
+            },
+            isPromotion: { from, to in
+                guard let fen else { return false }
+                let game = ChessGame(startingFEN: fen)
+                return game.isPromotion(
+                    from: SquareCoordinate(notation: from.algebraic),
+                    to: SquareCoordinate(notation: to.algebraic),
+                    at: game.startIndex
+                )
+            }
         )
     }
 
     func load() async {
         endLinePreview()
+        interaction.reset()
         state = .loading
         do {
             cardRecords = try await loadCards()
@@ -146,26 +172,36 @@ final class PracticeSessionViewModel: ObservableObject {
 
     func select(square: BoardSquare) {
         guard case .prompt = state else { return }
-        guard let selectedSquare else {
-            if position.pieces[square] != nil {
-                self.selectedSquare = square
-            }
-            return
-        }
+        resolve(interaction.select(square, context: interactionContext))
+    }
 
-        if square == selectedSquare {
-            self.selectedSquare = nil
-            return
-        }
-        if legalDestinations.contains(square) {
-            self.selectedSquare = nil
-            let attemptedUCI = selectedSquare.algebraic + square.algebraic
-            Task { await submit(attemptedUCI: attemptedUCI) }
-        } else if position.pieces[square] != nil {
-            self.selectedSquare = square
-        } else {
-            self.selectedSquare = nil
-        }
+    func beginDrag(from square: BoardSquare) {
+        guard case .prompt = state else { return }
+        interaction.beginDrag(from: square, context: interactionContext)
+    }
+
+    func drop(from: BoardSquare, to: BoardSquare) {
+        guard case .prompt = state else { return }
+        resolve(interaction.drop(from: from, to: to, context: interactionContext))
+    }
+
+    func completePromotion(with kind: PromotionKind) async {
+        guard case .prompt = state else { return }
+        guard case .play(let move) = interaction.choosePromotion(kind) else { return }
+        await submit(attemptedUCI: move.uci)
+    }
+
+    func cancelPromotion() {
+        interaction.cancelPromotion()
+    }
+
+    /// Plays whatever the interaction machine settled on. A promotion stops
+    /// here with the picker showing and only submits once the piece is
+    /// chosen, so the attempt always carries the engine's own five-character
+    /// UCI rather than a square pair that can name no promotion at all.
+    private func resolve(_ resolution: BoardInteraction.Resolution) {
+        guard case .play(let move) = resolution else { return }
+        Task { await submit(attemptedUCI: move.uci) }
     }
 
     func hint() {
@@ -190,13 +226,13 @@ final class PracticeSessionViewModel: ObservableObject {
 
     func tryAgain() {
         endLinePreview()
-        selectedSquare = nil
+        interaction.reset()
         state = .prompt
     }
 
     func next() async {
         endLinePreview()
-        selectedSquare = nil
+        interaction.reset()
         hintCount = 0
         attemptsOnCurrentCard = 0
         if currentIndex < cards.count {

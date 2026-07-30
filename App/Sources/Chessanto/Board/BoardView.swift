@@ -1,3 +1,4 @@
+import ChessCore
 import SwiftUI
 
 struct BoardView: View {
@@ -14,7 +15,47 @@ struct BoardView: View {
     /// reusing the app's own move-quality green (`MoveClassification.best`)
     /// rather than an unrelated ad-hoc color.
     var arrows: [(from: BoardSquare, to: BoardSquare)] = []
+    /// When set, the board is waiting for the mover to name a promotion
+    /// piece and shows the picker over the promotion file.
+    var pendingPromotion: BoardInteraction.PendingPromotion?
     var onSquareTapped: ((BoardSquare) -> Void)?
+    /// Set alongside `onPieceDropped` to make the board draggable. Boards
+    /// that leave both `nil` (line preview, report thumbnails) stay purely
+    /// display-only and never install a drag gesture.
+    var onPieceDragStarted: ((BoardSquare) -> Void)?
+    var onPieceDropped: ((BoardSquare, BoardSquare) -> Void)?
+    var onPromotionChosen: ((PromotionKind) -> Void)?
+    var onPromotionCancelled: (() -> Void)?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The square a piece is currently being dragged off, and how far the
+    /// pointer has travelled since. Held in the view because it is pure
+    /// pointer state: nothing outside the board can act on a half-finished
+    /// drag, and a drag that is abandoned must leave no trace.
+    @State private var dragOrigin: BoardSquare?
+    @State private var dragTranslation: CGSize = .zero
+
+    /// The move currently sliding into place, and how much of the slide is
+    /// left (1 at the origin square, 0 once it has arrived). Animating this
+    /// scalar rather than the piece's `position` keeps the movement inside
+    /// the piece layer, so nothing about the board's own geometry changes
+    /// and the surrounding column never reflows.
+    @State private var slidingMove: (from: BoardSquare, to: BoardSquare)?
+    @State private var slideProgress: CGFloat = 0
+
+    /// User-drawn arrows and circles for the position currently on the
+    /// board. Owned here and cleared whenever the position changes - see
+    /// `BoardAnnotations` for why they are not persisted.
+    @State private var annotations = BoardAnnotations()
+
+    private var isDraggable: Bool { onPieceDropped != nil && pendingPromotion == nil }
+
+    /// An `onChange`-comparable stand-in for the non-`Equatable` `lastMove`
+    /// tuple.
+    private var lastMoveKey: String? {
+        lastMove.map { "\($0.from.algebraic)\($0.to.algebraic)" }
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -26,6 +67,10 @@ struct BoardView: View {
                     ForEach(0..<8, id: \.self) { col in
                         let square = square(atRow: row, col: col)
                         Button {
+                            // A left click is the user moving on from
+                            // whatever they had drawn, same as every other
+                            // board.
+                            annotations.clear()
                             onSquareTapped?(square)
                         } label: {
                             ZStack(alignment: .topLeading) {
@@ -64,12 +109,26 @@ struct BoardView: View {
                     ForEach(0..<8, id: \.self) { col in
                         let square = square(atRow: row, col: col)
                         if let piece = position.pieces[square] {
+                            let isDragged = square == dragOrigin
+                            let slide = slideOffset(for: square, squareSize: squareSize)
                             PieceView(piece: piece, squareSize: squareSize)
                                 .frame(width: squareSize, height: squareSize)
+                                .scaleEffect(isDragged ? 1.08 : 1)
+                                .shadow(
+                                    color: Color.black.opacity(isDragged ? 0.3 : 0),
+                                    radius: isDragged ? 8 : 0,
+                                    y: isDragged ? 3 : 0
+                                )
                                 .position(
                                     x: CGFloat(col) * squareSize + squareSize / 2,
                                     y: CGFloat(row) * squareSize + squareSize / 2
                                 )
+                                .offset(isDragged ? dragTranslation : slide)
+                                // The piece in hand and the piece arriving
+                                // both have to clear whatever they pass over
+                                // or land on, or a capture animates behind
+                                // the piece it just took.
+                                .zIndex(isDragged ? 2 : (slide == .zero ? 0 : 1))
                                 .accessibilityIdentifier("piece-\(square.algebraic)")
                                 .allowsHitTesting(false)
                         }
@@ -81,10 +140,181 @@ struct BoardView: View {
                         .fill(Color(NSColor(hex: "#6F9E4C")).opacity(0.75))
                         .allowsHitTesting(false)
                 }
+
+                ForEach(Array(annotations.circles), id: \.self) { square in
+                    let (row, col) = rowCol(for: square)
+                    Circle()
+                        .strokeBorder(Self.annotationColor, lineWidth: max(squareSize * 0.07, 3))
+                        .frame(width: squareSize * 0.9, height: squareSize * 0.9)
+                        .position(
+                            x: CGFloat(col) * squareSize + squareSize / 2,
+                            y: CGFloat(row) * squareSize + squareSize / 2
+                        )
+                        .allowsHitTesting(false)
+                }
+
+                ForEach(Array(annotations.arrows), id: \.self) { arrow in
+                    arrowShape(from: arrow.from, to: arrow.to, squareSize: squareSize)
+                        .fill(Self.annotationColor)
+                        .allowsHitTesting(false)
+                }
+
+                RightDragCatcher { start, end in
+                    handleRightDrag(from: start, to: end, squareSize: squareSize)
+                }
+                .frame(width: size, height: size)
+
+                if let pendingPromotion {
+                    promotionPicker(for: pendingPromotion, squareSize: squareSize, boardSize: size)
+                }
             }
             .frame(width: size, height: size)
+            .simultaneousGesture(dragGesture(squareSize: squareSize), including: isDraggable ? .all : .none)
+            .onChange(of: lastMoveKey) { _, _ in
+                startSlide()
+            }
+            .onChange(of: position) { _, _ in
+                // An annotation is about the position it was drawn on.
+                // Showing a different one retires it.
+                annotations.clear()
+            }
+            // Escape backs out of the picker, the shortcut anyone would try
+            // first for a modal choice they did not mean to open.
+            .onExitCommand {
+                if pendingPromotion != nil {
+                    onPromotionCancelled?()
+                } else {
+                    annotations.clear()
+                }
+            }
         }
         .aspectRatio(1, contentMode: .fit)
+    }
+
+    /// Brass, the app's own accent - deliberately not the green the engine's
+    /// suggestion arrows use, so what the user drew never reads as something
+    /// the engine claimed.
+    private static let annotationColor = DesignColors.accent.opacity(0.85)
+
+    private func handleRightDrag(from start: CGPoint, to end: CGPoint, squareSize: CGFloat) {
+        guard let fromSquare = square(at: start, squareSize: squareSize),
+            let toSquare = square(at: end, squareSize: squareSize)
+        else { return }
+        annotations.toggleArrow(from: fromSquare, to: toSquare)
+    }
+
+    /// Dragging runs *alongside* the per-square buttons rather than
+    /// replacing them: a click still selects and moves (the accessible,
+    /// keyboard-reachable path the AX QA scripts drive), while a press that
+    /// travels far enough becomes a drag. The 4pt threshold is what keeps a
+    /// slightly unsteady click from being read as a drag.
+    private func dragGesture(squareSize: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                if dragOrigin == nil {
+                    guard let origin = square(at: value.startLocation, squareSize: squareSize),
+                        position.pieces[origin] != nil
+                    else { return }
+                    dragOrigin = origin
+                    onPieceDragStarted?(origin)
+                }
+                dragTranslation = value.translation
+            }
+            .onEnded { value in
+                let origin = dragOrigin
+                dragOrigin = nil
+                dragTranslation = .zero
+                guard let origin, let destination = square(at: value.location, squareSize: squareSize) else {
+                    return
+                }
+                onPieceDropped?(origin, destination)
+            }
+    }
+
+    /// Begins the arrival slide for whatever move just landed. Skipped
+    /// entirely under Reduce Motion, which leaves the piece exactly where it
+    /// belongs rather than moving it more slowly.
+    private func startSlide() {
+        guard let lastMove, !reduceMotion else {
+            slidingMove = nil
+            slideProgress = 0
+            return
+        }
+        slidingMove = lastMove
+        slideProgress = 1
+        withAnimation(.easeOut(duration: 0.18)) {
+            slideProgress = 0
+        }
+    }
+
+    /// How far `square`'s piece still is from where it came from, in points.
+    /// Zero for every piece except the one that just moved.
+    private func slideOffset(for square: BoardSquare, squareSize: CGFloat) -> CGSize {
+        guard let slidingMove, square == slidingMove.to, slideProgress > 0 else { return .zero }
+        let (fromRow, fromCol) = rowCol(for: slidingMove.from)
+        let (toRow, toCol) = rowCol(for: slidingMove.to)
+        return CGSize(
+            width: CGFloat(fromCol - toCol) * squareSize * slideProgress,
+            height: CGFloat(fromRow - toRow) * squareSize * slideProgress
+        )
+    }
+
+    /// The square under a point in board coordinates, or `nil` if the point
+    /// fell outside the board - which is how a piece dragged off the edge
+    /// returns home instead of moving somewhere arbitrary.
+    private func square(at point: CGPoint, squareSize: CGFloat) -> BoardSquare? {
+        let col = Int(floor(point.x / squareSize))
+        let row = Int(floor(point.y / squareSize))
+        guard (0..<8).contains(col), (0..<8).contains(row) else { return nil }
+        return square(atRow: row, col: col)
+    }
+
+    /// The promotion chooser, drawn as a column of four pieces on the file
+    /// the pawn just promoted on rather than as a detached dialog - the move
+    /// is decided where the eye already is, which is how every mainstream
+    /// board does it. The column grows from the promotion square toward the
+    /// middle of the board, so it always fits whichever edge it lands on and
+    /// whichever way the board is flipped.
+    @ViewBuilder
+    private func promotionPicker(
+        for promotion: BoardInteraction.PendingPromotion,
+        squareSize: CGFloat,
+        boardSize: CGFloat
+    ) -> some View {
+        let (row, col) = rowCol(for: promotion.to)
+        let direction: CGFloat = row == 0 ? 1 : -1
+
+        // A scrim over the board makes the four pieces the only live thing
+        // and gives the click-anywhere-to-cancel escape route a surface.
+        // It is a real Button, not a tap gesture on a shape: the only way
+        // out of the picker has to be reachable by keyboard and by assistive
+        // technology, not just by a pointer.
+        Button {
+            onPromotionCancelled?()
+        } label: {
+            Rectangle()
+                .fill(Color.black.opacity(0.42))
+                .frame(width: boardSize, height: boardSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("promotion-cancel")
+        .accessibilityLabel("Cancel promotion")
+
+        ForEach(Array(PromotionKind.pickerOrder.enumerated()), id: \.element) { offset, kind in
+            PromotionChoiceView(
+                piece: DisplayPiece(color: promotion.color, kind: kind.displayKind),
+                squareSize: squareSize
+            ) {
+                onPromotionChosen?(kind)
+            }
+            .position(
+                x: CGFloat(col) * squareSize + squareSize / 2,
+                y: (CGFloat(row) + direction * CGFloat(offset)) * squareSize + squareSize / 2
+            )
+            .accessibilityIdentifier("promote-to-\(kind.rawValue)")
+            .accessibilityLabel("Promote to \(kind.rawValue)")
+        }
     }
 
     /// A center-of-square-to-center-of-square arrow with a triangular head,
@@ -122,9 +352,16 @@ struct BoardView: View {
     /// File letter along the bottom edge, rank number along the left edge -
     /// the standard lichess/chess.com in-square placement, adjusted for
     /// board orientation.
+    ///
+    /// Sized at 22% of the square rather than the 16% this started at: a
+    /// beginner still counting files reads these constantly, and at 16% they
+    /// were the smallest text anywhere in the app. The 11pt floor keeps them
+    /// legible on a board squeezed into a narrow column, and the opposite
+    /// square color plus a bold weight is what carries contrast without
+    /// putting a plate behind each glyph.
     @ViewBuilder
     private func coordinateOverlay(for square: BoardSquare, row: Int, col: Int, squareSize: CGFloat) -> some View {
-        let font = Font.system(size: max(squareSize * 0.16, 8), weight: .semibold)
+        let font = Font.system(size: max(squareSize * 0.22, 11), weight: .bold)
         let color = baseColor(for: square) == theme.lightSquare ? theme.darkSquare : theme.lightSquare
         VStack {
             HStack {
@@ -133,8 +370,8 @@ struct BoardView: View {
                     Text("\(square.rank + 1)")
                         .font(font)
                         .foregroundStyle(color)
-                        .padding(.trailing, 2)
-                        .padding(.top, 1)
+                        .padding(.trailing, 3)
+                        .padding(.top, 2)
                 }
             }
             Spacer()
@@ -143,12 +380,16 @@ struct BoardView: View {
                     Text(String(UnicodeScalar(UInt8(97 + square.file))))
                         .font(font)
                         .foregroundStyle(color)
-                        .padding(.leading, 2)
-                        .padding(.bottom, 1)
+                        .padding(.leading, 3)
+                        .padding(.bottom, 2)
                 }
                 Spacer()
             }
         }
+        // Coordinates are decoration for sighted orientation; VoiceOver
+        // already gets each square's name from the button's own label, so
+        // announcing them again would read every edge square twice.
+        .accessibilityHidden(true)
         .allowsHitTesting(false)
     }
 }
@@ -186,6 +427,44 @@ private struct ArrowShape: Shape {
         path.addLine(to: CGPoint(x: trueStart.x - perpendicular.x * lineWidth / 2, y: trueStart.y - perpendicular.y * lineWidth / 2))
         path.closeSubpath()
         return path
+    }
+}
+
+/// One of the four promotion choices: the real piece artwork on a light
+/// card, so a cburnett black king-shaped silhouette never has to be read
+/// against a dark square. Hover raises the brass ring the rest of the app
+/// uses for its interactive accent.
+private struct PromotionChoiceView: View {
+    let piece: DisplayPiece
+    let squareSize: CGFloat
+    let onSelect: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button {
+            onSelect()
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: DesignShape.controlRadius)
+                    .fill(DesignColors.surface2)
+                RoundedRectangle(cornerRadius: DesignShape.controlRadius)
+                    .strokeBorder(
+                        isHovering ? DesignColors.accent : DesignColors.hairline,
+                        lineWidth: isHovering ? max(squareSize * 0.05, 2) : 1
+                    )
+                Image(piece.assetNameForTesting)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: squareSize * 0.76, height: squareSize * 0.76)
+            }
+            .frame(width: squareSize * 0.94, height: squareSize * 0.94)
+            .contentShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
+        }
+        .buttonStyle(.plain)
+        .shadow(color: Color.black.opacity(0.22), radius: 4, y: 1)
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 }
 

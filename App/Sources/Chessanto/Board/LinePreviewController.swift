@@ -5,6 +5,9 @@ struct LinePreviewStep {
     let position: BoardPosition
     let lastMove: (from: BoardSquare, to: BoardSquare)?
     let san: String?
+    /// Whether reaching this step took a piece, so playback can sound the
+    /// same as the real board does.
+    let isCapture: Bool
 }
 
 /// A read-only board playback of an engine line.
@@ -24,7 +27,8 @@ final class LinePreviewController: ObservableObject {
         let start = LinePreviewStep(
             position: BoardPositionMapper.position(fromFEN: startingFEN) ?? .empty,
             lastMove: nil,
-            san: nil
+            san: nil,
+            isCapture: false
         )
         let replayed = ChessGame.replayLine(fromUCI: uciMoves, startingFEN: startingFEN)
         self.steps = [start] + replayed.map { move in
@@ -33,7 +37,8 @@ final class LinePreviewController: ObservableObject {
             return LinePreviewStep(
                 position: BoardPositionMapper.position(fromFEN: move.resultingFEN) ?? .empty,
                 lastMove: from.flatMap { from in to.map { (from: from, to: $0) } },
-                san: move.san
+                san: move.san,
+                isCapture: move.capturedPieceKind != nil
             )
         }
     }
@@ -72,7 +77,7 @@ final class LinePreviewController: ObservableObject {
             isPlaying = false
             return
         }
-        stepIndex += 1
+        advance()
         if !canStepForward {
             isPlaying = false
         }
@@ -81,7 +86,15 @@ final class LinePreviewController: ObservableObject {
     func stepForward() {
         pause()
         guard canStepForward else { return }
+        advance()
+    }
+
+    /// Moves one step further into the line and sounds the move that got
+    /// there. Stepping back, replaying from the start, and jumping stay
+    /// silent - none of them is a move being made.
+    private func advance() {
         stepIndex += 1
+        BoardSounds.shared.play(current.isCapture ? .capture : .move)
     }
 
     func stepBackward() {
