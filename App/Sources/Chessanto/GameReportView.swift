@@ -16,6 +16,10 @@ struct GameReportView: View {
     let onSelectMoment: (KeyMoment) -> Void
     let onPlayBetterLine: (KeyMoment) -> Void
     let onPlayContinuation: (KeyMoment) -> Void
+    /// Starts analysis from inside the empty report. The tab that exists to
+    /// show the report is the natural place to ask for one; pointing at a
+    /// control elsewhere on screen made the primary surface a dead end.
+    var onAnalyze: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -45,9 +49,26 @@ struct GameReportView: View {
                         .foregroundStyle(DesignColors.textSecondary)
                         .padding()
                 } else {
-                    Text("Analyze this game (see the Analyze button above the board) to see the coaching report.")
-                        .foregroundStyle(DesignColors.textSecondary)
-                        .padding()
+                    VStack(alignment: .leading, spacing: DesignSpacing.md) {
+                        Text("This game has not been analyzed yet.")
+                            .font(.dsBody)
+                            .foregroundStyle(DesignColors.textPrimary)
+                        Text("Analysis finds the moments that decided the game and explains them.")
+                            .font(.dsSecondary)
+                            .foregroundStyle(DesignColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let onAnalyze {
+                            Button("Analyze this game", action: onAnalyze)
+                                .buttonStyle(.dsPrimary)
+                                .disabled(!engineService.isStarted)
+                            if !engineService.isStarted {
+                                Text(engineService.unavailableReason ?? "Starting the engine…")
+                                    .font(.dsSecondary)
+                                    .foregroundStyle(DesignColors.textSecondary)
+                            }
+                        }
+                    }
+                    .padding()
                 }
             }
             .padding()

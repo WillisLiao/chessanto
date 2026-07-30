@@ -17,7 +17,9 @@ struct GameReplayView: View {
     @State private var quality: AnalysisQuality = .standard
     @State private var analysisTask: Task<Void, Never>?
     @State private var interaction = BoardInteraction()
-    @State private var rightPaneTab: RightPaneTab = .moves
+    /// A game-review app should open on the review. The scoresheet is one
+    /// click away; the report was two plus knowing it existed.
+    @State private var rightPaneTab: RightPaneTab = .report
     @State private var flipped = false
     @State private var isCoachOpen = false
     @State private var practiceSourcePly: Int?
@@ -273,7 +275,8 @@ struct GameReplayView: View {
                         onPlayBetterLine: {
                             handleKeyMoment($0, intent: .playBetterLine)
                         },
-                        onPlayContinuation: playContinuation(moment:)
+                        onPlayContinuation: playContinuation(moment:),
+                        onAnalyze: { startAnalysis(reanalyze: false) }
                     )
                 case .practice:
                     EmptyView()

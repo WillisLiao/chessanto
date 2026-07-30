@@ -30,7 +30,7 @@ struct PlayerBriefView: View {
     }
 
     private var loadIdentity: String {
-        "\(library.isChessComAccountConfirmed):\(library.chessComUsername.lowercased()):\(loadGeneration)"
+        "\(library.briefIdentity?.lowercased() ?? ""):\(loadGeneration)"
     }
 
     private var header: some View {
@@ -39,8 +39,8 @@ struct PlayerBriefView: View {
                 Text("Player Brief")
                     .font(.dsTitle)
                     .foregroundStyle(DesignColors.textPrimary)
-                if !library.chessComUsername.isEmpty {
-                    Text("@\(library.chessComUsername)")
+                if let identity = library.briefIdentity {
+                    Text(library.isChessComAccountConfirmed ? "@\(identity)" : identity)
                         .font(.dsSecondary)
                         .foregroundStyle(DesignColors.textSecondary)
                 }
@@ -57,13 +57,8 @@ struct PlayerBriefView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !library.isChessComAccountConfirmed {
-            ContentUnavailableView(
-                "Confirm your chess.com account",
-                systemImage: "person.crop.circle.badge.questionmark",
-                description: Text("Player Brief matches analyzed games to the account you explicitly confirm in Settings.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if library.briefIdentity == nil {
+            identityPicker
         } else if isLoading {
             ProgressView("Building your brief…")
                 .controlSize(.large)
@@ -105,10 +100,52 @@ struct PlayerBriefView: View {
             ContentUnavailableView(
                 "No analyzed games yet",
                 systemImage: "chart.line.uptrend.xyaxis",
-                description: Text("Analyze a game where @\(library.chessComUsername) is one of the players to build your first brief.")
+                description: Text("Analyze a game where \(library.briefIdentity ?? "you") played to build your first brief.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Asks which of the players in the register is the user, rather than
+    /// demanding a confirmed chess.com account. The names come from the
+    /// user's own imported games, so the question is answerable even with
+    /// no account and no network.
+    @ViewBuilder
+    private var identityPicker: some View {
+        let candidates = library.playerNameCandidates
+        VStack(spacing: DesignSpacing.lg) {
+            VStack(spacing: DesignSpacing.sm) {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 34))
+                    .foregroundStyle(DesignColors.accent)
+                Text("Which player are you?")
+                    .font(.dsTitle)
+                    .foregroundStyle(DesignColors.textPrimary)
+                Text(
+                    candidates.isEmpty
+                        ? "Import a game first - Player Brief reads the names in your own games."
+                        : "Player Brief tracks the games you played. Pick your name from the register."
+                )
+                .font(.dsBody)
+                .foregroundStyle(DesignColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if !candidates.isEmpty {
+                VStack(spacing: DesignSpacing.sm) {
+                    ForEach(candidates.prefix(6), id: \.self) { name in
+                        Button(name) { library.savePlayerName(name) }
+                            .buttonStyle(.dsPrimary)
+                    }
+                }
+                Text("You can change this later in Settings.")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+            }
+        }
+        .frame(maxWidth: 420)
+        .padding(DesignSpacing.xl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func focusRegister(_ snapshot: PlayerBriefSnapshot) -> some View {
@@ -448,7 +485,7 @@ struct PlayerBriefView: View {
     private func startPractice(cards: [TrainingCardRecord]) {
         guard let gameID = cards.first?.gameId else { return }
         onOpenPractice(gameID) {
-            let username = library.chessComUsername.trimmingCharacters(in: .whitespaces)
+            let username = library.briefIdentity ?? ""
             let queue = try await library.store.trainingQueueSnapshot(
                 username: username.isEmpty ? nil : username
             )
@@ -457,7 +494,7 @@ struct PlayerBriefView: View {
     }
 
     private func load() async {
-        guard library.isChessComAccountConfirmed else {
+        guard let identity = library.briefIdentity else {
             snapshot = nil
             dueTrainingCards = []
             dueTrainingCardCount = 0
@@ -468,7 +505,7 @@ struct PlayerBriefView: View {
             return
         }
 
-        let username = library.chessComUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        let username = identity
         let games = library.games
         let store = library.store
         isLoading = true

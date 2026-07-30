@@ -854,7 +854,7 @@ struct PersistenceTests {
         #expect(result.1?.hintCount == 1)
         #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
         #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
-        #expect(result.3.last == "v10_boardSounds")
+        #expect(result.3.last == "v11_playerIdentity")
         #expect(result.4.isEmpty)
     }
 
@@ -954,7 +954,7 @@ struct PersistenceTests {
         }
 
         #expect(profile?.moveNotationStyle == "standard")
-        #expect(migrations.last == "v10_boardSounds")
+        #expect(migrations.last == "v11_playerIdentity")
     }
 
     @Test func v10MigrationTurnsBoardSoundsOnForExistingProfiles() throws {

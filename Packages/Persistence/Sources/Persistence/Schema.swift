@@ -173,6 +173,12 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v11_playerIdentity") { db in
+            try db.alter(table: "userProfile") { t in
+                t.add(column: "playerName", .text)
+            }
+        }
+
         return migrator
     }
 }

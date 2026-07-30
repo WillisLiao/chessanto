@@ -10,6 +10,13 @@ struct ChessComFetchView: View {
     @EnvironmentObject private var library: GameLibrary
     @Environment(\.dismiss) private var dismiss
 
+    /// Called with the games that were just imported, so the caller can put
+    /// them straight into the batch analyzer. Importing games the app then
+    /// offers to do nothing with is the flow gap this closes: every
+    /// aggregate surface needs analyzed games, and this is the moment the
+    /// user has just said which games they care about.
+    var onImported: ([GameRecord]) -> Void = { _ in }
+
     @State private var username: String = ""
     @State private var games: [ChessComGame] = []
     @State private var alreadyImportedURLs: Set<String> = []
@@ -17,6 +24,7 @@ struct ChessComFetchView: View {
     @State private var isLoading = false
     @State private var fetchError: String?
     @State private var didFetch = false
+    @AppStorage("analyzeAfterImport") private var analyzeAfterImport = true
 
     private let client = ChessComClient()
 
@@ -123,6 +131,9 @@ struct ChessComFetchView: View {
                 .font(.dsSecondary)
                 .foregroundStyle(DesignColors.textSecondary)
             Spacer()
+            Toggle("Analyze after import", isOn: $analyzeAfterImport)
+                .toggleStyle(.checkbox)
+                .help("Queue the imported games for analysis as soon as this sheet closes")
             Button("Cancel", role: .cancel) { dismiss() }
             Button(importButtonLabel) {
                 importSelected()
@@ -179,8 +190,17 @@ struct ChessComFetchView: View {
     }
 
     private func importSelected() {
+        let urls = Set(games.filter { selection.contains($0.url) }.map(\.url))
         for game in games where selection.contains(game.url) {
             library.importPGN(game.pgn, source: .chessCom, sourceURL: game.url)
+        }
+        if analyzeAfterImport {
+            // Match on sourceURL rather than trusting import order: the
+            // register is sorted by played date, not by when rows landed.
+            let imported = library.games.filter { record in
+                record.sourceURL.map(urls.contains) ?? false
+            }
+            onImported(imported)
         }
         dismiss()
     }

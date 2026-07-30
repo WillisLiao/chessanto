@@ -34,6 +34,7 @@ struct ContentView: View {
     /// natural owner of "select this game, then enter practice mode".
     @State private var pendingPracticeGameID: Int64?
     @State private var pendingPracticeLoadCards: (() async throws -> [TrainingCardRecord])?
+    @StateObject private var batchAnalysis = BatchAnalysisCoordinator()
 
     var body: some View {
         NavigationSplitView {
@@ -44,6 +45,7 @@ struct ContentView: View {
                 } else {
                     browsingList
                 }
+                BatchAnalysisBar(coordinator: batchAnalysis)
                 sidebarBottomBar
             }
             .navigationTitle("Games")
@@ -84,7 +86,9 @@ struct ContentView: View {
             handleFileImport(result: result)
         }
         .sheet(isPresented: $isShowingChessComFetch) {
-            ChessComFetchView()
+            ChessComFetchView { imported in
+                startBatchAnalysis(of: imported)
+            }
         }
         .sheet(isPresented: onboardingBinding) {
             OnboardingView()
@@ -475,6 +479,19 @@ struct ContentView: View {
             }
             .help("Add a game")
             Spacer()
+            if !unanalyzedGames.isEmpty && !batchAnalysis.isRunning {
+                Button {
+                    startBatchAnalysis()
+                } label: {
+                    Label(
+                        "Analyze \(unanalyzedGames.count)",
+                        systemImage: "wand.and.stars"
+                    )
+                }
+                .help(
+                    "Analyze the \(unanalyzedGames.count) game\(unanalyzedGames.count == 1 ? "" : "s") that have no analysis yet, one after another"
+                )
+            }
             SettingsLink {
                 Label(
                     companion.activeDevices.isEmpty
@@ -493,6 +510,35 @@ struct ContentView: View {
         .background(DesignColors.surface1)
         .overlay(alignment: .top) {
             Rectangle().fill(DesignColors.hairline).frame(height: 1)
+        }
+    }
+
+    /// The games the batch action would work on: everything currently in the
+    /// register with no analysis stored.
+    private var unanalyzedGames: [GameRecord] {
+        BatchAnalysisCoordinator.unanalyzed(
+            in: library.games,
+            analyzedGameIDs: library.analyzedGameIDs
+        )
+    }
+
+    private func startBatchAnalysis() {
+        startBatchAnalysis(of: unanalyzedGames)
+    }
+
+    private func startBatchAnalysis(of candidates: [GameRecord]) {
+        let games = BatchAnalysisCoordinator.unanalyzed(
+            in: candidates,
+            analyzedGameIDs: library.analyzedGameIDs
+        )
+        let quality = library.analysisQuality
+        batchAnalysis.start(games: games) { game in
+            try await companion.analyzeLocally(
+                game: game,
+                quality: quality,
+                reanalyze: false
+            )
+            library.reload()
         }
     }
 

@@ -20,6 +20,13 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
     /// chess board - a learner tracking what just happened is the reason
     /// the sounds exist.
     public var boardSoundsEnabled: Bool
+    /// Which player in the imported games is the user.
+    ///
+    /// Separate from `chessComUsername` on purpose: a PGN-only user has an
+    /// identity in their own games without having a chess.com account, and
+    /// gating progress surfaces on the account made the app unusable for
+    /// them despite the README promising PGN-only support.
+    public var playerName: String?
 
     public init(
         id: Int64 = 1,
@@ -32,7 +39,8 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
         analysisQuality: String = "standard",
         boardTheme: String = "classic",
         moveNotationStyle: String = "standard",
-        boardSoundsEnabled: Bool = true
+        boardSoundsEnabled: Bool = true,
+        playerName: String? = nil
     ) {
         self.id = id
         self.chessComUsername = chessComUsername
@@ -45,5 +53,6 @@ public struct UserProfileRecord: Codable, FetchableRecord, MutablePersistableRec
         self.boardTheme = boardTheme
         self.moveNotationStyle = moveNotationStyle
         self.boardSoundsEnabled = boardSoundsEnabled
+        self.playerName = playerName
     }
 }

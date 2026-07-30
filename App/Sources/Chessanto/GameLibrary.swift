@@ -14,6 +14,7 @@ final class GameLibrary: ObservableObject {
     @Published var boardTheme: BoardTheme
     @Published var moveNotationStyle: MoveNotationStyle
     @Published var boardSoundsEnabled: Bool
+    @Published private(set) var playerName: String?
     @Published private(set) var hasCompletedOnboarding: Bool
     @Published private(set) var analyzedGameIDs: Set<Int64> = []
     @Published private(set) var openingByGameID: [Int64: String] = [:]
@@ -35,6 +36,7 @@ final class GameLibrary: ObservableObject {
         self.boardTheme = profile.flatMap { BoardTheme(rawValue: $0.boardTheme) } ?? .classic
         self.moveNotationStyle = profile.flatMap { MoveNotationStyle(rawValue: $0.moveNotationStyle) } ?? .standard
         self.boardSoundsEnabled = profile?.boardSoundsEnabled ?? true
+        self.playerName = profile?.playerName
         self.hasCompletedOnboarding = profile?.hasCompletedOnboarding ?? false
         // The board plays sound through a shared player rather than reading
         // this object, so the stored preference has to be pushed to it once
@@ -83,6 +85,39 @@ final class GameLibrary: ObservableObject {
         do {
             var profile = try store.userProfile()
             profile.moveNotationStyle = style.rawValue
+            try store.saveUserProfile(profile)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Who the user is among the players in their own games.
+    ///
+    /// A confirmed chess.com account answers this implicitly, so it wins;
+    /// otherwise the user picks a name from their imported PGNs. Without
+    /// this, every progress surface was unreachable for the PGN-only user
+    /// the README explicitly supports.
+    var briefIdentity: String? {
+        BriefIdentity.resolve(
+            chessComUsername: chessComUsername,
+            isChessComAccountConfirmed: isChessComAccountConfirmed,
+            playerName: playerName
+        )
+    }
+
+    /// Every name appearing in the register, most-played first - the
+    /// candidates for "which of these is you".
+    var playerNameCandidates: [String] {
+        BriefIdentity.candidates(in: games)
+    }
+
+    func savePlayerName(_ name: String?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stored = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        playerName = stored
+        do {
+            var profile = try store.userProfile()
+            profile.playerName = stored
             try store.saveUserProfile(profile)
         } catch {
             errorMessage = error.localizedDescription

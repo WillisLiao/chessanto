@@ -9,6 +9,7 @@ struct GeneralSettingsView: View {
     @State private var theme: BoardTheme = .classic
     @State private var notationStyle: MoveNotationStyle = .standard
     @State private var soundsEnabled = true
+    @State private var playerName = ""
     @State private var username: String = ""
 
     var body: some View {
@@ -72,6 +73,28 @@ struct GeneralSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section("You") {
+                Picker("Your name in imported games", selection: $playerName) {
+                    Text("Not set").tag("")
+                    ForEach(library.playerNameCandidates, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .disabled(library.isChessComAccountConfirmed)
+                .onChange(of: playerName) { _, newValue in
+                    library.savePlayerName(newValue.isEmpty ? nil : newValue)
+                }
+
+                Text(
+                    library.isChessComAccountConfirmed
+                        ? "Your confirmed chess.com account already identifies you, so Player Brief uses that."
+                        : "Player Brief and the practice queue track the games you played. Pick your name from the games you have imported."
+                )
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("chess.com account") {
                 ChessComUsernameField(
                     username: $username,
@@ -97,6 +120,7 @@ struct GeneralSettingsView: View {
             theme = library.boardTheme
             notationStyle = library.moveNotationStyle
             soundsEnabled = library.boardSoundsEnabled
+            playerName = library.playerName ?? ""
             username = library.chessComUsername
         }
     }
