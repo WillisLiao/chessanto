@@ -27,10 +27,16 @@ public struct ClassificationContext: Sendable, Equatable {
     /// Plies (1-based, matching `playedUCIs[p - 1]`) where the mover had
     /// exactly one legal move.
     public let forcedPlies: Set<Int>
+    /// Plies (1-based) that `BrilliancyDetector` found to be a genuine
+    /// brilliancy: the engine's own top choice, a real sacrifice accepted
+    /// on the board, the mover clearly winning after, and materially
+    /// unique among the engine's own lines.
+    public let brilliantPlies: Set<Int>
 
-    public init(deepestBookPly: Int = 0, forcedPlies: Set<Int> = []) {
+    public init(deepestBookPly: Int = 0, forcedPlies: Set<Int> = [], brilliantPlies: Set<Int> = []) {
         self.deepestBookPly = deepestBookPly
         self.forcedPlies = forcedPlies
+        self.brilliantPlies = brilliantPlies
     }
 
     /// No book and no forced-move information: every move is graded.
@@ -54,7 +60,12 @@ public struct ClassificationContext: Sendable, Equatable {
             forced.insert(p)
         }
 
-        return ClassificationContext(deepestBookPly: deepestBookPly, forcedPlies: forced)
+        var brilliant: Set<Int> = []
+        for p in 1...moveCount where p > deepestBookPly && !forced.contains(p) {
+            if BrilliancyDetector.isBrilliant(input: input, ply: p) { brilliant.insert(p) }
+        }
+
+        return ClassificationContext(deepestBookPly: deepestBookPly, forcedPlies: forced, brilliantPlies: brilliant)
     }
 }
 
@@ -90,6 +101,10 @@ public enum MoveClassifier {
             }
             if context.forcedPlies.contains(p) {
                 results.append(.forced)
+                continue
+            }
+            if context.brilliantPlies.contains(p) {
+                results.append(.brilliant)
                 continue
             }
 

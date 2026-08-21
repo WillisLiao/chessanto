@@ -210,6 +210,40 @@ struct MoveClassifierTests {
         #expect(result == [.book])
     }
 
+    @Test func forcedMoveIsForcedNotBrilliant() {
+        let evals = [eval(cp: 30, best: "e2e4"), eval(cp: 30)]
+        let result = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["e2e4"],
+            whiteToMove: [true],
+            context: ClassificationContext(forcedPlies: [1], brilliantPlies: [1])
+        )
+        #expect(result == [.forced])
+    }
+
+    @Test func bookMoveIsBookNotBrilliant() {
+        let evals = [eval(cp: 30, best: "e2e4"), eval(cp: 30)]
+        let result = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["e2e4"],
+            whiteToMove: [true],
+            context: ClassificationContext(deepestBookPly: 1, brilliantPlies: [1])
+        )
+        #expect(result == [.book])
+    }
+
+    @Test func classifyLabelsBrilliantPliesBrilliant() {
+        // Would otherwise classify as .best (played matches engine best).
+        let evals = [eval(cp: 30, best: "e2e4"), eval(cp: 30)]
+        let result = MoveClassifier.classify(
+            positionEvaluations: evals,
+            playedUCIs: ["e2e4"],
+            whiteToMove: [true],
+            context: ClassificationContext(brilliantPlies: [1])
+        )
+        #expect(result == [.brilliant])
+    }
+
     @Test func onlyBookAndForcedAreExemptFromScoring() {
         let exempt = MoveClassification.allCases.filter { !$0.isPlayerDecision }
         #expect(Set(exempt) == Set([.book, .forced]))

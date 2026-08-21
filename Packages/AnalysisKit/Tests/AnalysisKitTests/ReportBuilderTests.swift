@@ -66,6 +66,38 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     #expect(report.whiteAccuracy > report.blackAccuracy)
 }
 
+@Test func reportBuilderCountsIncludeAGenuineBrilliantMove() {
+    // A queen sacrifice forcing a smothered mate: White plays the engine's
+    // own top choice (Qd5-g8+), Black's only sensible reply accepts the
+    // sacrifice, and White is left in a forced mate - a genuine brilliancy
+    // reaching all the way through classification into the report's
+    // aggregate counts, not just the raw classify() output.
+    let preFEN = "5r1k/6pp/8/3Q2N1/8/8/8/6K1 w - - 0 1"
+    let postFEN = "5rQk/6pp/8/6N1/8/8/8/6K1 b - - 1 1"
+    let plies = [
+        PlyRecord(
+            fen: preFEN,
+            lines: [
+                RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 2, principalVariationUCI: ["d5g8", "f8g8", "g5f7"], depth: 20),
+                RankedLine(rank: 2, scoreCentipawns: 50, mateIn: nil, principalVariationUCI: ["g5f7"], depth: 20),
+            ],
+            playedUCI: nil
+        ),
+        PlyRecord(
+            fen: postFEN,
+            lines: [RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 1, principalVariationUCI: ["f8g8", "g5f7"], depth: 20)],
+            playedUCI: "d5g8"
+        ),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "WhitePlayer", blackName: "BlackPlayer", result: "*", chessComUsername: nil)
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
+    #expect(report != nil)
+    guard let report else { return }
+
+    #expect(report.whiteClassificationCounts.contains(ClassificationCount(classification: .brilliant, count: 1)))
+    #expect(!report.blackClassificationCounts.contains { $0.classification == .brilliant })
+}
+
 @Test func reportBuilderTakeawaysRestateTheAllowedMate() {
     let input = scholarsMateInput()
     let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
