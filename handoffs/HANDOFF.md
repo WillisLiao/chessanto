@@ -5,8 +5,33 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-Priority 2 of the product review - flow - in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`, expanded into `handoffs/NEXT-SESSION-FLOW.md`.
-Before anything else, run the four board items listed as unverified below through a real visible window; `scripts/axdrag.swift` is committed and ready.
+Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: P4.2 (new detectors - threats, forks/pins, tempo-wasting moves), P4.3 (takeaways that actually say something), P1.6/P4.4 (`brilliant`), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
+Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and the four board items below that have never been verified through a real visible window.
+`scripts/axdrag.swift` is committed and ready for that whenever a composited display is available to the agent.
+
+## Current state (2026-08-21)
+
+- **Teaching level now does real work, and beginner prose dropped percentages for plain language (P4.1 + P4.7).**
+  Full narrative in `devlogs/2026-08-21.md`.
+  `RatingRegister` moved from CoachKit to AnalysisKit (CoachKit keeps a `typealias`) so `ReportBuilder`/`KeyMomentSelector`/`ReportText` can read it, not just one LLM prompt sentence.
+  Beginner reports show 4 key moments instead of 8, prefer moments with a concrete consequence (a punishment, missed mate, or allowed mate) when the cap forces a choice, truncate better-lines to 2 plies, and render qualitative prose ("makes things worse for you: White is winning now") instead of percentages or eval-label numerals.
+  No material figure is ever derived from a win-probability swing - only `PunishmentFact`, which is already audited, licenses material language.
+  `ThemeDetector`'s principal variation is never truncated at detection time, only at render time, so `FactAuditor` keeps verifying the same fact the detector produced.
+  Every existing caller of `ReportBuilder.build`/`KeyMomentSelector.selectPlies` defaults to `.advanced` and is byte-identical to before, proved by the pre-existing golden fixture test passing unmodified plus a new beginner golden fixture.
+  Also fixed: the eval-graph hover readout said "Ply 27" for everyone; it now reads "14... 63% for White".
+  `GameReportView` and `GameReplayView` each carried their own hand-rolled, independently-drifted key-moment summary sentence; both are deleted in favor of the one canonical `ReportText.momentSummary`.
+  Practice feedback said "Engine loss: 140 centipawns"; it now says "About 1.4 pawns worse than the best move."
+  `ChessGlossary` gained `match(in:)` (term plus gloss), and beginner key-moment rows show one plain-language footnote when a known term appears in the summary.
+  Design was consulted with an Opus advisor given the cross-package layering question (AnalysisKit cannot depend on CoachKit) and the pedagogical judgment calls (exact thresholds, what "nameable consequence" means operationally, whether to derive material figures from probability - the advisor's answer was no, and said why).
+  Packages/AnalysisKit: 90 tests across 6 suites (was 29). Packages/CoachKit: 74 tests across 8 suites (unchanged). App suite: 170 tests across 34 suites (was 159 across 32).
+  **Not done this session:** native QA of the rendered beginner report in the real app - the golden-fixture tests prove the text is exactly what was designed, but nobody has looked at the beginner register live in a window yet.
+  Also not wired this session, deliberately: `PortableReportAssembler`, `DashboardView`, `PlayerBriefView`, `MacGameAnalysisBackend` still build reports at the `.advanced` default regardless of the viewer's actual register.
+
+- **Finished the rest of Priority 2's keyboard/window items (P2.6) and the onboarding-to-fetch handoff (P2.2), committed at the start of this session having been left uncommitted by a prior one.**
+  `KeyMomentNavigator` walks a report's key moments in ply order without wrapping; a new Game menu (Next/Previous Move, Next/Previous Key Moment, Play/Pause Line, Flip Board, Analyze) works regardless of which view has focus.
+  `coachDockWidthThreshold` was comparing the window's width against a quantity measured from the detail pane, so the Coach panel could never dock on a 13-inch laptop; corrected from 1100 to 960.
+  Onboarding now reports whether the user confirmed a chess.com account so the app can route straight into fetching games instead of landing on an empty register.
+  App suite: 159 tests across 32 suites (was 154 across 31) before the P4.1/P4.7 work above added more.
 
 ## Current state (2026-07-30)
 
