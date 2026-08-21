@@ -5,11 +5,20 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: P4.2 (new detectors - threats, forks/pins, tempo-wasting moves), P4.3 (takeaways that actually say something), P1.6/P4.4 (`brilliant`), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
+Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: P4.2 (new detectors - threats, forks/pins, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
+P1.6/P4.4 (`brilliant`) is now implemented; see below.
 Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and the four board items below that have never been verified through a real visible window.
 `scripts/axdrag.swift` is committed and ready for that whenever a composited display is available to the agent.
 
-## Current state (2026-08-21)
+## Current state (2026-08-22)
+
+- **`MoveClassification.brilliant` is implemented (P1.6 + P4.4): sacrifice detection.**
+  Full narrative in `devlogs/2026-08-22.md`.
+  `BrilliancyDetector.isBrilliant(input:ply:)` requires all five: the engine's own top choice, still 75%+ winning immediately after, a 10-point uniqueness margin over the engine's second choice (the honest proxy for "this was a find" that stored analysis can actually support), not a same-square recapture, and a settled material deficit of 3+ pawns-equivalent once the sacrifice is actually accepted - measured at the longest even-length prefix of the replayed line, mirroring `ThemeDetector.punishment`'s own rule.
+  Detection lives inside `ClassificationContext.forGame`, alongside the existing book/forced-move detection, so the Report, the scoresheet, and the phone companion see identical brilliant assignments automatically rather than needing separate wiring at each of the three real call sites.
+  **A first implementation attempt produced a real false positive on the committed Carlsen fixture** - checking material only at k=2 and k=4 of the replayed line caught a transient dip mid-exchange (a rook offered on move 55 that nets White a queen for a rook once fully settled) and mislabeled a winning combination as a sacrifice. Caught by doing exactly what the design's own author flagged as the one pre-ship check worth doing: running the detector over the real fixture corpus and reading every fire by hand. Fixed by reading the settled position instead of a fixed early window; confirmed zero false positives remain in the fixture corpus.
+  Deliberately narrow: exchange sacrifices and pawn sacrifices do not qualify. No depth-dependent re-verification, no beauty scoring, no `KeyMomentSelector` or `FactAuditor` wiring this session.
+  Packages/AnalysisKit: 105 tests across 6 suites (was 90). App suite: 170 tests across 34 suites (unchanged, no App-layer change - `.brilliant`'s color, glossary entry, and Coach headline were all already written in a prior session and needed no touching).
 
 - **Teaching level now does real work, and beginner prose dropped percentages for plain language (P4.1 + P4.7).**
   Full narrative in `devlogs/2026-08-21.md`.
