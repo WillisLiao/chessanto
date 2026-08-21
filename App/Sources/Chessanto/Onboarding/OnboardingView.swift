@@ -10,6 +10,13 @@ struct OnboardingView: View {
     @EnvironmentObject private var library: GameLibrary
     @Environment(\.dismiss) private var dismiss
 
+    /// Called with whether the user confirmed a chess.com account.
+    ///
+    /// Confirming an account and then landing on "No games in the register"
+    /// made the question pointless - the answer led nowhere. The caller uses
+    /// this to continue straight into fetching those games.
+    var onFinished: (Bool) -> Void = { _ in }
+
     private enum Page: Int, CaseIterable {
         case welcome, username, ratingBand, coach
     }
@@ -214,6 +221,8 @@ struct OnboardingView: View {
         profile.coachModel = coachModel.isEmpty ? nil : coachModel
         _ = try? library.store.saveUserProfile(profile)
         library.completeOnboarding()
+        let didConfirmAccount = confirmedUsername != nil
         dismiss()
+        onFinished(didConfirmAccount)
     }
 }

@@ -38,11 +38,18 @@ struct GameReplayView: View {
         case practice = "Practice"
     }
 
-    /// Below this window width the Coach panel slides over the Moves/Report
-    /// pane instead of docking as a third column (decision A) - board(420)
-    /// + moves/report(~300) + coach(~320) needs roughly this much room to
-    /// coexist comfortably.
-    private static let coachDockWidthThreshold: CGFloat = 1100
+    /// Below this content width the Coach panel slides over the Moves/Report
+    /// pane instead of docking as a third column (decision A).
+    ///
+    /// This is the *detail pane's* width, not the window's, and the sidebar
+    /// takes about 300 of the window before this is measured. At the old
+    /// 1100 the Coach could therefore never dock on a laptop: a 13-inch Air
+    /// gives roughly 980 points here, so the panel always covered the move
+    /// list it is supposed to sit beside. 960 clears that, and the board is
+    /// the element that gives up the difference - it already sizes itself
+    /// from leftover space through `aspectRatio(.fit)`, so it shrinks rather
+    /// than forcing anything to overflow.
+    private static let coachDockWidthThreshold: CGFloat = 960
 
     init(
         game: GameRecord,
@@ -103,11 +110,46 @@ struct GameReplayView: View {
             switch direction {
             case .right: viewModel.stepForward()
             case .left: viewModel.stepBackward()
-            default: break
+            case .down: jumpToKeyMoment(.next)
+            case .up: jumpToKeyMoment(.previous)
+            @unknown default: break
             }
+        }
+        // Single-key shortcuts match the muscle memory of every online
+        // board. They only fire while the board has focus, so the Game menu
+        // carries a modifier equivalent of each that always works.
+        .onKeyPress("f") {
+            flipped.toggle()
+            return .handled
+        }
+        .onKeyPress(.space) {
+            toggleLinePlayback()
+            return .handled
         }
         .onExitCommand {
             if isCoachOpen { isCoachOpen = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .stepForwardRequested)) { _ in
+            viewModel.stepForward()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .stepBackwardRequested)) { _ in
+            viewModel.stepBackward()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .nextKeyMomentRequested)) { _ in
+            jumpToKeyMoment(.next)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .previousKeyMomentRequested)) { _ in
+            jumpToKeyMoment(.previous)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .flipBoardRequested)) { _ in
+            flipped.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleLinePlaybackRequested)) { _ in
+            toggleLinePlayback()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .analyzeGameRequested)) { _ in
+            guard engineService.isStarted, !engineService.isAnalyzing else { return }
+            startAnalysis(reanalyze: viewModel.report != nil)
         }
         .onAppear {
             quality = library.analysisQuality
@@ -552,6 +594,39 @@ struct GameReplayView: View {
         let from = SquareCoordinate(notation: move.from.algebraic)
         let to = SquareCoordinate(notation: move.to.algebraic)
         Task { await viewModel.playMove(from: from, to: to, promotion: move.promotion ?? .queen) }
+    }
+
+    private enum KeyMomentDirection {
+        case next
+        case previous
+    }
+
+    /// Walks the report's key moments from wherever the board is, selecting
+    /// the moment without starting its better-line playback - stepping
+    /// through mistakes should not auto-play a line each time.
+    private func jumpToKeyMoment(_ direction: KeyMomentDirection) {
+        guard let moments = viewModel.report?.keyMoments, !moments.isEmpty else { return }
+        // Key moments are indexed by position in `moveIndices`, the same
+        // mapping `handleKeyMoment` uses to jump, so navigation has to speak
+        // that and not a raw move index.
+        let currentPly = viewModel.moveIndices.firstIndex(of: viewModel.currentIndex) ?? -1
+        let target = direction == .next
+            ? KeyMomentNavigator.next(after: currentPly, in: moments)
+            : KeyMomentNavigator.previous(before: currentPly, in: moments)
+        guard let target else { return }
+        rightPaneTab = .report
+        handleKeyMoment(target, intent: .selectOnly)
+    }
+
+    /// Space pauses or resumes whichever line is playing, and does nothing
+    /// when no line is on the board.
+    private func toggleLinePlayback() {
+        guard let linePreview else { return }
+        if linePreview.isPlaying {
+            linePreview.pause()
+        } else {
+            linePreview.play()
+        }
     }
 
     /// Analysis controls (quality picker, Analyze/Re-analyze, engine status)

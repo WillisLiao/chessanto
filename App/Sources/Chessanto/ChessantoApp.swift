@@ -16,6 +16,10 @@ struct ChessantoApp: App {
         NSApplication.shared.appearance = NSAppearance(named: .aqua)
     }
 
+    private func post(_ name: Notification.Name) {
+        NotificationCenter.default.post(name: name, object: nil)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -55,6 +59,25 @@ struct ChessantoApp: App {
                 }
                 .keyboardShortcut("o", modifiers: [.command])
             }
+
+            CommandMenu("Game") {
+                Button("Next Move") { post(.stepForwardRequested) }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command])
+                Button("Previous Move") { post(.stepBackwardRequested) }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command])
+                Divider()
+                Button("Next Key Moment") { post(.nextKeyMomentRequested) }
+                    .keyboardShortcut(.downArrow, modifiers: [.command])
+                Button("Previous Key Moment") { post(.previousKeyMomentRequested) }
+                    .keyboardShortcut(.upArrow, modifiers: [.command])
+                Divider()
+                Button("Play or Pause Line") { post(.toggleLinePlaybackRequested) }
+                    .keyboardShortcut(.space, modifiers: [.command])
+                Button("Flip Board") { post(.flipBoardRequested) }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+                Button("Analyze Game") { post(.analyzeGameRequested) }
+                    .keyboardShortcut("r", modifiers: [.command])
+            }
         }
 
         Settings {
@@ -78,4 +101,17 @@ struct ChessantoApp: App {
 
 extension Notification.Name {
     static let importPGNRequested = Notification.Name("importPGNRequested")
+    /// Board and review commands, posted from the menu bar.
+    ///
+    /// The single-key shortcuts on the board only fire while the board has
+    /// focus, which it loses the moment the sidebar is clicked. Menu items
+    /// fire regardless of focus and are discoverable, so every board action
+    /// has one - the key press is the shortcut, not the only way in.
+    static let stepForwardRequested = Notification.Name("stepForwardRequested")
+    static let stepBackwardRequested = Notification.Name("stepBackwardRequested")
+    static let nextKeyMomentRequested = Notification.Name("nextKeyMomentRequested")
+    static let previousKeyMomentRequested = Notification.Name("previousKeyMomentRequested")
+    static let flipBoardRequested = Notification.Name("flipBoardRequested")
+    static let analyzeGameRequested = Notification.Name("analyzeGameRequested")
+    static let toggleLinePlaybackRequested = Notification.Name("toggleLinePlaybackRequested")
 }

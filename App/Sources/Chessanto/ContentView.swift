@@ -91,7 +91,15 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: onboardingBinding) {
-            OnboardingView()
+            OnboardingView { didConfirmAccount in
+                // Straight from "this is my account" to "here are your
+                // games", instead of an empty register and a menu to hunt
+                // for. Imports flow on into analysis from there, since
+                // "Analyze after import" is on by default.
+                if didConfirmAccount, library.games.isEmpty {
+                    isShowingChessComFetch = true
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .importPGNRequested)) { _ in
             isShowingImporter = true
@@ -443,10 +451,28 @@ struct ContentView: View {
                 .frame(maxWidth: 360, alignment: .leading)
 
                 if library.games.isEmpty {
-                    Button("Import PGN…") {
-                        isShowingImporter = true
+                    HStack(spacing: DesignSpacing.sm) {
+                        // The text has always offered two ways in; only one
+                        // of them was a button, and it was the one a user who
+                        // just confirmed a chess.com account does not want.
+                        if library.isChessComAccountConfirmed {
+                            Button("Fetch my chess.com games") {
+                                isShowingChessComFetch = true
+                            }
+                            .buttonStyle(.dsPrimary)
+                            Button("Import PGN…") {
+                                isShowingImporter = true
+                            }
+                        } else {
+                            Button("Import PGN…") {
+                                isShowingImporter = true
+                            }
+                            .buttonStyle(.dsPrimary)
+                            Button("Fetch from chess.com…") {
+                                isShowingChessComFetch = true
+                            }
+                        }
                     }
-                    .buttonStyle(.dsPrimary)
                 }
             }
             .padding(DesignSpacing.xl)
