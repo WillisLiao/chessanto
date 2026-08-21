@@ -36,6 +36,22 @@ private enum TestFixtureError: Error {
     #expect(rendered == golden.trimmingCharacters(in: .newlines))
 }
 
+@Test func realFixtureGameProducesTheCommittedBeginnerGoldenReport() throws {
+    let input = try loadFixtureInput()
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared, register: .beginner)
+    #expect(report != nil)
+    guard let report else { return }
+
+    let rendered = ReportText.render(report)
+
+    guard let goldenURL = Bundle.module.url(forResource: "real-fixture-game-golden-report-beginner", withExtension: "txt") else {
+        Issue.record("missing beginner golden fixture")
+        return
+    }
+    let golden = try String(contentsOf: goldenURL, encoding: .utf8)
+    #expect(rendered == golden.trimmingCharacters(in: .newlines))
+}
+
 @Test func realFixtureGameAuditDropsNothing() throws {
     let input = try loadFixtureInput()
     let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)

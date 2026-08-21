@@ -119,6 +119,51 @@ private func makeWhiteDropsInput(whiteDrops: [Double], whiteClassifications: [Mo
     #expect(selected == [1, 3, 5])
 }
 
+// MARK: - Register-driven cap
+
+@Test func beginnerRegisterCapsAtFourOptionalCandidates() {
+    let drops = (1...10).map { Double($0) }
+    let (input, classifications) = makeWhiteDropsInput(
+        whiteDrops: drops,
+        whiteClassifications: Array(repeating: .inaccuracy, count: 10)
+    )
+    let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input, register: .beginner)
+    #expect(selected.count == 4)
+}
+
+@Test func intermediateRegisterCapsAtSixOptionalCandidates() {
+    let drops = (1...10).map { Double($0) }
+    let (input, classifications) = makeWhiteDropsInput(
+        whiteDrops: drops,
+        whiteClassifications: Array(repeating: .inaccuracy, count: 10)
+    )
+    let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input, register: .intermediate)
+    #expect(selected.count == 6)
+}
+
+@Test func requiredMomentsAreNeverDroppedPastTheBeginnerCap() {
+    // 9 blunders - even the tightest cap (beginner, 4) must not drop any.
+    let drops = (1...9).map { Double($0) * 5 }
+    let (input, classifications) = makeWhiteDropsInput(
+        whiteDrops: drops,
+        whiteClassifications: Array(repeating: .blunder, count: 9)
+    )
+    let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input, register: .beginner)
+    #expect(selected.count == 9)
+}
+
+@Test func beginnerRegisterStillSelectsWhenNoMomentHasANameableConsequence() {
+    // Plain win-probability drops with no captures/mates in the synthetic
+    // PV - the beginner "prefer consequences" sort must degrade to the
+    // drop-sorted order rather than filtering everything out.
+    let (input, classifications) = makeWhiteDropsInput(
+        whiteDrops: [12, 14, 16],
+        whiteClassifications: [.inaccuracy, .inaccuracy, .inaccuracy]
+    )
+    let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input, register: .beginner)
+    #expect(!selected.isEmpty)
+}
+
 // MARK: - Whose moves are candidates
 
 /// Two blunders, one by each side, in a game where the FEN's side-to-move

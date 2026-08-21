@@ -5,7 +5,7 @@ public enum ReportBuilder {
     /// Builds the full coaching report for an analyzed game. Returns `nil`
     /// if the game isn't fully analyzed (every ply needs a rank-1 record)
     /// or has no moves at all.
-    public static func build(input: ReportInput, openingBook: OpeningBook) -> GameReport? {
+    public static func build(input: ReportInput, openingBook: OpeningBook, register: RatingRegister = .advanced) -> GameReport? {
         guard input.isFullyAnalyzed, input.plies.count > 1 else { return nil }
 
         let moveCount = input.plies.count - 1
@@ -46,7 +46,7 @@ public enum ReportBuilder {
 
         let opening = buildOpeningFact(input: input, openingBook: openingBook)
 
-        let selectedPlies = KeyMomentSelector.selectPlies(classifications: classifications, input: input)
+        let selectedPlies = KeyMomentSelector.selectPlies(classifications: classifications, input: input, register: register)
         var keyMoments: [KeyMoment] = []
         for p in selectedPlies {
             guard let evalSwing = ThemeDetector.evalSwing(input: input, ply: p, classification: classifications[p - 1]) else {
@@ -85,7 +85,8 @@ public enum ReportBuilder {
             blackClassificationCounts: orderedCounts(blackCounts),
             opening: opening,
             keyMoments: keyMoments,
-            takeaways: takeaways
+            takeaways: takeaways,
+            register: register
         )
     }
 

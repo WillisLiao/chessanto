@@ -76,14 +76,15 @@ public enum ReportText {
     /// The rule-based one-line summary of a single key moment, without the
     /// leading list marker - used both by `render` and (as a Layer 1 input)
     /// by CoachKit's whole-game summary payload.
-    public static func momentSummary(_ moment: KeyMoment, report: GameReport) -> String {
-        momentLines(moment, report: report)[0].replacingOccurrences(of: "- ", with: "", options: [.anchored])
+    public static func momentSummary(_ moment: KeyMoment, report: GameReport, includingMoveLabel: Bool = true) -> String {
+        momentLines(moment, report: report, includingMoveLabel: includingMoveLabel)[0]
+            .replacingOccurrences(of: "- ", with: "", options: [.anchored])
     }
 
-    private static func momentLines(_ moment: KeyMoment, report: GameReport) -> [String] {
-        var text = evalSwingSentence(moment.evalSwing, report: report)
+    private static func momentLines(_ moment: KeyMoment, report: GameReport, includingMoveLabel: Bool = true) -> [String] {
+        var text = evalSwingSentence(moment.evalSwing, report: report, includingMoveLabel: includingMoveLabel)
         if let betterMove = moment.betterMove {
-            text += " " + betterMoveSentence(betterMove)
+            text += " " + betterMoveSentence(betterMove, report: report)
         }
         if let punishment = moment.punishment {
             text += " " + punishmentSentence(punishment)
@@ -97,19 +98,56 @@ public enum ReportText {
         return ["- \(text)"]
     }
 
-    private static func evalSwingSentence(_ fact: EvalSwingFact, report: GameReport) -> String {
+    private static func evalSwingSentence(_ fact: EvalSwingFact, report: GameReport, includingMoveLabel: Bool = true) -> String {
         let player = playerLabel(report: report, isWhite: fact.moverIsWhite)
         let moveLabel = moveNumberLabel(ply: fact.ply, moverIsWhite: fact.moverIsWhite)
-        return "\(moveLabel) \(fact.playedSAN) drops \(possessive(player)) winning chances from \(pct(fact.moverWinProbabilityBefore))% to \(pct(fact.moverWinProbabilityAfter))%."
+        let prefix = includingMoveLabel ? "\(moveLabel) " : ""
+        if report.register.usesWinPercentages {
+            return "\(prefix)\(fact.playedSAN) drops \(possessive(player)) winning chances from \(pct(fact.moverWinProbabilityBefore))% to \(pct(fact.moverWinProbabilityAfter))%."
+        }
+
+        let before = fact.moverWinProbabilityBefore
+        let after = fact.moverWinProbabilityAfter
+        let drop = before - after
+        let magnitude: String
+        if drop >= 20 {
+            magnitude = "much worse"
+        } else if drop >= 10 {
+            magnitude = "worse"
+        } else {
+            magnitude = "a little worse"
+        }
+
+        let opponent = playerLabel(report: report, isWhite: !fact.moverIsWhite)
+        func verb(_ label: String) -> String { label == "you" ? "are" : "is" }
+        let stateClause: String
+        if after >= 70 {
+            stateClause = "\(player) \(verb(player)) still winning, just by less"
+        } else if after >= 55 {
+            stateClause = "\(player) \(verb(player)) still better"
+        } else if after >= 45 {
+            stateClause = "the position is level now"
+        } else if after >= 30 {
+            stateClause = "\(opponent) \(verb(opponent)) better now"
+        } else {
+            stateClause = "\(opponent) \(verb(opponent)) winning now"
+        }
+
+        return "\(prefix)\(fact.playedSAN) makes things \(magnitude) for \(player): \(stateClause)."
     }
 
-    private static func betterMoveSentence(_ fact: BetterMoveFact) -> String {
-        let evalLabel = EvalLabel.format(scoreCentipawns: fact.preMoveScoreCentipawns, mateIn: fact.preMoveMateIn)
+    private static func betterMoveSentence(_ fact: BetterMoveFact, report: GameReport) -> String {
+        let line = Array(fact.lineSANs.prefix(report.register.betterLinePlyCap))
         var text = "Better was \(fact.bestMoveSAN)"
-        if fact.lineSANs.count > 1 {
-            text += " (\(fact.lineSANs.joined(separator: " ")))"
+        if line.count > 1 {
+            text += " (\(line.joined(separator: " ")))"
         }
-        text += ", keeping the evaluation around \(evalLabel)."
+        if report.register.showsEvalLabel {
+            let evalLabel = EvalLabel.format(scoreCentipawns: fact.preMoveScoreCentipawns, mateIn: fact.preMoveMateIn)
+            text += ", keeping the evaluation around \(evalLabel)."
+        } else {
+            text += "."
+        }
         return text
     }
 

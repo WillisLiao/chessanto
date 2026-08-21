@@ -137,7 +137,7 @@ struct PracticeContentView: View {
                 .foregroundStyle(DesignColors.textSecondary)
 
             if let loss = feedback.lossCentipawns, feedback.outcome != .strong {
-                Text("Engine loss: \(loss) centipawns.")
+                Text("About \(String(format: "%.1f", Double(loss) / 100)) pawns worse than the best move.")
                     .font(.dsSecondary)
                     .foregroundStyle(DesignColors.textSecondary)
             }

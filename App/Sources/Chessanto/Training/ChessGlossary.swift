@@ -27,14 +27,21 @@ enum ChessGlossary {
         .forced: "the only legal move in the position, so there was nothing to choose between",
     ]
 
+    /// Returns the first known term (longest-first, matching `termGlosses`'
+    /// own order) found in `text` alongside its gloss, or `nil` if `text`
+    /// contains none of them. Never invents a gloss for an unrecognized term.
+    static func match(in text: String) -> (term: String, gloss: String)? {
+        for entry in termGlosses where text.contains(entry.term) {
+            return entry
+        }
+        return nil
+    }
+
     /// Returns the gloss for whichever known term appears in `text`, or
     /// `nil` if `text` contains none of them. Never invents a gloss for an
     /// unrecognized term.
     static func gloss(for text: String) -> String? {
-        for entry in termGlosses where text.contains(entry.term) {
-            return entry.gloss
-        }
-        return nil
+        match(in: text)?.gloss
     }
 
     static func gloss(for classification: MoveClassification) -> String {

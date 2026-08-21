@@ -27,7 +27,11 @@ let package = Package(
         .testTarget(
             name: "AnalysisKitTests",
             dependencies: ["AnalysisKit"],
-            resources: [.copy("Resources/real-fixture-game-report-input.json"), .copy("Resources/real-fixture-game-golden-report.txt")]
+            resources: [
+                .copy("Resources/real-fixture-game-report-input.json"),
+                .copy("Resources/real-fixture-game-golden-report.txt"),
+                .copy("Resources/real-fixture-game-golden-report-beginner.txt"),
+            ]
         )
     ]
 )

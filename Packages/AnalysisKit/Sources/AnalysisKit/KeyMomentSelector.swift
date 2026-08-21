@@ -14,7 +14,7 @@ import Foundation
 /// filtered to the user's side afterwards - the register would list eight
 /// moments and Practice would then offer three cards with no explanation.
 public enum KeyMomentSelector {
-    public static func selectPlies(classifications: [MoveClassification], input: ReportInput) -> [Int] {
+    public static func selectPlies(classifications: [MoveClassification], input: ReportInput, register: RatingRegister = .advanced) -> [Int] {
         let candidateKinds: Set<MoveClassification> = [.inaccuracy, .mistake, .blunder, .missedWin]
         let mustInclude: Set<MoveClassification> = [.blunder, .missedWin]
 
@@ -37,8 +37,27 @@ public enum KeyMomentSelector {
         }
 
         let required = drops.filter { mustInclude.contains($0.classification) }
-        let optional = drops.filter { !mustInclude.contains($0.classification) }
-            .sorted { $0.drop > $1.drop }
+        var optional = drops.filter { !mustInclude.contains($0.classification) }
+        if register.prefersNameableConsequences {
+            // Beginner register: prefer optional moments a learner can name
+            // a consequence for (something was hung, a mate was missed or
+            // allowed) over the raw win-probability drop, without ever
+            // filtering anything out - a game with no such moments still
+            // fills from the drop-sorted pool.
+            func hasConsequence(_ ply: Int) -> Bool {
+                ThemeDetector.punishment(input: input, ply: ply) != nil
+                    || ThemeDetector.missedMate(input: input, ply: ply) != nil
+                    || ThemeDetector.allowedMate(input: input, ply: ply) != nil
+            }
+            optional.sort {
+                let lhs = hasConsequence($0.ply)
+                let rhs = hasConsequence($1.ply)
+                if lhs != rhs { return lhs && !rhs }
+                return $0.drop > $1.drop
+            }
+        } else {
+            optional.sort { $0.drop > $1.drop }
+        }
 
         var selected = Set(required.map(\.ply))
         // Every blunder/missedWin is always kept, so the cap only bounds
@@ -47,7 +66,7 @@ public enum KeyMomentSelector {
         // (rather than stopping once 3 is reached) is what makes "at least
         // 3" actually a floor rather than a target: with 10 available
         // candidates the report should show the 8 biggest drops, not just 3.
-        let cap = max(8, required.count)
+        let cap = max(register.keyMomentCap, required.count)
         for candidate in optional {
             if selected.count >= cap { break }
             selected.insert(candidate.ply)

@@ -25,4 +25,7 @@ public struct GameReport: Sendable, Equatable {
     public let opening: OpeningFact?
     public let keyMoments: [KeyMoment]
     public let takeaways: [String]
+    /// The teaching-depth register this report was built and should render
+    /// for - see `RatingRegister`.
+    public let register: RatingRegister
 }

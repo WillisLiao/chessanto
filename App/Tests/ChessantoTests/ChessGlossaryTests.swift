@@ -24,4 +24,19 @@ struct ChessGlossaryTests {
     @Test func testUnknownTermReturnsNil() {
         #expect(ChessGlossary.gloss(for: "Zwischenzug") == nil)
     }
+
+    @Test func matchReturnsNilForProseWithNoKnownTerm() {
+        #expect(ChessGlossary.match(in: "White is better now.") == nil)
+    }
+
+    @Test func matchReturnsTheTermAndGlossFromARealRenderedSentence() {
+        let match = ChessGlossary.match(in: "This also left the bishop on c5 hanging: Bxc5 winning material.")
+        #expect(match?.term == "hanging")
+        #expect(match?.gloss == "left where the opponent can capture it for free")
+    }
+
+    @Test func matchPrefersTheLongerCastlingTokenOverItsSubstring() {
+        let match = ChessGlossary.match(in: "0-0-0 castles the king queenside: O-O-O.")
+        #expect(match?.term == "O-O-O")
+    }
 }

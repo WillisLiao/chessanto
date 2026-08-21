@@ -87,13 +87,7 @@ struct EvalGraphView: View {
     }
 
     private func hoverReadout(ply: Int, width: CGFloat) -> some View {
-        let evalText: String
-        if let probability = series[ply] {
-            evalText = "\(Int(probability.rounded()))% white"
-        } else {
-            evalText = "unanalyzed"
-        }
-        let label = "Ply \(ply) · \(evalText)"
+        let label = Self.hoverLabel(ply: ply, winPercentForWhite: series[ply])
         let fraction = CGFloat(ply) / CGFloat(max(series.count - 1, 1))
         return Text(label)
             .font(.dsSecondary)
@@ -103,6 +97,21 @@ struct EvalGraphView: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(DesignColors.hairline, lineWidth: 1))
             .position(x: min(max(fraction * width, 40), width - 40), y: 12)
+    }
+
+    /// The eval-graph hover label for one ply - move-number-based, matching
+    /// `ReportText.moveNumberLabel`'s convention, never "Ply N" (nobody
+    /// counts plies).
+    static func hoverLabel(ply: Int, winPercentForWhite: Double?) -> String {
+        guard ply > 0 else {
+            guard let winPercentForWhite else { return "Start · not analyzed yet" }
+            return "Start · \(Int(winPercentForWhite.rounded()))% for White"
+        }
+        let isWhiteMove = ply % 2 == 1
+        let moveNumber = isWhiteMove ? (ply + 1) / 2 : ply / 2
+        let movePrefix = isWhiteMove ? "\(moveNumber)." : "\(moveNumber)..."
+        guard let winPercentForWhite else { return "\(movePrefix) · not analyzed yet" }
+        return "\(movePrefix) · \(Int(winPercentForWhite.rounded()))% for White"
     }
 
     private func point(forPly ply: Int, width: CGFloat, height: CGFloat, count: Int) -> CGPoint {

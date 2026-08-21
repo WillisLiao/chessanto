@@ -52,30 +52,10 @@ public struct CoachSummaryPayload: Codable, Sendable {
     public let momentOneLiners: [String]
 }
 
-/// Adaptive rating register (PLAN.md's "Teaching depth"): three prompt
-/// registers, resolved either directly from a fixed `userProfile.ratingBand`
-/// or per-game from the user's numeric rating.
-public enum RatingRegister: String, Sendable, Codable, CaseIterable {
-    case beginner, intermediate, advanced
-
-    /// `ratingBand` is `userProfile.ratingBand` verbatim ("beginner",
-    /// "intermediate", "advanced", or "adaptive"). For "adaptive", `userRating`
-    /// (the user's rating in *this* game, resolved by the caller from
-    /// `GameRecord.whiteRating`/`blackRating` via `chessComUsername`) decides:
-    /// <1200 beginner, 1200-1800 intermediate, >1800 advanced, unknown -> intermediate.
-    public static func resolve(ratingBand: String, userRating: Int?) -> RatingRegister {
-        switch ratingBand {
-        case "beginner": return .beginner
-        case "intermediate": return .intermediate
-        case "advanced": return .advanced
-        default:
-            guard let userRating else { return .intermediate }
-            if userRating < 1200 { return .beginner }
-            if userRating <= 1800 { return .intermediate }
-            return .advanced
-        }
-    }
-}
+/// Adaptive rating register (PLAN.md's "Teaching depth") - now owned by
+/// AnalysisKit so `ReportBuilder`/`ReportText` can also branch on it; kept
+/// as a typealias here so every existing CoachKit reference keeps compiling.
+public typealias RatingRegister = AnalysisKit.RatingRegister
 
 /// Plain-value input to `CoachPayloadBuilder.chatPayload`, assembled by the
 /// app's view model each turn (M7). Contains no chess computation itself -

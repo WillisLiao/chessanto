@@ -348,9 +348,11 @@ final class GameReplayViewModel: ObservableObject {
             return
         }
         let analysisRows = cachedAllRanksByPly.values.flatMap { $0 }
-        let username = (try? store.userProfile())?.chessComUsername
+        let profile = try? store.userProfile()
+        let username = profile?.chessComUsername
+        let register = RatingRegister.resolve(ratingBand: profile?.ratingBand ?? "adaptive", userRating: userRatingInThisGame)
         reportInput = ReportBuilding.buildInput(record: record, analysisRows: analysisRows, chessComUsername: username)
-        report = reportInput.flatMap { ReportBuilder.build(input: $0, openingBook: OpeningBook.shared) }
+        report = reportInput.flatMap { ReportBuilder.build(input: $0, openingBook: OpeningBook.shared, register: register) }
         if let report, let reportInput, let gameId {
             startTrainingCardReconciliation(
                 report: report,

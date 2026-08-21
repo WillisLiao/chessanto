@@ -442,10 +442,11 @@ struct GameReplayView: View {
             )
         }
         let narration = coachService.narrationsByPly[ply]
+        let summary = viewModel.report.map { ReportText.momentSummary(moment, report: $0, includingMoveLabel: false) } ?? ""
         return CoachStageContent(
             eyebrow: "\(moveNumberLabel(ply: ply)) \(moment.evalSwing.playedSAN)",
             headline: CoachStageText.headline(for: moment.evalSwing.classification),
-            message: CoachStageText.condensed(narration?.text ?? momentSummary(moment)),
+            message: CoachStageText.condensed(narration?.text ?? summary),
             source: narration?.source == .coach ? "Local Coach" : "Engine verified",
             emotion: coachEmotion(for: moment.evalSwing.classification)
         )
@@ -464,19 +465,6 @@ struct GameReplayView: View {
         case .book, .forced:
             return .instructive
         }
-    }
-
-    private func momentSummary(_ moment: KeyMoment) -> String {
-        var parts = [
-            "Winning chances changed from \(Int(moment.evalSwing.moverWinProbabilityBefore.rounded()))% to \(Int(moment.evalSwing.moverWinProbabilityAfter.rounded()))%."
-        ]
-        if let betterMove = moment.betterMove {
-            parts.append("Better was \(betterMove.bestMoveSAN).")
-        }
-        if let punishment = moment.punishment {
-            parts.append("\(punishment.refutingSAN) is the reply to watch.")
-        }
-        return parts.joined(separator: " ")
     }
 
     private func moveNumberLabel(ply: Int) -> String {

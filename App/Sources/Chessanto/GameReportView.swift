@@ -162,7 +162,7 @@ struct GameReportView: View {
                 VStack(alignment: .leading, spacing: DesignSpacing.sm) {
                     ForEach(Array(report.keyMoments.enumerated()), id: \.element.ply) { offset, moment in
                         if offset > 0 { Divider() }
-                        keyMomentRow(moment)
+                        keyMomentRow(moment, report: report)
                     }
                 }
             }
@@ -195,7 +195,8 @@ struct GameReportView: View {
     }
 
     @ViewBuilder
-    private func keyMomentRow(_ moment: KeyMoment) -> some View {
+    private func keyMomentRow(_ moment: KeyMoment, report: GameReport) -> some View {
+        let summary = ReportText.momentSummary(moment, report: report, includingMoveLabel: false)
         VStack(alignment: .leading, spacing: DesignSpacing.xs) {
             Button {
                 onSelectMoment(moment)
@@ -211,9 +212,15 @@ struct GameReportView: View {
                         Spacer()
                     }
 
-                    Text(moveNotation.text(momentSummary(moment)))
+                    Text(moveNotation.text(summary))
                         .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
+
+                    if report.register == .beginner, let match = ChessGlossary.match(in: summary) {
+                        Text("\(match.term) - \(match.gloss)")
+                            .font(.dsSecondary)
+                            .foregroundStyle(DesignColors.textSecondary)
+                    }
 
                 }
                 .padding(DesignSpacing.xs)
@@ -221,7 +228,7 @@ struct GameReportView: View {
             }
             .buttonStyle(KeyMomentRowButtonStyle())
             .accessibilityLabel(
-                "Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moveNotation.move(moment.evalSwing.playedSAN).spoken). \(moveNotation.accessibilityText(momentSummary(moment)))"
+                "Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moveNotation.move(moment.evalSwing.playedSAN).spoken). \(moveNotation.accessibilityText(summary))"
             )
             .contextMenu {
                 Button("Ask the coach about this moment") {
@@ -260,24 +267,6 @@ struct GameReportView: View {
                 }
             }
         }
-    }
-
-    private func momentSummary(_ moment: KeyMoment) -> String {
-        var parts: [String] = []
-        parts.append("Drops winning chances from \(Int(moment.evalSwing.moverWinProbabilityBefore.rounded()))% to \(Int(moment.evalSwing.moverWinProbabilityAfter.rounded()))%.")
-        if let betterMove = moment.betterMove {
-            parts.append("Better was \(betterMove.bestMoveSAN).")
-        }
-        if let punishment = moment.punishment {
-            parts.append("\(punishment.refutingSAN) punishes this.")
-        }
-        if let missedMate = moment.missedMate {
-            parts.append("Missed a forced mate in \(missedMate.mateInN).")
-        }
-        if let allowedMate = moment.allowedMate {
-            parts.append("Allowed a forced mate in \(allowedMate.mateInN).")
-        }
-        return parts.joined(separator: " ")
     }
 
     private func moveNumberLabel(ply: Int) -> String {
