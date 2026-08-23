@@ -21,5 +21,5 @@ Hint level one presents the typed threat SAN when the marker exists and falls ba
 The practice UI now exposes Step N of M, three reserved hint lines, an accessible Opponent replies SAN status, and a display-only board outside learner prompts.
 The display-only board is disabled for keyboard and VoiceOver interaction outside the learner prompt.
 Focused tests cover successful three-ply exchanges, wrong second learner moves, learner and opponent checkmates, stale delayed replies, scheduler atomicity, first-attempt summaries, marker generation and compatibility, legacy cards, and malformed lines.
-The focused macOS test command passed 48 tests across the PracticeSessionViewModel and TrainingDomain suites after the final additions.
+The focused macOS test command passed 49 tests across the PracticeSessionViewModel and TrainingDomain suites after the final additions.
 Visual window capture was unavailable in this environment, so accessibility-oriented source checks and state-driven injected-delay verification were used for the reply flow.
