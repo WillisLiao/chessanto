@@ -309,79 +309,104 @@ struct CoachVerifierTests {
 
     // MARK: - Concreteness detection (P4.8)
 
-    @Test func numberedMoveChainIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "1. e4 is a classic opening move."))
+    @Test func numberedMoveChainRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "1. e4 is a classic opening move."))
     }
 
-    @Test func moveRecommendationPhrasedIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "You should play Nf3 to develop your knight."))
+    @Test func defaultClosedPolicyRequiresEvaluateForGeneralChessLanguage() {
+        for response in [
+            "Development is important before attacking.",
+            "Attacking the king is the plan.",
+            "Castling is the plan.",
+            "White has a slight advantage.",
+        ] {
+            #expect(CoachVerifier.requiresEvaluateCall(in: response))
+        }
     }
 
-    @Test func evalAssertionWithMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "After Nf3, White has a clear advantage here."))
+    @Test func safeToolFreeResponsesAreExactGreetingThanksAndAcknowledgments() {
+        for response in ["Hello!", "Thanks.", "Thank you", "Okay, got it."] {
+            #expect(!CoachVerifier.requiresEvaluateCall(in: response))
+        }
     }
 
-    @Test func evaluationClaimWithoutMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "White is winning."))
+    @Test func pureClarifyingQuestionIsSafeWithoutEvaluate() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking whether White is winning?"))
     }
 
-    @Test func numericEvaluationWithoutMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "The position is +0.5 for White."))
+    @Test func advicePlusQuestionRequiresEvaluateByDefaultClosedPolicy() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "You should play Nf3, right?"))
     }
 
-    @Test func mateClaimWithoutMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "White has mate in 3."))
+    @Test func moveRecommendationRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "You should play Nf3 to develop your knight."))
     }
 
-    @Test func planClaimWithoutMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "Develop your pieces and castle."))
+    @Test func evalAssertionWithMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "After Nf3, White has a clear advantage here."))
     }
 
-    @Test func inflectedPlanClaimWithoutMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "Focus on developing your pieces and controlling the center."))
-        #expect(CoachVerifier.containsConcreteClaim(in: "Try developing your pieces and controlling the centre."))
+    @Test func evaluationClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "White is winning."))
     }
 
-    @Test func developmentalMoveClaimIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "Nf3 develops naturally."))
+    @Test func numericEvaluationWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "The position is +0.5 for White."))
     }
 
-    @Test func tacticalClaimWithoutMoveTokenIsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "This creates a fork and wins material."))
+    @Test func mateClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "White has mate in 3."))
     }
 
-    @Test func pureConversationalTextIsNotConcrete() {
-        #expect(!CoachVerifier.containsConcreteClaim(in: "What specifically would you like to know about this position?"))
+    @Test func planClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Develop your pieces and castle."))
     }
 
-    @Test func bareSquareReferenceIsNotConcrete() {
-        #expect(!CoachVerifier.containsConcreteClaim(in: "The pawn on e4 controls some important squares."))
+    @Test func inflectedPlanClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Focus on developing your pieces and controlling the center."))
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Try developing your pieces and controlling the centre."))
     }
 
-    @Test func clarifyingQuestionIsNotConcrete() {
-        #expect(!CoachVerifier.containsConcreteClaim(in: "Are you asking about the opening or the middlegame plan?"))
+    @Test func developmentalMoveClaimRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Nf3 develops naturally."))
     }
 
-    @Test func clarifyingQuestionWithEvaluationWordsIsNotConcrete() {
-        #expect(!CoachVerifier.containsConcreteClaim(in: "Are you asking whether White is winning?"))
+    @Test func tacticalClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "This creates a fork and wins material."))
     }
 
-    @Test func declarativeAdviceWithTrailingQuestionRemainsConcrete() {
-        #expect(CoachVerifier.containsConcreteClaim(in: "You should play Nf3, right?"))
+    @Test func pureClarifyingQuestionIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "What specifically would you like to know about this position?"))
     }
 
-    @Test func greetingIsNotConcrete() {
-        #expect(!CoachVerifier.containsConcreteClaim(in: "Hello, how can I help?"))
+    @Test func boardFactWithBareSquareRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "The pawn on e4 controls some important squares."))
     }
 
-    @Test func tautologyWithMoveReferenceIsConcrete() {
+    @Test func clarifyingQuestionIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking about the opening or the middlegame plan?"))
+    }
+
+    @Test func clarifyingQuestionWithEvaluationWordsIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking whether White is winning?"))
+    }
+
+    @Test func declarativeAdviceWithTrailingQuestionRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "You should play Nf3, right?"))
+    }
+
+    @Test func greetingIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Hello!"))
+    }
+
+    @Test func tautologyWithMoveReferenceRequiresEvaluate() {
         // The observed failure case: tautologies that sound like advice
-        #expect(CoachVerifier.containsConcreteClaim(in: "e4 is a classic opening move for White, and it's a good choice to continue the game."))
+        #expect(CoachVerifier.requiresEvaluateCall(in: "e4 is a classic opening move for White, and it's a good choice to continue the game."))
     }
 
-    @Test func letMeCheckWithNoToolCallIsConcrete() {
+    @Test func letMeCheckWithNoToolCallRequiresEvaluate() {
         // The specific failure: "Let me check the evaluation" + move recommendation
-        #expect(CoachVerifier.containsConcreteClaim(in: "Let me check the evaluation to see which of these options is the best. You should play Nf3."))
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Let me check the evaluation to see which of these options is the best. You should play Nf3."))
     }
 }
 

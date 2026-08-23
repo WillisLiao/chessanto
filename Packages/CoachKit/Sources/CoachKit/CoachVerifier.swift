@@ -478,134 +478,32 @@ public enum CoachVerifier {
         }
     }
 
-    // MARK: - Concreteness detection (P4.8 evaluate-tool gate)
+    // MARK: - Evaluate-tool gate (P4.8)
 
-    /// Returns true when the response text contains a concrete claim about
-    /// the position - a move recommendation, an evaluation assertion, or a
-    /// tactical/strategic plan referencing specific moves. Used by
-    /// `CoachChat` to enforce the evaluate-tool gate on open-ended
-    /// questions: a concrete claim without a preceding tool call is a
-    /// violation.
-    ///
-    /// The rule is intentionally conservative to avoid false positives on
-    /// genuinely non-concrete responses (clarifying questions, greetings,
-    /// conversational asides):
-    /// - A numbered move chain (e.g. "1. e4", "12... Nf6") is always concrete.
-    /// - A move-recommendation phrase ("you should play", "the best move is",
-    ///   "I recommend", "consider playing") adjacent to a move token is concrete.
-    /// - An evaluation assertion ("White is winning", "the position is
-    ///   better") or a concrete plan/tactical phrase ("develop your pieces",
-    ///   "wins material") is concrete even without a move token.
-    /// - An evaluation/plan/tactical phrase combined with a non-exempt move
-    ///   token is concrete.
-    /// - Bare conversational text with no position claim is never concrete.
-    public static func containsConcreteClaim(in text: String) -> Bool {
-        let chains = citedLineChains(in: text)
+    /// Returns true for every non-empty response that is not explicitly proven
+    /// to be safe without a current-turn evaluate call.
+    public static func requiresEvaluateCall(in text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return !isPureToolFreeResponse(in: trimmed)
+    }
 
-        // Any numbered move chain is a concrete recommendation/citation.
-        if chains.contains(where: { $0.hasLeadingNumberMarker }) {
-            return true
-        }
-
-        // Any non-exempt move token beyond bare squares counts as a strong
-        // move reference that triggers evaluation-phrase detection.
-        let hasStrongMoveTokens = chains.contains(where: { chain in
-            !(chain.tokens.count == 1 && chain.isExemptBareSquare)
-        })
-
-        // Any move token at all, including bare squares like "e4".
-        let hasAnyMoveTokens = !chains.isEmpty
-
-        let lower = text.lowercased()
-
-        // A pure clarifying question is conversational even when it repeats
-        // an evaluation phrase. Require an explicit interrogative opening and
-        // a single terminal question so concrete advice plus a question stays
-        // concrete.
+    private static func isPureToolFreeResponse(in text: String) -> Bool {
         if isPureClarifyingQuestion(in: text) {
-            return false
-        }
-
-        // Signed evaluations, win percentages, and mate counts are concrete
-        // position claims even when the response names no move.
-        if !matches(of: evalPattern, in: text).isEmpty
-            || !matches(of: percentPattern, in: text).isEmpty
-            || !matches(of: matePattern, in: text).isEmpty
-            || !matches(of: mateInWordsPattern, in: text).isEmpty {
             return true
         }
 
-        // Move-recommendation phrases.
-        let recommendationPhrases = [
-            "you should play", "the best move", "i recommend",
-            "consider playing", "try playing", "play ",
-            "the strongest", "the key move", "the winning move",
-            "you can play", "you could play", "i suggest",
-            "the idea is to play", "continue with",
-            "a good choice", "a good move", "is a good",
-            "is a classic opening", "is the right",
+        let normalized = text
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        let safeResponses: Set<String> = [
+            "hello", "hi", "hey", "thanks", "thank you",
+            "ok", "okay", "got it", "okay got it", "understood", "sounds good",
+            "yes", "no",
         ]
-        if hasAnyMoveTokens && recommendationPhrases.contains(where: lower.contains) {
-            return true
-        }
-
-        // These phrases make a position claim without needing a move token.
-        // Keep them specific enough that a genuine clarifying question about
-        // a "plan" or a greeting remains tool-free.
-        let standaloneEvaluationPhrases = [
-            "white is winning", "black is winning", "you are winning",
-            "white is losing", "black is losing", "you are losing",
-            "white is better", "black is better", "you are better",
-            "white is worse", "black is worse", "you are worse",
-            "the position is winning", "the position is losing",
-            "the position is equal", "the position is better",
-            "the position is worse", "this position is winning",
-            "this position is losing", "this position is equal",
-            "white has an advantage", "black has an advantage",
-            "you have an advantage", "the evaluation is",
-            "winning for white", "winning for black", "winning chances",
-        ]
-        if standaloneEvaluationPhrases.contains(where: lower.contains) {
-            return true
-        }
-
-        let standalonePlanPhrases = [
-            "develop your pieces", "develop the pieces", "bring out your pieces",
-            "developing your pieces", "developing the pieces",
-            "bringing out your pieces",
-            "castle your king", "control the center", "control the centre",
-            "controlling the center", "controlling the centre",
-            "attack the king", "create a threat", "look for a fork",
-            "trade queens", "keep your king safe", "connect your rooks",
-            "improve your pieces", "improve your position", "the plan is to",
-            "the best move is", "creates a fork", "creates a pin",
-            "creates a skewer", "wins material", "loses material",
-            "threatens mate", "allows mate", "tactical shot",
-        ]
-        if standalonePlanPhrases.contains(where: lower.contains) {
-            return true
-        }
-
-        // Evaluation, plan, and tactical words are concrete when attached to
-        // a real move token. Bare squares stay exempt so a positional square
-        // reference such as "the pawn on e4" remains conversational.
-        if hasStrongMoveTokens {
-            let moveClaimPhrases = [
-                "winning", "losing", "equal", "advantage",
-                "better position", "worse", "clearly better",
-                "is strong", "is weak", "decisive",
-                "the evaluation", "the engine says", "winning chances",
-                "compensation", "develop", "castle", "control",
-                "attack", "threaten", "wins material", "loses material",
-                "creates a fork", "creates a pin", "creates a skewer",
-                "threatens mate", "allows mate", "tactical shot",
-            ]
-            if moveClaimPhrases.contains(where: lower.contains) {
-                return true
-            }
-        }
-
-        return false
+        return safeResponses.contains(normalized)
     }
 
     private static func isPureClarifyingQuestion(in text: String) -> Bool {

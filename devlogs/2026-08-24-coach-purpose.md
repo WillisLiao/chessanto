@@ -98,11 +98,11 @@ The independent audit found that the first P4.8 implementation let pre-existing 
 `CoachChat` carries that successful-call signal across its one regeneration attempt and resets it for every new user turn.
 The contradictory `hadEngineData` bypass and the chat prompt's payload exception were removed.
 
-`CoachVerifier.containsConcreteClaim` now covers concrete evaluation assertions without move tokens, bounded tactical and plan language without move tokens, and developmental claims such as `Nf3 develops naturally` while keeping greetings, square references, and genuine clarifying questions tool-free.
-The deterministic plan phrases include ordinary inflections such as `developing your pieces` and `controlling the center` or `controlling the centre`, while a narrow explicit-opening and terminal-question predicate exempts pure clarifying questions such as `Are you asking whether White is winning?` without exempting declarative advice followed by a question.
+`CoachVerifier.requiresEvaluateCall` now uses a default-closed policy: every non-empty response requires a successful current-turn evaluate call unless the whole response is one explicit-opening clarifying question or one exact normalized greeting, thanks, or acknowledgment from the small whitelist.
+This policy therefore gates general chess instruction, positional square descriptions, plans, tactics, nuanced evaluations, and declarative advice followed by a question without maintaining a phrase-list detector.
 `CoachFactsPayload` now carries the audited `ignoredThreat` fact, and the moment prompt names and explains all five supported fact families: betterMove, punishment, ignoredThreat, missedMate, and allowedMate.
 
 The repair is verified against the CoachKit mock client only because no Ollama service was available at `127.0.0.1:11434` during this session.
-CoachKit now passes 102 tests across 8 suites, and the root macOS suite passes 179 tests across 34 suites.
+CoachKit now passes 106 tests across 8 suites, and the root macOS suite passes 179 tests across 34 suites.
 The root macOS build ends with `** BUILD SUCCEEDED **`, the root macOS test ends with `** TEST SUCCEEDED **`, and `git diff --check` is clean.
 The model-floor question remains report-only, and the current evidence still supports evaluating an 8B minimum later rather than changing `CoachModelCatalog` in this repair.

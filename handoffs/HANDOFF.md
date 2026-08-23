@@ -23,16 +23,18 @@ The independent audit repair closes the concrete-claim gate loopholes from the e
 `CoachChat` no longer checks `hadEngineData`, and neither payload lines nor precheck or seed evaluations can satisfy the gate.
 `CoachNarrator.ConversationResult.successfulEvaluateCalls` records only a successful `evaluate` executor result, and `CoachChat` retains that signal across regeneration while resetting it between user turns.
 Invalid or failed evaluate calls therefore still regenerate and fall back when the final response is concrete.
-`CoachVerifier.containsConcreteClaim` now covers concrete evaluation, tactical, and plan language both with and without move tokens while preserving tool-free greetings, square references, and clarifying questions.
-The bounded heuristic recognizes ordinary inflections such as `developing your pieces` and `controlling the center` or `controlling the centre`, and its explicit-opening plus terminal-question predicate exempts pure clarifying questions without exempting declarative advice followed by a question.
+`CoachVerifier.requiresEvaluateCall` now uses a default-closed policy in which every non-empty response requires a successful current-turn evaluate call unless it is one whole explicit-opening clarifying question or one exact normalized greeting, thanks, or acknowledgment from the small whitelist.
+The phrase-list detector is removed, so general chess instruction, positional square descriptions, development, attack, castling, nuanced evaluations, tactics, and declarative advice followed by a question all require evaluate.
 The chat prompt no longer advertises a pre-existing-engine-data exception.
 `CoachFactsPayload` and `CoachPayloadBuilder` now carry `ignoredThreat`, and the moment prompt explicitly tells the model to phrase that audited fact alongside betterMove, punishment, missedMate, and allowedMate.
-The corrected behavior is covered by 102 CoachKit tests across 8 suites, including pre-existing, precheck, seed, successful, invalid, failed, regeneration, inflected-plan, and clarifying-question cases.
+The corrected behavior is covered by 106 CoachKit tests across 8 suites, including pre-existing, precheck, seed, successful, invalid, failed, regeneration, default-closed, safe-response, and clarifying-question cases.
 The root macOS build passed with `** BUILD SUCCEEDED **`, the root macOS test passed with `179 tests in 34 suites` and `** TEST SUCCEEDED **`, and `git diff --check` passed.
 No real-model run was possible because Ollama was unavailable at `127.0.0.1:11434`, so this repair is mock-verified only.
 The model-floor decision remains report-only, with the earlier recommendation to consider disabling the Coach below 8B left for product direction.
 
 ## Current state (2026-08-24)
+
+The original P4.8 record below is historical and is superseded by the bounded audit repair section above.
 
 - **LLM Coach purpose clarified and enforced (P4.8).**
   Full narrative in `devlogs/2026-08-24-coach-purpose.md`.

@@ -219,13 +219,12 @@ public actor CoachChat {
             let verdict = await CoachVerifier.verify(text: text, context: verifierContext)
             switch verdict {
             case .verified(let verifiedText):
-                // P4.8 concreteness gate: pre-existing payload, precheck,
-                // and seed data do not satisfy the requirement. Only a
-                // successful evaluate call from this user turn does.
+                // P4.8 evaluate gate: only a successful evaluate call from
+                // this user turn can authorize a non-safe final response.
                 if !successfulEvaluateUsed
-                    && CoachVerifier.containsConcreteClaim(in: verifiedText) {
+                    && CoachVerifier.requiresEvaluateCall(in: verifiedText) {
                     let concreteViolation = CoachVerifier.Violation(
-                        "response makes concrete position claims without calling the evaluate tool first - call the evaluate tool to verify your claims before answering"
+                        "response requires an evaluate tool call before answering - call the evaluate tool before answering"
                     )
                     violationTotal += 1
                     poolNewAnchors(conversation.newAnchors)

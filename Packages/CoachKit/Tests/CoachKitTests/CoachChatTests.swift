@@ -88,11 +88,11 @@ private func sampleContext(fen: String = startFEN, lines: [RankedLine]? = nil) -
 struct CoachChatTests {
 
     @Test func happyPathReturnsVerifiedCoachReply() async throws {
-        let client = MockChatClient([.content("What would you like to explore in this position?")])
+        let client = MockChatClient([.content("Hello!")])
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
         let reply = await chat.send(question: "how should I continue?", context: sampleContext())
         #expect(reply.source == .coach)
-        #expect(reply.text == "What would you like to explore in this position?")
+        #expect(reply.text == "Hello!")
     }
 
     @Test func inflectedConcretePlanWithoutToolCallTriggersViolation() async throws {
@@ -172,9 +172,9 @@ struct CoachChatTests {
     @Test func contextBlockIsOmittedWhenPositionUnchangedAndReincludedOnFENChange() async throws {
         let secondFEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
         let client = MockChatClient([
-            .content("First reply, no citations."),
-            .content("Second reply, same position, no citations."),
-            .content("Third reply, new position, no citations."),
+            .content("Okay."),
+            .content("Thanks."),
+            .content("Got it."),
         ])
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
 
@@ -195,8 +195,8 @@ struct CoachChatTests {
 
     @Test func historyIsPrunedToPlainTurnsAndCappedAtTwelveMessages() async throws {
         var responses: [MockChatClient.ScriptedResponse] = []
-        for i in 0..<8 {
-            responses.append(.content("Reply number \(i), no citations."))
+        for _ in 0..<8 {
+            responses.append(.content("Okay."))
         }
         let client = MockChatClient(responses)
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
