@@ -34,11 +34,17 @@ struct EvalBarView: View {
         }
         .frame(width: width)
         .overlay(Rectangle().stroke(DesignColors.hairline, lineWidth: 1))
+        .help(helpText)
         .accessibilityLabel(accessibilityLabel)
     }
 
     private func isWhiteBetter(_ eval: EvalDisplay) -> Bool {
         eval.whiteWinProbability >= 50
+    }
+
+    private var helpText: String {
+        guard let eval else { return "Evaluation unavailable" }
+        return "Evaluation: \(eval.label) (White win probability: \(Int(eval.whiteWinProbability))%)"
     }
 
     private var accessibilityLabel: String {

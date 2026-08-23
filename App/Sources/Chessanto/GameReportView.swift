@@ -20,6 +20,7 @@ struct GameReportView: View {
     /// show the report is the natural place to ask for one; pointing at a
     /// control elsewhere on screen made the primary surface a dead end.
     var onAnalyze: (() -> Void)?
+    @State private var isClassificationLegendExpanded = false
 
     var body: some View {
         ScrollView {
@@ -83,12 +84,14 @@ struct GameReportView: View {
             Text("\(report.whiteName) vs \(report.blackName) · \(report.result)")
                 .font(.dsTitle)
                 .foregroundStyle(DesignColors.textPrimary)
+            let isWhiteUser = BoardIdentityStrip.isUser(name: report.whiteName, username: report.chessComUsername ?? "")
+            let isBlackUser = BoardIdentityStrip.isUser(name: report.blackName, username: report.chessComUsername ?? "")
             HStack(spacing: DesignSpacing.xs) {
-                Text("White \(String(format: "%.1f", report.whiteAccuracy))%")
-                    .foregroundStyle(DesignColors.accentText)
+                Text(AccuracySummaryFormatter.format(side: "White", accuracy: report.whiteAccuracy, isUser: isWhiteUser))
+                    .foregroundStyle(isWhiteUser ? DesignColors.accentText : DesignColors.textSecondary)
                 Text("·").foregroundStyle(DesignColors.textSecondary)
-                Text("Black \(String(format: "%.1f", report.blackAccuracy))%")
-                    .foregroundStyle(DesignColors.accentText)
+                Text(AccuracySummaryFormatter.format(side: "Black", accuracy: report.blackAccuracy, isUser: isBlackUser))
+                    .foregroundStyle(isBlackUser ? DesignColors.accentText : DesignColors.textSecondary)
             }
             .font(.dsNotation)
 
@@ -98,6 +101,10 @@ struct GameReportView: View {
                 classificationRow(name: report.whiteName, counts: report.whiteClassificationCounts)
                 classificationRow(name: report.blackName, counts: report.blackClassificationCounts)
             }
+
+            Divider()
+
+            classificationLegend
         }
 
         if let opening = report.opening {
@@ -192,6 +199,32 @@ struct GameReportView: View {
                 }
             }
         }
+    }
+
+    private var classificationLegend: some View {
+        DisclosureGroup(
+            isExpanded: $isClassificationLegendExpanded,
+            content: {
+                VStack(alignment: .leading, spacing: DesignSpacing.sm) {
+                    ForEach(MoveClassification.allCases, id: \.self) { classification in
+                        VStack(alignment: .leading, spacing: 2) {
+                            ClassificationChip(classification: classification)
+                            Text(ChessGlossary.gloss(for: classification))
+                                .font(.dsSecondary)
+                                .foregroundStyle(DesignColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 1)
+                    }
+                }
+                .padding(.top, DesignSpacing.xs)
+            },
+            label: {
+                Text("Classification marks legend")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+            }
+        )
     }
 
     @ViewBuilder

@@ -761,13 +761,16 @@ struct GameReplayView: View {
     @ViewBuilder
     private var accuracySummary: some View {
         if let white = viewModel.whiteAccuracy, let black = viewModel.blackAccuracy {
-            HStack {
-                Text("White \(String(format: "%.1f", white))")
-                Text("·").foregroundStyle(.secondary)
-                Text("Black \(String(format: "%.1f", black))")
+            let isWhiteUser = BoardIdentityStrip.isUser(name: game.white, username: library.chessComUsername)
+            let isBlackUser = BoardIdentityStrip.isUser(name: game.black, username: library.chessComUsername)
+            HStack(spacing: DesignSpacing.xs) {
+                Text(AccuracySummaryFormatter.format(side: "White", accuracy: white, isUser: isWhiteUser))
+                    .foregroundStyle(isWhiteUser ? DesignColors.textPrimary : DesignColors.textSecondary)
+                Text("·").foregroundStyle(DesignColors.textSecondary)
+                Text(AccuracySummaryFormatter.format(side: "Black", accuracy: black, isUser: isBlackUser))
+                    .foregroundStyle(isBlackUser ? DesignColors.textPrimary : DesignColors.textSecondary)
             }
             .font(.dsNotation.weight(.semibold))
-            .foregroundStyle(DesignColors.textSecondary)
             .padding(.horizontal, DesignSpacing.sm)
             .padding(.vertical, DesignSpacing.xs)
         }

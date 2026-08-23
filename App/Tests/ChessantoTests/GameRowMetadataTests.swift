@@ -15,4 +15,14 @@ struct GameRowMetadataTests {
         #expect(GameRowMetadata.formattedTimeControl("1/259200") == "1/259200")
         #expect(GameRowMetadata.formattedTimeControl(nil) == nil)
     }
+
+    @Test
+    func formatsPlainLanguageResults() {
+        #expect(GameRowMetadata.plainResult("1-0") == "White won")
+        #expect(GameRowMetadata.plainResult("0-1") == "Black won")
+        #expect(GameRowMetadata.plainResult("1/2-1/2") == "Draw")
+        #expect(GameRowMetadata.plainResult("*") == nil)
+        #expect(GameRowMetadata.plainResult(nil) == nil)
+        #expect(GameRowMetadata.plainResult("") == nil)
+    }
 }

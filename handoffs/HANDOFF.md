@@ -6,9 +6,23 @@ Read this first at session start; update it at session end.
 ## Next up
 
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: P4.2 (new detectors - threats, forks/pins, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
-P1.6/P4.4 (`brilliant`) is now implemented; see below.
-Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and the four board items below that have never been verified through a real visible window.
+P1.6/P4.4 (`brilliant`) is implemented; Priority 5 UI polish (all 8 items) is implemented per below.
+Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), and the four board items below that have never been verified through a real visible window.
 `scripts/axdrag.swift` is committed and ready for that whenever a composited display is available to the agent.
+
+## Current state (2026-08-24)
+
+- **Priority 5 small UI detail polish complete (all 8 items).**
+  Full narrative in `devlogs/2026-08-24.md`.
+  - **Classification chip wrapping:** Added `.lineLimit(1)` and `.fixedSize(horizontal: true, vertical: false)` to `ClassificationChip` so labels like "Inaccuracy" never wrap mid-word in narrow columns.
+  - **Classification marks legend:** Added a collapsible `DisclosureGroup` legend under "Game audit" in `GameReportView.swift` covering all 10 `MoveClassification` cases with definitions sourced directly from `ChessGlossary.gloss(for:)`.
+  - **Accuracy formatting & user identification:** Added percent signs and "(You)" player identification to `accuracySummary` in `GameReplayView.swift` and `GameReportView.swift`, powered by `AccuracySummaryFormatter` and `BoardIdentityStrip.isUser` with unit tests.
+  - **Sidebar result text:** Added `GameRowMetadata.plainResult(_:)` to render outcomes as "White won", "Black won", and "Draw" when no chess.com username perspective is available, with unit tests.
+  - **LinesPanelView truncation & adopt action:** Separated inspection from variation adoption by adding `.help(fullSANLine)` for full PV inspection on hover and a dedicated branch button (`arrow.triangle.branch`) with tooltip for intentional adoption.
+  - **Eval graph key moments hit target:** Wrapped the 6pt key moment circles in `EvalGraphView.swift` in a button with a 24x24 point hit target (`.contentShape(Circle())`) that jumps directly to the key moment ply with tooltip and VoiceOver label.
+  - **Eval bar scale mismatch:** Added explanatory tooltip and accessibility descriptions in `EvalBarView.swift` clarifying that the bar fill indicates win probability while the label shows engine pawn/mate evaluation.
+  - **Unexplained disabled button:** Added `.help` tooltip ("Analyze a game first to generate practice cards") and descriptive accessibility label to the disabled "Practice positions" button in `PlayerBriefView.swift`.
+  App suite: 174 tests across 34 suites (was 170 across 34). Packages/AnalysisKit and Packages/CoachKit remained untouched.
 
 ## Current state (2026-08-22)
 

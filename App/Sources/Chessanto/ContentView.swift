@@ -737,13 +737,14 @@ private struct GameRow: View {
                 .font(.dsNotation.weight(.semibold))
                 .frame(width: 18)
                 .foregroundStyle(outcome.color)
-        } else if let result = game.result, !result.isEmpty {
-            Text(result == "1/2-1/2" ? "½" : result)
-                .font(.dsNotation)
-                .frame(width: 30)
+                .accessibilityLabel(outcome.accessibilityLabel)
+        } else if let resultText = GameRowMetadata.plainResult(game.result) {
+            Text(resultText)
+                .font(.dsSecondary)
+                .lineLimit(1)
                 .fixedSize()
                 .foregroundStyle(DesignColors.textSecondary)
-                .accessibilityLabel("Result \(result)")
+                .accessibilityLabel(resultText)
         } else {
             Text("·")
                 .font(.dsNotation)
@@ -760,6 +761,14 @@ private struct GameRow: View {
             case .win: return "W"
             case .loss: return "L"
             case .draw: return "D"
+            }
+        }
+
+        var accessibilityLabel: String {
+            switch self {
+            case .win: return "You won"
+            case .loss: return "You lost"
+            case .draw: return "Draw"
             }
         }
 
@@ -799,6 +808,19 @@ private struct GameRow: View {
 }
 
 enum GameRowMetadata {
+    /// Formats a chess result string ("1-0", "0-1", "1/2-1/2") into plain language
+    /// ("White won", "Black won", "Draw") so learners do not read raw numbers as sports scores.
+    static func plainResult(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        switch raw {
+        case "1-0": return "White won"
+        case "0-1": return "Black won"
+        case "1/2-1/2": return "Draw"
+        case "*": return nil
+        default: return raw
+        }
+    }
+
     /// Turns chess.com's raw `TimeControl` seconds string ("180", "180+2",
     /// "1/259200") into a human-readable label ("3 min", "3+2 · Blitz").
     static func formattedTimeControl(_ raw: String?) -> String? {

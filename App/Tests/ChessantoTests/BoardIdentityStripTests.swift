@@ -66,4 +66,28 @@ struct BoardIdentityStripTests {
         #expect(strips.bottom.rating == nil)
         #expect(strips.top.rating == 1600)
     }
+
+    @Test func testAccuracySummaryFormatterWithoutUser() {
+        let white = AccuracySummaryFormatter.format(side: "White", accuracy: 93.8, isUser: false)
+        #expect(white == "White 93.8%")
+
+        let black = AccuracySummaryFormatter.format(side: "Black", accuracy: 90.8, isUser: false)
+        #expect(black == "Black 90.8%")
+    }
+
+    @Test func testAccuracySummaryFormatterWithUser() {
+        let white = AccuracySummaryFormatter.format(side: "White", accuracy: 93.8, isUser: true)
+        #expect(white == "White (You) 93.8%")
+
+        let black = AccuracySummaryFormatter.format(side: "Black", accuracy: 90.8, isUser: true)
+        #expect(black == "Black (You) 90.8%")
+    }
+
+    @Test func testIsUserMatchesCaseInsensitively() {
+        #expect(BoardIdentityStrip.isUser(name: "WillisLiao", username: "willisliao"))
+        #expect(BoardIdentityStrip.isUser(name: "willisliao", username: "WillisLiao"))
+        #expect(!BoardIdentityStrip.isUser(name: "Alice", username: "Bob"))
+        #expect(!BoardIdentityStrip.isUser(name: "Alice", username: ""))
+        #expect(!BoardIdentityStrip.isUser(name: "Alice", username: "   "))
+    }
 }
