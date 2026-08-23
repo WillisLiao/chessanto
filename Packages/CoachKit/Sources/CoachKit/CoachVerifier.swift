@@ -477,4 +477,78 @@ public enum CoachVerifier {
             )
         }
     }
+
+    // MARK: - Concreteness detection (P4.8 evaluate-tool gate)
+
+    /// Returns true when the response text contains a concrete claim about
+    /// the position - a move recommendation, an evaluation assertion, or a
+    /// tactical/strategic plan referencing specific moves. Used by
+    /// `CoachChat` to enforce the evaluate-tool gate on open-ended
+    /// questions: a concrete claim without a preceding tool call is a
+    /// violation.
+    ///
+    /// The rule is intentionally conservative to avoid false positives on
+    /// genuinely non-concrete responses (clarifying questions, greetings,
+    /// conversational asides):
+    /// - A numbered move chain (e.g. "1. e4", "12... Nf6") is always concrete.
+    /// - A move-recommendation phrase ("you should play", "the best move is",
+    ///   "I recommend", "consider playing") adjacent to a move token is concrete.
+    /// - An evaluation-assertion phrase ("winning", "losing", "equal",
+    ///   "advantage", "better position", "worse") combined with any
+    ///   non-exempt move token in the text is concrete.
+    /// - Bare conversational text with no move tokens at all is never concrete.
+    public static func containsConcreteClaim(in text: String) -> Bool {
+        let chains = citedLineChains(in: text)
+
+        // Any numbered move chain is a concrete recommendation/citation.
+        if chains.contains(where: { $0.hasLeadingNumberMarker }) {
+            return true
+        }
+
+        // Any non-exempt move token beyond bare squares counts as a strong
+        // move reference that triggers evaluation-phrase detection.
+        let hasStrongMoveTokens = chains.contains(where: { chain in
+            !(chain.tokens.count == 1 && chain.isExemptBareSquare)
+        })
+
+        // Any move token at all, including bare squares like "e4".
+        let hasAnyMoveTokens = !chains.isEmpty
+
+        guard hasAnyMoveTokens else { return false }
+
+        let lower = text.lowercased()
+
+        // Move-recommendation phrases.
+        let recommendationPhrases = [
+            "you should play", "the best move", "i recommend",
+            "consider playing", "try playing", "play ",
+            "the strongest", "the key move", "the winning move",
+            "you can play", "you could play", "i suggest",
+            "the idea is to play", "continue with",
+            "a good choice", "a good move", "is a good",
+            "is a classic opening", "is the right",
+        ]
+        for phrase in recommendationPhrases {
+            if lower.contains(phrase) { return true }
+        }
+
+        // Evaluation assertions - only concrete when paired with strong
+        // (non-bare-square) move tokens, to avoid flagging "the pawn on e4
+        // controls important squares" as a concrete claim.
+        if hasStrongMoveTokens {
+            let evalPhrases = [
+                "winning", "losing", "equal", "advantage",
+                "better position", "worse", "clearly better",
+                "is strong", "is weak", "decisive",
+                "the evaluation", "the engine says",
+                "winning chances", "compensation",
+            ]
+            for phrase in evalPhrases {
+                if lower.contains(phrase) { return true }
+            }
+        }
+
+        return false
+    }
 }
+

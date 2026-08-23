@@ -306,6 +306,43 @@ struct CoachVerifierTests {
             return
         }
     }
+
+    // MARK: - Concreteness detection (P4.8)
+
+    @Test func numberedMoveChainIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "1. e4 is a classic opening move."))
+    }
+
+    @Test func moveRecommendationPhrasedIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "You should play Nf3 to develop your knight."))
+    }
+
+    @Test func evalAssertionWithMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "After Nf3, White has a clear advantage here."))
+    }
+
+    @Test func pureConversationalTextIsNotConcrete() {
+        #expect(!CoachVerifier.containsConcreteClaim(in: "What specifically would you like to know about this position?"))
+    }
+
+    @Test func bareSquareReferenceIsNotConcrete() {
+        #expect(!CoachVerifier.containsConcreteClaim(in: "The pawn on e4 controls some important squares."))
+    }
+
+    @Test func clarifyingQuestionIsNotConcrete() {
+        #expect(!CoachVerifier.containsConcreteClaim(in: "Are you asking about the opening or the middlegame plan?"))
+    }
+
+    @Test func tautologyWithMoveReferenceIsConcrete() {
+        // The observed failure case: tautologies that sound like advice
+        #expect(CoachVerifier.containsConcreteClaim(in: "e4 is a classic opening move for White, and it's a good choice to continue the game."))
+    }
+
+    @Test func letMeCheckWithNoToolCallIsConcrete() {
+        // The specific failure: "Let me check the evaluation" + move recommendation
+        #expect(CoachVerifier.containsConcreteClaim(in: "Let me check the evaluation to see which of these options is the best. You should play Nf3."))
+    }
 }
 
 private let startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+

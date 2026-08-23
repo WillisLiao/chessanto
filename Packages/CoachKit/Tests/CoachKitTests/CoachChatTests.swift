@@ -11,6 +11,7 @@ import Testing
 private final class MockChatClient: OllamaChatStreaming, @unchecked Sendable {
     enum ScriptedResponse {
         case content(String)
+        case toolCall(name: String, arguments: [String: JSONValue])
         case failure
     }
 
@@ -36,6 +37,11 @@ private final class MockChatClient: OllamaChatStreaming, @unchecked Sendable {
             switch next {
             case .content(let text):
                 continuation.yield(OllamaChatChunk.stub(content: text, done: false))
+                continuation.yield(OllamaChatChunk.stub(content: "", done: true))
+                continuation.finish()
+            case .toolCall(let name, let arguments):
+                let call = OllamaToolCall(id: "call_1", function: .init(index: 0, name: name, arguments: arguments))
+                continuation.yield(OllamaChatChunk.stub(content: "", toolCalls: [call], done: false))
                 continuation.yield(OllamaChatChunk.stub(content: "", done: true))
                 continuation.finish()
             case .failure:
@@ -189,5 +195,66 @@ struct CoachChatTests {
         #expect(lastRequest.first?.role == "system")
         // No tool or violation-feedback roles should ever survive pruning.
         #expect(lastRequest.allSatisfy { $0.role == "system" || $0.role == "user" || $0.role == "assistant" })
+    }
+
+    // MARK: - P4.8 Concreteness gate
+
+    @Test func concreteClaimWithNoToolCallAndNoEngineDataTriggersViolation() async throws {
+        // The model answers with a concrete move recommendation without
+        // calling the evaluate tool, and no engine lines are in the context.
+        // Both attempts produce the same concrete claim -> falls back.
+        let client = MockChatClient([
+            .content("You should play Nf3 to develop your knight and control the center."),
+            .content("You should play Nf3 to develop your knight and control the center."),
+        ])
+        let noLinesContext = sampleContext(lines: [])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: noLinesContext)
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(client.callCount == 2)
+    }
+
+    @Test func concreteClaimAfterToolCallPassesThrough() async throws {
+        // The model correctly calls evaluate first, then gives a concrete answer.
+        let executor = StubExecutor(default: .success(EngineToolResult(
+            resultingFEN: startFEN, scoreCentipawnsWhitePerspective: 30, mateInWhitePerspective: nil,
+            evalLabel: "+0.3", principalVariationUCI: ["e2e4"], principalVariationSAN: ["e4"], depth: 12
+        )))
+        let client = MockChatClient([
+            .toolCall(name: "evaluate", arguments: ["fen": .string(startFEN)]),
+            .content("You should play 1. e4 to control the center (+0.3)."),
+        ])
+        let noLinesContext = sampleContext(lines: [])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: executor)
+        let reply = await chat.send(question: "how should I continue?", context: noLinesContext)
+        // The seed eval fires for empty-lines contexts when an executor is present,
+        // so hadEngineData becomes true. Either way, the tool call was made.
+        #expect(reply.source == .coach)
+        #expect(reply.violationCount == 0)
+    }
+
+    @Test func nonConcreteResponseWithNoToolCallPassesThrough() async throws {
+        // A conversational response with no concrete claims - no gate trigger.
+        let client = MockChatClient([
+            .content("What specifically would you like to know about this position?"),
+        ])
+        let noLinesContext = sampleContext(lines: [])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: noLinesContext)
+        #expect(reply.source == .coach)
+        #expect(reply.violationCount == 0)
+    }
+
+    @Test func concreteClaimWithPreExistingEngineDataPassesThrough() async throws {
+        // The context already has engine lines, so the model can cite them
+        // without calling the tool itself.
+        let client = MockChatClient([
+            .content("You should play 1. e4 to control the center."),
+        ])
+        // sampleContext() provides a line by default.
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext())
+        #expect(reply.source == .coach)
     }
 }

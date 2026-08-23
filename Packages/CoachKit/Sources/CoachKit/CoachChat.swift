@@ -193,6 +193,10 @@ public actor CoachChat {
             anchorPool.append(contentsOf: newAnchors)
         }
 
+        // Whether the model had pre-existing engine data to cite (from the
+        // payload's position lines, precheck evaluations, or a seed eval).
+        let hadEngineData = !payload.currentPositionLines.isEmpty || !precheckNotes.isEmpty
+
         for attempt in 0..<2 {
             let conversation = await CoachNarrator.runConversation(
                 messages: &turnMessages,
@@ -217,12 +221,31 @@ public actor CoachChat {
             let verdict = await CoachVerifier.verify(text: text, context: verifierContext)
             switch verdict {
             case .verified(let verifiedText):
-                poolNewAnchors(conversation.newAnchors)
-                recordTurn(question: question, reply: verifiedText)
-                return CoachChatReply(
-                    text: verifiedText, source: .coach,
-                    toolCallCount: toolCallTotal, violationCount: violationTotal, duration: Date().timeIntervalSince(start)
-                )
+                // P4.8 concreteness gate: if the response makes concrete
+                // claims about the position but the model never called the
+                // evaluate tool and had no pre-existing engine data to cite,
+                // treat this as a violation and force regeneration. This
+                // catches the observed failure where the Coach said "let me
+                // check the evaluation" and never did.
+                if conversation.toolCallsUsed == 0 && !hadEngineData
+                    && CoachVerifier.containsConcreteClaim(in: verifiedText) {
+                    let concreteViolation = CoachVerifier.Violation(
+                        "response makes concrete position claims without calling the evaluate tool first - call the evaluate tool to verify your claims before answering"
+                    )
+                    violationTotal += 1
+                    poolNewAnchors(conversation.newAnchors)
+                    if attempt == 0 {
+                        turnMessages.append(.init(role: "assistant", content: text))
+                        turnMessages.append(.init(role: "user", content: CoachPrompt.regenerationUserMessage(violations: [concreteViolation])))
+                    }
+                } else {
+                    poolNewAnchors(conversation.newAnchors)
+                    recordTurn(question: question, reply: verifiedText)
+                    return CoachChatReply(
+                        text: verifiedText, source: .coach,
+                        toolCallCount: toolCallTotal, violationCount: violationTotal, duration: Date().timeIntervalSince(start)
+                    )
+                }
             case .violations(let violations):
                 violationTotal += violations.count
                 poolNewAnchors(conversation.newAnchors)
