@@ -6,6 +6,7 @@ Read this first at session start; update it at session end.
 ## Next up
 
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
+P4.6 (real spaced repetition) is now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
 Priority 5's small UI details batch is now implemented; see below.
@@ -13,6 +14,18 @@ Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 
 ## Current state (2026-08-24)
+
+- **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**
+  Full narrative in `devlogs/2026-08-24-spaced-repetition.md`.
+  Fixed the immediate same-session reappearance bug where incorrect/inaccurate answers set `dueAt = now`.
+  Lapses now schedule at least 1 day in the future to train recall rather than recognition.
+  Added append-only migration `v12_spacedRepetition` introducing `easeFactor: Double` (default 2.5), `lapseCount: Int` (default 0), and `intervalDays: Double` (default 0.0) on `trainingCard`.
+  Updated `DeterministicReviewScheduler` with an ease-factor SM-2 algorithm tailored to Chessanto's four outcome grades.
+  `.strong` recalls increment `consecutiveSuccesses`, grow `easeFactor` by +0.15, follow the early ladder (3d -> 7d), and scale intervals by `easeFactor` upon graduation at 3 consecutive successes up to an asymptotic 180-day maximum.
+  Lapses (`.incorrect`, `.inaccurate`) reset `consecutiveSuccesses` to 0, return `masteryState` to `learning`, decrement `easeFactor` by -0.2 (clamped at a 1.3 floor), increment `lapseCount`, and enforce a 1-day relearn interval with tighter post-lapse progression (1d -> 3d -> 3*ease).
+  `lapseCount` dampens maximum interval ceilings for leeches via `max(30.0, 180.0 / (1.0 + 0.25 * Double(lapseCount)))`.
+  `.playable` answers reset consecutive successes to 0 and set 1-day interval without changing `easeFactor` or `lapseCount`.
+  Packages/Persistence: 44 tests across 2 suites (was 43). App suite: 178 tests across 34 suites (was 174).
 
 - **Native QA of the four unverified board behaviors: drag and drop confirmed live.**
   Full narrative in `devlogs/2026-08-24-board-qa.md`.

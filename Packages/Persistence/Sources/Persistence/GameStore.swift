@@ -507,10 +507,16 @@ public final class GameStore: Sendable {
                         updated.consecutiveSuccesses = existing.consecutiveSuccesses
                         updated.masteryState = existing.masteryState
                         updated.lastResult = existing.lastResult
+                        updated.easeFactor = existing.easeFactor
+                        updated.lapseCount = existing.lapseCount
+                        updated.intervalDays = existing.intervalDays
                     } else {
                         updated.consecutiveSuccesses = 0
                         updated.masteryState = "new"
                         updated.lastResult = nil
+                        updated.easeFactor = 2.5
+                        updated.lapseCount = 0
+                        updated.intervalDays = 0.0
                         if let cardId = existing.id {
                             _ = try TrainingAttemptRecord
                                 .filter(Column("cardId") == cardId)

@@ -80,7 +80,7 @@ struct AnalysisProvenanceTests {
         #expect(result.1.contains("qualityPreset"))
         #expect(result.1.contains("analyzedAt"))
         #expect(result.1.contains("engineIdentifier"))
-        #expect(result.2.last == "v11_playerIdentity")
+        #expect(result.2.last == "v12_spacedRepetition")
     }
 
     @Test("only sufficient analyzed plies are reusable")

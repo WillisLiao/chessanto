@@ -501,7 +501,9 @@ struct TrainingDomainTests {
 
         #expect(record.consecutiveSuccesses == 3)
         #expect(record.masteryState == "mastered")
-        #expect(Calendar.current.dateComponents([.day], from: now, to: record.dueAt).day == 14)
+        #expect(record.easeFactor == 2.65)
+        #expect(record.intervalDays == 19.0)
+        #expect(Calendar.current.dateComponents([.day], from: now, to: record.dueAt).day == 19)
     }
 
     @Test
@@ -518,14 +520,189 @@ struct TrainingDomainTests {
             rankedLinesJSON: "[]",
             classification: "mistake",
             consecutiveSuccesses: 2,
-            masteryState: "review"
+            masteryState: "review",
+            easeFactor: 2.5,
+            lapseCount: 1,
+            intervalDays: 7.0
         )
 
         let updated = scheduler.next(card: record, outcome: .playable, now: now)
 
         #expect(updated.consecutiveSuccesses == 0)
         #expect(updated.masteryState == "learning")
+        #expect(updated.easeFactor == 2.5)
+        #expect(updated.lapseCount == 1)
+        #expect(updated.intervalDays == 1.0)
         #expect(Calendar.current.dateComponents([.day], from: now, to: updated.dueAt).day == 1)
+    }
+
+    @Test
+    func incorrectAndInaccurateAnswersDoNotRescheduleImmediately() {
+        let scheduler = DeterministicReviewScheduler()
+        let now = Date(timeIntervalSince1970: 100_000)
+        let record = TrainingCardRecord(
+            id: 10,
+            gameId: 1,
+            sourcePly: 1,
+            preMoveFEN: "fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            consecutiveSuccesses: 2,
+            masteryState: "review"
+        )
+
+        let incorrectUpdated = scheduler.next(card: record, outcome: .incorrect, now: now)
+        #expect(incorrectUpdated.consecutiveSuccesses == 0)
+        #expect(incorrectUpdated.masteryState == "learning")
+        #expect(incorrectUpdated.lapseCount == 1)
+        #expect(incorrectUpdated.easeFactor == 2.3)
+        #expect(incorrectUpdated.intervalDays == 1.0)
+        #expect(incorrectUpdated.dueAt > now)
+        #expect(Calendar.current.dateComponents([.day], from: now, to: incorrectUpdated.dueAt).day == 1)
+
+        let inaccurateUpdated = scheduler.next(card: record, outcome: .inaccurate, now: now)
+        #expect(inaccurateUpdated.consecutiveSuccesses == 0)
+        #expect(inaccurateUpdated.masteryState == "learning")
+        #expect(inaccurateUpdated.lapseCount == 1)
+        #expect(inaccurateUpdated.easeFactor == 2.3)
+        #expect(inaccurateUpdated.intervalDays == 1.0)
+        #expect(inaccurateUpdated.dueAt > now)
+        #expect(Calendar.current.dateComponents([.day], from: now, to: inaccurateUpdated.dueAt).day == 1)
+    }
+
+    @Test
+    func easeFactorIncreasesOnStrongRecallAndIsFlooredOnDecreases() {
+        let scheduler = DeterministicReviewScheduler()
+        let now = Date(timeIntervalSince1970: 1_000)
+        var record = TrainingCardRecord(
+            id: 1,
+            gameId: 1,
+            sourcePly: 1,
+            preMoveFEN: "fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            easeFactor: 2.5
+        )
+
+        record = scheduler.next(card: record, outcome: .strong, now: now)
+        #expect(abs(record.easeFactor - 2.65) < 0.001)
+
+        record = scheduler.next(card: record, outcome: .incorrect, now: now)
+        #expect(abs(record.easeFactor - 2.45) < 0.001)
+
+        // Multiple lapses down to the 1.3 floor
+        for _ in 0..<10 {
+            record = scheduler.next(card: record, outcome: .incorrect, now: now)
+        }
+        #expect(record.easeFactor == 1.3)
+        #expect(record.lapseCount == 11)
+
+        // Strong recall increases from the 1.3 floor
+        record = scheduler.next(card: record, outcome: .strong, now: now)
+        #expect(abs(record.easeFactor - 1.45) < 0.001)
+    }
+
+    @Test
+    func freshCardFollowsStandardLadderAndScalesOnGraduation() {
+        let scheduler = DeterministicReviewScheduler()
+        let now = Date(timeIntervalSince1970: 1_000)
+        var card = TrainingCardRecord(
+            id: 1,
+            gameId: 1,
+            sourcePly: 1,
+            preMoveFEN: "fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            consecutiveSuccesses: 0,
+            masteryState: "new",
+            easeFactor: 2.5,
+            lapseCount: 0,
+            intervalDays: 0.0
+        )
+
+        // Success 1: 3 days
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 1)
+        #expect(card.masteryState == "review")
+        #expect(card.intervalDays == 3.0)
+        #expect(abs(card.easeFactor - 2.65) < 0.001)
+
+        // Success 2: 7 days
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 2)
+        #expect(card.masteryState == "review")
+        #expect(card.intervalDays == 7.0)
+        #expect(abs(card.easeFactor - 2.80) < 0.001)
+
+        // Success 3 (Graduation): round(7 * 2.95) = 21 days, mastered
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 3)
+        #expect(card.masteryState == "mastered")
+        #expect(card.intervalDays == 21.0)
+        #expect(abs(card.easeFactor - 2.95) < 0.001)
+
+        // Success 4: round(21 * 3.10) = 65 days
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 4)
+        #expect(card.masteryState == "mastered")
+        #expect(card.intervalDays == 65.0)
+        #expect(abs(card.easeFactor - 3.10) < 0.001)
+    }
+
+    @Test
+    func lapsedCardRelearnsWithTighterLadderAndLapseDampenedCeiling() {
+        let scheduler = DeterministicReviewScheduler()
+        let now = Date(timeIntervalSince1970: 1_000)
+        var card = TrainingCardRecord(
+            id: 1,
+            gameId: 1,
+            sourcePly: 1,
+            preMoveFEN: "fen",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[]",
+            classification: "mistake",
+            consecutiveSuccesses: 3,
+            masteryState: "mastered",
+            easeFactor: 2.5,
+            lapseCount: 0,
+            intervalDays: 21.0
+        )
+
+        // Card lapses
+        card = scheduler.next(card: card, outcome: .incorrect, now: now)
+        #expect(card.consecutiveSuccesses == 0)
+        #expect(card.masteryState == "learning")
+        #expect(card.lapseCount == 1)
+        #expect(abs(card.easeFactor - 2.30) < 0.001)
+        #expect(card.intervalDays == 1.0)
+
+        // Relearning recall 1: 1 day confirmation step
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 1)
+        #expect(card.masteryState == "review")
+        #expect(card.intervalDays == 1.0)
+        #expect(abs(card.easeFactor - 2.45) < 0.001)
+
+        // Relearning recall 2: 3 days step
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 2)
+        #expect(card.masteryState == "review")
+        #expect(card.intervalDays == 3.0)
+        #expect(abs(card.easeFactor - 2.60) < 0.001)
+
+        // Relearning recall 3: round(3 * 2.75) = 8 days, mastered
+        card = scheduler.next(card: card, outcome: .strong, now: now)
+        #expect(card.consecutiveSuccesses == 3)
+        #expect(card.masteryState == "mastered")
+        #expect(card.intervalDays == 8.0)
+        #expect(abs(card.easeFactor - 2.75) < 0.001)
     }
 
     private func card(
