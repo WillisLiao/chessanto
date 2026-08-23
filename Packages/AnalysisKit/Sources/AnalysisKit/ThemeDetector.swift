@@ -175,6 +175,81 @@ public enum ThemeDetector {
         }
     }
 
+    /// Detects a fork only when the moved piece attacks the required valuable
+    /// targets and the stored post-move line proves one target is actually
+    /// won. Geometry alone is deliberately insufficient: the line must have
+    /// an opponent response, the same piece's capture of an original target,
+    /// and one reply after that capture, with a settled gain for the mover.
+    public static func fork(input: ReportInput, ply p: Int) -> ForkFact? {
+        guard p >= 1, p < input.plies.count else { return nil }
+        let preMove = input.plies[p - 1]
+        let postMove = input.plies[p]
+        guard let playedUCI = postMove.playedUCI,
+            let played = ChessGame.replayLine(fromUCI: [playedUCI], startingFEN: preMove.fen).first
+        else { return nil }
+
+        let playedDestination = String(playedUCI.dropFirst(2).prefix(2))
+        guard played.endSquare == playedDestination else { return nil }
+
+        // Use the replayed result rather than trusting a possibly stale FEN
+        // record; this is the position the played move actually produced.
+        let postForkFEN = played.resultingFEN
+        let targets = ChessGame.attackedEnemySquares(from: playedDestination, in: postForkFEN)
+            .filter { $0.kind == .king || ($0.kind != .pawn && pieceValue($0.kind) >= 3) }
+            .map { ForkTarget(square: $0.square, kind: $0.kind) }
+            .sorted {
+                let lhsValue = pieceValue($0.kind)
+                let rhsValue = pieceValue($1.kind)
+                if lhsValue != rhsValue { return lhsValue > rhsValue }
+                return $0.square < $1.square
+            }
+        let nonKingTargets = targets.filter { $0.kind != .king && $0.kind != .pawn && pieceValue($0.kind) >= 3 }
+        let forksKing = targets.contains { $0.kind == .king }
+        guard nonKingTargets.count >= 2 || (forksKing && !nonKingTargets.isEmpty) else { return nil }
+
+        // Mate facts explain the same ply more directly and take precedence.
+        guard missedMate(input: input, ply: p) == nil,
+            allowedMate(input: input, ply: p) == nil
+        else { return nil }
+
+        guard let rank1 = postMove.rank1, !rank1.principalVariationUCI.isEmpty else { return nil }
+        let replayed = ChessGame.replayLine(fromUCI: rank1.principalVariationUCI, startingFEN: postForkFEN)
+        guard replayed.count == rank1.principalVariationUCI.count, replayed.count >= 3 else { return nil }
+
+        let moverColor = played.movedPieceColor
+        let opponentColor = moverColor.opposite
+        let response = replayed[0]
+        let capture = replayed[1]
+        let reply = replayed[2]
+        guard response.movedPieceColor == opponentColor,
+            capture.movedPieceColor == moverColor,
+            reply.movedPieceColor == opponentColor,
+            capture.movedPieceKind == played.movedPieceKind,
+            String(capture.uci.prefix(2)) == playedDestination,
+            let capturedKind = capture.capturedPieceKind,
+            let wonTarget = nonKingTargets.first(where: {
+                $0.square == capture.endSquare && $0.kind == capturedKind
+            })
+        else { return nil }
+
+        let beforeMaterial = ChessGame.material(fen: postForkFEN)
+        let settledMaterial = ChessGame.material(fen: reply.resultingFEN)
+        func balance(_ material: (white: Int, black: Int)) -> Int {
+            moverColor == .white ? material.white - material.black : material.black - material.white
+        }
+        let netGain = balance(settledMaterial) - balance(beforeMaterial)
+        guard netGain >= 1 else { return nil }
+
+        return ForkFact(
+            ply: p,
+            forkingPieceKind: played.movedPieceKind,
+            destinationSquare: playedDestination,
+            targets: targets,
+            wonTarget: wonTarget,
+            netMaterialGain: netGain
+        )
+    }
+
     /// True when `record.mateIn` (white-perspective) is a forced mate that
     /// favors whichever side `whiteFavored` selects, excluding the
     /// terminal-mate sentinel (`|mateIn| == 99`, see verified fact 1).

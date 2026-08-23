@@ -53,6 +53,15 @@ public enum FactAuditor {
             && fact.isCheckmate == expected.isCheckmate
     }
 
+    public static func verify(_ fact: ForkFact, input: ReportInput) -> Bool {
+        guard let expected = ThemeDetector.fork(input: input, ply: fact.ply) else { return false }
+        return fact.forkingPieceKind == expected.forkingPieceKind
+            && fact.destinationSquare == expected.destinationSquare
+            && fact.targets == expected.targets
+            && fact.wonTarget == expected.wonTarget
+            && fact.netMaterialGain == expected.netMaterialGain
+    }
+
     /// Re-verifies every Fact attached to `moment`, dropping (setting to
     /// `nil`) any that fail. `evalSwing` is the moment's foundation - if it
     /// fails, the whole moment is unsalvageable and `nil` is returned.
@@ -79,6 +88,7 @@ public enum FactAuditor {
             betterMove: keep(moment.betterMove, verify: { verify($0, input: input) }, label: "BetterMoveFact"),
             punishment: keep(moment.punishment, verify: { verify($0, input: input) }, label: "PunishmentFact"),
             ignoredThreat: keep(moment.ignoredThreat, verify: { verify($0, input: input) }, label: "IgnoredThreatFact"),
+            fork: keep(moment.fork, verify: { verify($0, input: input) }, label: "ForkFact"),
             missedMate: keep(moment.missedMate, verify: { verify($0, input: input) }, label: "MissedMateFact"),
             allowedMate: keep(moment.allowedMate, verify: { verify($0, input: input) }, label: "AllowedMateFact")
         )
