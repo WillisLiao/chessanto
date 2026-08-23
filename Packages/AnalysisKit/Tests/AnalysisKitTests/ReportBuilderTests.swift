@@ -185,6 +185,64 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     #expect(!report.takeaways.contains("A clean game: no mistakes or blunders at this analysis depth."))
 }
 
+@Test func takeawaysIncludeRecurringIgnoredThreats() {
+    func rank1(_ cp: Int?, _ mate: Int?, _ pv: [String]) -> [RankedLine] {
+        [RankedLine(rank: 1, scoreCentipawns: cp, mateIn: mate, principalVariationUCI: pv, depth: 20)]
+    }
+    let plies = [
+        PlyRecord(fen: "4k3/p6p/8/2b5/8/4B3/8/4K3 b - - 0 1", lines: rank1(0, nil, ["c5e3"]), playedUCI: nil),
+        PlyRecord(fen: "4k3/p7/7p/2b5/8/4B3/8/4K3 w - - 0 2", lines: rank1(300, nil, ["e3c5"]), playedUCI: "h7h6"),
+        PlyRecord(fen: "4k3/p7/7p/2B5/8/8/8/4K3 b - - 0 2", lines: rank1(300, nil, ["a7a6"]), playedUCI: "e3c5"),
+        PlyRecord(fen: "8/p2k4/7p/2B5/8/8/8/4K3 w - - 1 3", lines: rank1(600, nil, ["c5a7"]), playedUCI: "e8d7"),
+        PlyRecord(fen: "8/B2k4/7p/8/8/8/8/4K3 b - - 0 3", lines: rank1(600, nil, ["d7e6"]), playedUCI: "c5a7"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "WhitePlayer", blackName: "BlackPlayer", result: "1-0", chessComUsername: nil)
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
+    #expect(report != nil)
+    guard let report else { return }
+
+    #expect(report.takeaways.contains { $0.contains("2 of BlackPlayer's mistakes ignored an active threat from the opponent (1..., 2...)") })
+    #expect(!report.takeaways.contains { $0.contains("WhitePlayer") && $0.contains("ignored an active threat") })
+}
+
+@Test func takeawaysIncludeGeneralErrorFrequency() {
+    func rank1(_ cp: Int?, _ mate: Int?, _ pv: [String]) -> [RankedLine] {
+        [RankedLine(rank: 1, scoreCentipawns: cp, mateIn: mate, principalVariationUCI: pv, depth: 20)]
+    }
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: rank1(20, nil, ["e2e4"]), playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: rank1(25, nil, ["e7e5"]), playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: rank1(210, nil, ["d2d4"]), playedUCI: "e7e6"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/4p3/8/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", lines: rank1(0, nil, ["d7d5"]), playedUCI: "g1f3"),
+        PlyRecord(fen: "rnbqkbnr/1ppp1ppp/p3p3/8/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3", lines: rank1(300, nil, ["b1c3"]), playedUCI: "a7a6"),
+        PlyRecord(fen: "rnbqkbnr/1ppp1ppp/p3p3/8/4P3/2N2N2/PPPP1PPP/R1BQKB1R b KQkq - 1 3", lines: rank1(-100, nil, ["g8f6"]), playedUCI: "b1c3"),
+        PlyRecord(fen: "rnbqkbnr/1ppp1pp1/p3p2p/8/4P3/2N2N2/PPPP1PPP/R1BQKB1R w KQkq - 0 4", lines: rank1(400, nil, ["d2d4"]), playedUCI: "h7h6"),
+        PlyRecord(fen: "rnbqkbnr/1ppp1pp1/p3p2p/8/3PP3/2N2N2/PPP2PPP/R1BQKB1R b KQkq - 0 4", lines: rank1(400, nil, ["d7d5"]), playedUCI: "d2d4"),
+        PlyRecord(fen: "rnbqkbnr/1pp2pp1/p3p2p/3p4/3PP3/2N2N2/PPP2PPP/R1BQKB1R w KQkq - 0 5", lines: rank1(400, nil, ["e4d5"]), playedUCI: "d7d5"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "WhitePlayer", blackName: "BlackPlayer", result: "1-0", chessComUsername: nil)
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
+    #expect(report != nil)
+    guard let report else { return }
+
+    #expect(report.takeaways == [
+        "BlackPlayer made 3 errors across 4 scored moves (1 inaccuracy, 1 mistake, 1 blunder).",
+        "WhitePlayer made 1 error across 4 scored moves (1 inaccuracy)."
+    ])
+}
+
+@Test func takeawaysPrioritizeRareTacticalMomentsOverGeneralErrors() {
+    let input = scholarsMateInput()
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
+    #expect(report != nil)
+    guard let report else { return }
+
+    #expect(report.takeaways.count >= 2)
+    #expect(report.takeaways[0].contains("forced mate in 1"))
+    #expect(report.takeaways[1].contains("BlackPlayer made 1 error across 3 scored moves (1 blunder)."))
+}
+
+
 // MARK: - FactAuditor
 
 @Test func factAuditorDropsAFactWithACorruptedSAN() {

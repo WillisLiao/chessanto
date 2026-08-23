@@ -11,4 +11,5 @@ Key moments:
 - 27... f6 drops Black's winning chances from 50% to 12%. Better was Qe4+ (Qe4+ Ka2), keeping the evaluation around 0.0.
 
 Takeaways:
-- No single recurring pattern stood out - see the key moments above for specifics.
+- artin10862 made 2 errors across 24 scored moves (1 inaccuracy, 1 blunder).
+- MagnusCarlsen made 1 error across 26 scored moves (1 inaccuracy).
