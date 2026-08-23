@@ -337,6 +337,11 @@ struct CoachVerifierTests {
         #expect(CoachVerifier.containsConcreteClaim(in: "Develop your pieces and castle."))
     }
 
+    @Test func inflectedPlanClaimWithoutMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "Focus on developing your pieces and controlling the center."))
+        #expect(CoachVerifier.containsConcreteClaim(in: "Try developing your pieces and controlling the centre."))
+    }
+
     @Test func developmentalMoveClaimIsConcrete() {
         #expect(CoachVerifier.containsConcreteClaim(in: "Nf3 develops naturally."))
     }
@@ -355,6 +360,14 @@ struct CoachVerifierTests {
 
     @Test func clarifyingQuestionIsNotConcrete() {
         #expect(!CoachVerifier.containsConcreteClaim(in: "Are you asking about the opening or the middlegame plan?"))
+    }
+
+    @Test func clarifyingQuestionWithEvaluationWordsIsNotConcrete() {
+        #expect(!CoachVerifier.containsConcreteClaim(in: "Are you asking whether White is winning?"))
+    }
+
+    @Test func declarativeAdviceWithTrailingQuestionRemainsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "You should play Nf3, right?"))
     }
 
     @Test func greetingIsNotConcrete() {

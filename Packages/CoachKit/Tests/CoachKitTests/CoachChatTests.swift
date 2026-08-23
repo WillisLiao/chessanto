@@ -88,11 +88,23 @@ private func sampleContext(fen: String = startFEN, lines: [RankedLine]? = nil) -
 struct CoachChatTests {
 
     @Test func happyPathReturnsVerifiedCoachReply() async throws {
-        let client = MockChatClient([.content("Focus on developing your pieces and controlling the center.")])
+        let client = MockChatClient([.content("What would you like to explore in this position?")])
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
         let reply = await chat.send(question: "how should I continue?", context: sampleContext())
         #expect(reply.source == .coach)
-        #expect(reply.text == "Focus on developing your pieces and controlling the center.")
+        #expect(reply.text == "What would you like to explore in this position?")
+    }
+
+    @Test func inflectedConcretePlanWithoutToolCallTriggersViolation() async throws {
+        let client = MockChatClient([
+            .content("Focus on developing your pieces and controlling the center."),
+            .content("Focus on developing your pieces and controlling the center."),
+        ])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext())
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(client.callCount == 2)
     }
 
     // MARK: - Precheck: illegal proposal never reaches the LLM

@@ -518,6 +518,14 @@ public enum CoachVerifier {
 
         let lower = text.lowercased()
 
+        // A pure clarifying question is conversational even when it repeats
+        // an evaluation phrase. Require an explicit interrogative opening and
+        // a single terminal question so concrete advice plus a question stays
+        // concrete.
+        if isPureClarifyingQuestion(in: text) {
+            return false
+        }
+
         // Signed evaluations, win percentages, and mate counts are concrete
         // position claims even when the response names no move.
         if !matches(of: evalPattern, in: text).isEmpty
@@ -563,7 +571,10 @@ public enum CoachVerifier {
 
         let standalonePlanPhrases = [
             "develop your pieces", "develop the pieces", "bring out your pieces",
+            "developing your pieces", "developing the pieces",
+            "bringing out your pieces",
             "castle your king", "control the center", "control the centre",
+            "controlling the center", "controlling the centre",
             "attack the king", "create a threat", "look for a fork",
             "trade queens", "keep your king safe", "connect your rooks",
             "improve your pieces", "improve your position", "the plan is to",
@@ -595,5 +606,19 @@ public enum CoachVerifier {
         }
 
         return false
+    }
+
+    private static func isPureClarifyingQuestion(in text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix("?") else { return false }
+        let lowercased = trimmed.lowercased()
+        let openings = [
+            "are you asking", "what specifically", "what do you mean",
+            "which aspect", "would you like", "do you mean",
+            "can you clarify", "could you clarify", "is your question",
+        ]
+        guard openings.contains(where: lowercased.hasPrefix) else { return false }
+        let body = trimmed.dropLast()
+        return !body.contains(where: { ".!?\n".contains($0) })
     }
 }
