@@ -56,6 +56,42 @@ private let samplePGN = """
     #expect(total == 20)
 }
 
+// MARK: - Attacked enemy squares
+
+@Test func attackedEnemySquaresFindsKnightTargetsRegardlessOfSideToMove() {
+    let fen = "7k/8/2n1n3/1p6/3N4/8/2r1r3/7K b - - 0 1"
+    let attacks = ChessGame.attackedEnemySquares(from: "d4", in: fen)
+    #expect(attacks.map(\.square) == ["b5", "c2", "c6", "e2", "e6"])
+    #expect(attacks.map(\.kind) == [.pawn, .rook, .knight, .rook, .knight])
+}
+
+@Test func attackedEnemySquaresFindsOpenSliderLineUntilFirstEnemyPiece() {
+    let fen = "7k/8/8/8/8/8/8/R6r w - - 0 1"
+    let attacks = ChessGame.attackedEnemySquares(from: "a1", in: fen)
+    #expect(attacks.map(\.square) == ["h1"])
+    #expect(attacks.map(\.kind) == [.rook])
+}
+
+@Test func attackedEnemySquaresStopsAtOwnSliderBlocker() {
+    let fen = "7k/r7/8/8/P7/8/8/R3K3 w - - 0 1"
+    #expect(ChessGame.attackedEnemySquares(from: "a1", in: fen).isEmpty)
+}
+
+@Test func attackedEnemySquaresReturnsPawnDiagonalsButNeverForwardPushes() {
+    let fen = "k7/8/8/2n1r3/3P4/8/8/7K b - - 0 1"
+    let attacks = ChessGame.attackedEnemySquares(from: "d4", in: fen)
+    #expect(attacks.map(\.square) == ["c5", "e5"])
+    #expect(attacks.map(\.kind) == [.knight, .rook])
+}
+
+@Test func attackedEnemySquaresReturnsEmptyForNoTargetsAndInvalidInput() {
+    let noTargets = "7k/8/8/8/8/8/3P4/2B1K3 b - - 0 1"
+    #expect(ChessGame.attackedEnemySquares(from: "c1", in: noTargets).isEmpty)
+    #expect(ChessGame.attackedEnemySquares(from: "a1", in: "not a fen").isEmpty)
+    #expect(ChessGame.attackedEnemySquares(from: "z9", in: noTargets).isEmpty)
+    #expect(ChessGame.attackedEnemySquares(from: "h1", in: noTargets).isEmpty)
+}
+
 @Test func illegalMoveIsRejected() {
     var game = ChessGame()
     let result = game.playMove(from: SquareCoordinate(notation: "e2"), to: SquareCoordinate(notation: "e5"), at: game.startIndex)

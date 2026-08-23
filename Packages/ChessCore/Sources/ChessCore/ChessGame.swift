@@ -281,6 +281,27 @@ extension Move {
 }
 
 extension ChessGame {
+    /// Enemy pieces currently reachable by the piece at `square` in `fen`.
+    ///
+    /// ChessKit's legal-move generator supplies the attack destinations, so
+    /// this stays independent of the FEN's side-to-move field and does not
+    /// duplicate chess movement geometry. Only occupied enemy destinations
+    /// are returned, which excludes pawn pushes and empty squares.
+    public static func attackedEnemySquares(from square: String, in fen: String) -> [(square: String, kind: PieceKind)] {
+        guard let position = Position(fen: fen) else { return [] }
+        let source = Square(square)
+        guard source.notation == square, let piece = position.piece(at: source) else { return [] }
+
+        let board = Board(position: position)
+        return board
+            .legalMoves(forPieceAt: source)
+            .compactMap { destination in
+                guard let target = position.piece(at: destination), target.color != piece.color else { return nil }
+                return (square: destination.notation, kind: target.kind.asPieceKind)
+            }
+            .sorted { $0.square < $1.square }
+    }
+
     /// Replays a line of UCI moves (e.g. an engine PV) from `fen`, stopping
     /// at the first move that fails to parse or play. Each returned move
     /// carries the exact board facts (SAN, check/mate flags, captures)

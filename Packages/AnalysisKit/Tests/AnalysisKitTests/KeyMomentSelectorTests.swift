@@ -215,3 +215,20 @@ private func makeBothSidesBlunderInput(chessComUsername: String?) -> (ReportInpu
     let selected = KeyMomentSelector.selectPlies(classifications: classifications, input: input)
     #expect(selected.allSatisfy { input.moverIsWhite(atPly: $0) })
 }
+
+@Test func forkFactsDoNotChangeBeginnerSelectionPriority() {
+    let preForkFEN = "7k/8/1r3b2/8/1p6/2N5/8/7K w - - 0 1"
+    let postForkFEN = "7k/8/1r3b2/3N4/1p6/8/8/7K b - - 0 1"
+    let plies = [
+        PlyRecord(fen: preForkFEN, lines: [RankedLine(rank: 1, scoreCentipawns: 0, mateIn: nil, principalVariationUCI: [], depth: 10)], playedUCI: nil),
+        PlyRecord(fen: postForkFEN, lines: [RankedLine(rank: 1, scoreCentipawns: 0, mateIn: nil, principalVariationUCI: ["h8g8", "d5f6", "g8h8"], depth: 10)], playedUCI: "c3d5"),
+        PlyRecord(fen: "6k1/8/1r3b2/3N4/1p6/8/8/7K w - - 1 2", lines: [RankedLine(rank: 1, scoreCentipawns: 100, mateIn: nil, principalVariationUCI: [], depth: 10)], playedUCI: "h8g8"),
+        PlyRecord(fen: "6k1/8/1r6/8/1p6/5N2/8/7K b - - 0 2", lines: [RankedLine(rank: 1, scoreCentipawns: -100, mateIn: nil, principalVariationUCI: [], depth: 10)], playedUCI: "d5f6"),
+        PlyRecord(fen: "7k/8/1r6/8/1p6/5N2/8/7K w - - 1 3", lines: [RankedLine(rank: 1, scoreCentipawns: 0, mateIn: nil, principalVariationUCI: [], depth: 10)], playedUCI: "g8h8"),
+        PlyRecord(fen: "7k/8/1r6/8/1p6/5N2/8/7K b - - 2 3", lines: [RankedLine(rank: 1, scoreCentipawns: -100, mateIn: nil, principalVariationUCI: [], depth: 10)], playedUCI: "h1g1"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+    let classifications = Array(repeating: MoveClassification.inaccuracy, count: 5)
+    #expect(ThemeDetector.fork(input: input, ply: 1) != nil)
+    #expect(KeyMomentSelector.selectPlies(classifications: classifications, input: input, register: .beginner) == [2, 3, 4, 5])
+}

@@ -72,6 +72,9 @@ private enum TestFixtureError: Error {
         if let ignoredThreat = moment.ignoredThreat {
             #expect(FactAuditor.verify(ignoredThreat, input: input))
         }
+        if let fork = moment.fork {
+            #expect(FactAuditor.verify(fork, input: input))
+        }
         if let missedMate = moment.missedMate {
             #expect(FactAuditor.verify(missedMate, input: input))
         }
@@ -97,5 +100,23 @@ private enum TestFixtureError: Error {
         let moveNum = (p + 1) / 2
         let moveLabel = input.moverIsWhite(atPly: p) ? "\(moveNum)." : "\(moveNum)..."
         print("Fire at ply \(p) (\(mover) move \(moveLabel) played \(input.plies[p].playedUCI ?? "")): threatened \(fact.threatenedSAN), isMate: \(fact.isCheckmate), piece: \(String(describing: fact.capturedPieceKind)), square: \(String(describing: fact.capturedSquare)), gain: \(fact.netMaterialGainForOpponent)")
+    }
+}
+
+@Test func realFixtureGameForksScannedAcrossAllPlies() throws {
+    let input = try loadFixtureInput()
+    var fires: [(ply: Int, fact: ForkFact)] = []
+    for p in 1..<input.plies.count {
+        if let fact = ThemeDetector.fork(input: input, ply: p) {
+            fires.append((p, fact))
+        }
+    }
+    print("Real fixture fork fires count: \(fires.count)")
+    for (p, fact) in fires {
+        let mover = input.moverIsWhite(atPly: p) ? "White" : "Black"
+        let moveNum = (p + 1) / 2
+        let moveLabel = input.moverIsWhite(atPly: p) ? "\(moveNum)." : "\(moveNum)..."
+        let targets = fact.targets.map { "\($0.kind.rawValue)@\($0.square)" }.joined(separator: ", ")
+        print("Fire at ply \(p) (\(mover) move \(moveLabel) played \(input.plies[p].playedUCI ?? "")): \(fact.forkingPieceKind.rawValue)@\(fact.destinationSquare) targets [\(targets)], won \(fact.wonTarget.kind.rawValue)@\(fact.wonTarget.square), gain \(fact.netMaterialGain)")
     }
 }

@@ -98,6 +98,46 @@ public struct IgnoredThreatFact: Sendable, Equatable, Codable {
     }
 }
 
+/// One enemy piece attacked by a fork, identified by its original square and
+/// kind in the post-move position.
+public struct ForkTarget: Sendable, Equatable, Codable {
+    public let square: String
+    public let kind: PieceKind
+
+    public init(square: String, kind: PieceKind) {
+        self.square = square
+        self.kind = kind
+    }
+}
+
+/// A replay-verified fork whose rank-1 continuation wins one original target.
+public struct ForkFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let forkingPieceKind: PieceKind
+    public let destinationSquare: String
+    public let targets: [ForkTarget]
+    public let wonTarget: ForkTarget
+    /// Settled material gained by the forking mover after the opponent's
+    /// reply to the verified capture, relative to the post-fork position.
+    public let netMaterialGain: Int
+
+    public init(
+        ply: Int,
+        forkingPieceKind: PieceKind,
+        destinationSquare: String,
+        targets: [ForkTarget],
+        wonTarget: ForkTarget,
+        netMaterialGain: Int
+    ) {
+        self.ply = ply
+        self.forkingPieceKind = forkingPieceKind
+        self.destinationSquare = destinationSquare
+        self.targets = targets
+        self.wonTarget = wonTarget
+        self.netMaterialGain = netMaterialGain
+    }
+}
+
 /// The game's opening name/deviation point, from the bundled opening book.
 public struct OpeningFact: Sendable, Equatable, Codable {
     public let eco: String
@@ -116,6 +156,7 @@ public struct KeyMoment: Sendable, Equatable, Codable {
     public let betterMove: BetterMoveFact?
     public let punishment: PunishmentFact?
     public let ignoredThreat: IgnoredThreatFact?
+    public let fork: ForkFact?
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
 
@@ -125,6 +166,7 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         betterMove: BetterMoveFact? = nil,
         punishment: PunishmentFact? = nil,
         ignoredThreat: IgnoredThreatFact? = nil,
+        fork: ForkFact? = nil,
         missedMate: MissedMateFact? = nil,
         allowedMate: AllowedMateFact? = nil
     ) {
@@ -133,6 +175,7 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         self.betterMove = betterMove
         self.punishment = punishment
         self.ignoredThreat = ignoredThreat
+        self.fork = fork
         self.missedMate = missedMate
         self.allowedMate = allowedMate
     }

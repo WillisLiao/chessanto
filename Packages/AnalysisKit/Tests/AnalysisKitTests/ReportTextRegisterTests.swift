@@ -202,3 +202,53 @@ private func makeMoment(before: Double, after: Double, moverIsWhite: Bool = true
     #expect(summary.contains("This ignored the threat to the bishop on c5: Bxc5 winning the bishop."))
     #expect(!summary.contains("This also left the bishop on c5 hanging"))
 }
+
+@Test func forkSentenceNamesForkSquareTargetsAndVerifiedWonTarget() {
+    let moment = KeyMoment(
+        ply: 1,
+        evalSwing: EvalSwingFact(
+            ply: 1, moverIsWhite: true, playedSAN: "Nd5",
+            moverWinProbabilityBefore: 90, moverWinProbabilityAfter: 55, classification: .blunder
+        ),
+        fork: ForkFact(
+            ply: 1,
+            forkingPieceKind: .knight,
+            destinationSquare: "d5",
+            targets: [
+                ForkTarget(square: "b6", kind: .rook),
+                ForkTarget(square: "f6", kind: .bishop),
+            ],
+            wonTarget: ForkTarget(square: "f6", kind: .bishop),
+            netMaterialGain: 3
+        )
+    )
+    let report = makeReport(register: .advanced, keyMoments: [moment])
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("fork by the knight on d5"))
+    #expect(summary.contains("rook on b6 and bishop on f6"))
+    #expect(summary.contains("won the bishop on f6"))
+    #expect(summary.contains("net material gain: 3"))
+}
+
+@Test func mateSentenceTakesPrecedenceOverForkSentence() {
+    let moment = KeyMoment(
+        ply: 1,
+        evalSwing: EvalSwingFact(
+            ply: 1, moverIsWhite: true, playedSAN: "Nd5",
+            moverWinProbabilityBefore: 90, moverWinProbabilityAfter: 10, classification: .blunder
+        ),
+        fork: ForkFact(
+            ply: 1,
+            forkingPieceKind: .knight,
+            destinationSquare: "d5",
+            targets: [ForkTarget(square: "b6", kind: .rook), ForkTarget(square: "f6", kind: .bishop)],
+            wonTarget: ForkTarget(square: "f6", kind: .bishop),
+            netMaterialGain: 3
+        ),
+        missedMate: MissedMateFact(ply: 1, mateInN: 1, matingLineSANs: nil)
+    )
+    let report = makeReport(register: .advanced, keyMoments: [moment])
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("missed a forced mate in 1"))
+    #expect(!summary.contains("fork by the knight"))
+}

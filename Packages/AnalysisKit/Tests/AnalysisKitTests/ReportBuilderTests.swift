@@ -27,6 +27,34 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     return ReportInput(plies: plies, whiteName: "WhitePlayer", blackName: "BlackPlayer", result: "1-0", chessComUsername: chessComUsername)
 }
 
+private func forkReportInput() -> ReportInput {
+    let preFEN = "7k/8/1r3b2/8/1p6/2N5/8/7K w - - 0 1"
+    let postFEN = "7k/8/1r3b2/3N4/1p6/8/8/7K b - - 0 1"
+    let preLine = RankedLine(rank: 1, scoreCentipawns: 500, mateIn: nil, principalVariationUCI: ["h1g1"], depth: 20)
+    let postLine = RankedLine(rank: 1, scoreCentipawns: -500, mateIn: nil, principalVariationUCI: ["h8g8", "d5f6", "g8h8"], depth: 20)
+    return ReportInput(
+        plies: [
+            PlyRecord(fen: preFEN, lines: [preLine], playedUCI: nil),
+            PlyRecord(fen: postFEN, lines: [postLine], playedUCI: "c3d5"),
+        ],
+        whiteName: "WhitePlayer", blackName: "BlackPlayer", result: "1-0", chessComUsername: nil
+    )
+}
+
+@Test func reportBuilderCarriesForkThroughAuditIntoKeyMoment() {
+    let input = forkReportInput()
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
+    #expect(report?.keyMoments.count == 1)
+    guard let moment = report?.keyMoments.first else { return }
+    #expect(moment.fork?.targets == [
+        ForkTarget(square: "b6", kind: .rook),
+        ForkTarget(square: "f6", kind: .bishop),
+    ])
+    if let fork = moment.fork {
+        #expect(FactAuditor.verify(fork, input: input))
+    }
+}
+
 @Test func reportBuilderProducesTheExpectedKeyMomentWithAllFacts() {
     let input = scholarsMateInput()
     let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
@@ -303,6 +331,20 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
         ply: real.ply, threatenedSAN: real.threatenedSAN, capturedPieceKind: real.capturedPieceKind,
         capturedSquare: real.capturedSquare, netMaterialGainForOpponent: 99,
         isCheckmate: real.isCheckmate
+    )
+    #expect(!FactAuditor.verify(corrupted, input: input))
+}
+
+@Test func factAuditorDropsAForkFactWithAWrongWonTarget() {
+    let input = forkReportInput()
+    let real = ThemeDetector.fork(input: input, ply: 1)!
+    let corrupted = ForkFact(
+        ply: real.ply,
+        forkingPieceKind: real.forkingPieceKind,
+        destinationSquare: real.destinationSquare,
+        targets: real.targets,
+        wonTarget: ForkTarget(square: "b6", kind: .rook),
+        netMaterialGain: real.netMaterialGain
     )
     #expect(!FactAuditor.verify(corrupted, input: input))
 }

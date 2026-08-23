@@ -442,3 +442,199 @@ private let allowedMatePostFEN = "4r1k1/8/8/8/8/8/5PPP/6K1 b - - 0 1"
     )
     #expect(ThemeDetector.ignoredThreat(input: input, ply: 1) == nil)
 }
+
+// MARK: - ForkFact
+
+private func forkInput(
+    preFEN: String,
+    postFEN: String,
+    playedUCI: String,
+    pv: [String],
+    preLines: [RankedLine] = []
+) -> ReportInput {
+    ReportInput(
+        plies: [
+            PlyRecord(fen: preFEN, lines: preLines, playedUCI: nil),
+            PlyRecord(fen: postFEN, lines: [line(rank: 1, cp: 0, mate: nil, pv: pv)], playedUCI: playedUCI),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+}
+
+@Test func forkFactFiresOnKnightForkAndRecordsSettledWonTarget() {
+    let input = forkInput(
+        preFEN: "7k/8/1r3b2/8/1p6/2N5/8/7K w - - 0 1",
+        postFEN: "7k/8/1r3b2/3N4/1p6/8/8/7K b - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g8", "d5f6", "g8h8"]
+    )
+    let fact = ThemeDetector.fork(input: input, ply: 1)
+    #expect(fact?.forkingPieceKind == .knight)
+    #expect(fact?.destinationSquare == "d5")
+    #expect(fact?.targets == [
+        ForkTarget(square: "b6", kind: .rook),
+        ForkTarget(square: "f6", kind: .bishop),
+    ])
+    #expect(fact?.wonTarget == ForkTarget(square: "f6", kind: .bishop))
+    #expect(fact?.netMaterialGain == 3)
+}
+
+@Test func forkFactFiresOnRoyalForkAndNamesKingAndValuablePiece() {
+    let input = forkInput(
+        preFEN: "4r3/7k/8/7N/8/8/8/K7 w - - 0 1",
+        postFEN: "4r3/7k/5N2/8/8/8/8/K7 b - - 0 1",
+        playedUCI: "h5f6",
+        pv: ["h7h8", "f6e8", "h8g8"]
+    )
+    let fact = ThemeDetector.fork(input: input, ply: 1)
+    #expect(fact?.targets == [
+        ForkTarget(square: "e8", kind: .rook),
+        ForkTarget(square: "h7", kind: .king),
+    ])
+    #expect(fact?.wonTarget == ForkTarget(square: "e8", kind: .rook))
+    #expect(fact?.netMaterialGain == 5)
+    #expect(ThemeDetector.missedMate(input: input, ply: 1) == nil)
+    #expect(ThemeDetector.allowedMate(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactLabelsAPromotedQueenAndVerifiesItsCapture() {
+    let input = forkInput(
+        preFEN: "4r3/P6k/2n5/8/8/8/8/7K w - - 0 1",
+        postFEN: "Q3r3/7k/2n5/8/8/8/8/7K b - - 0 1",
+        playedUCI: "a7a8q",
+        pv: ["h7g7", "a8e8", "g7h7"]
+    )
+    let fact = ThemeDetector.fork(input: input, ply: 1)
+    #expect(fact?.forkingPieceKind == .queen)
+    #expect(fact?.targets == [
+        ForkTarget(square: "e8", kind: .rook),
+        ForkTarget(square: "c6", kind: .knight),
+    ])
+    #expect(fact?.wonTarget == ForkTarget(square: "e8", kind: .rook))
+    #expect(fact?.netMaterialGain == 5)
+}
+
+@Test func forkFactLabelsAPromotedKnightAndVerifiesItsCapture() {
+    let input = forkInput(
+        preFEN: "8/P1r4k/1r6/8/8/8/8/7K w - - 0 1",
+        postFEN: "N7/2r4k/1r6/8/8/8/8/7K b - - 0 1",
+        playedUCI: "a7a8n",
+        pv: ["h7g7", "a8b6", "g7h7"]
+    )
+    let fact = ThemeDetector.fork(input: input, ply: 1)
+    #expect(fact?.forkingPieceKind == .knight)
+    #expect(fact?.targets == [
+        ForkTarget(square: "b6", kind: .rook),
+        ForkTarget(square: "c7", kind: .rook),
+    ])
+    #expect(fact?.wonTarget == ForkTarget(square: "b6", kind: .rook))
+    #expect(fact?.netMaterialGain == 5)
+}
+
+@Test func forkFactRejectsAWhiteMoveWhenTheFENSaysBlackToMove() {
+    let input = forkInput(
+        preFEN: "4r3/P6k/2n5/8/8/8/8/7K b - - 0 1",
+        postFEN: "Q3r3/7k/2n5/8/8/8/8/7K w - - 0 1",
+        playedUCI: "a7a8q",
+        pv: ["h7g7", "a8e8", "g7h7"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsAWrongColoredOrdinaryMove() {
+    let input = forkInput(
+        preFEN: "7k/8/1r3b2/8/1p6/2N5/8/7K b - - 0 1",
+        postFEN: "7k/8/1r3b2/3N4/1p6/8/8/7K w - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g8", "d5f6", "g8h8"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsARecapturedForkingPiece() {
+    let input = forkInput(
+        preFEN: "7k/8/1r3b2/8/8/2N5/8/7K w - - 0 1",
+        postFEN: "7k/8/1r3b2/3N4/8/8/8/7K b - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g8", "d5f6", "b6f6"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsTwoDefendedTargetsWhenTheSettledLineIsEven() {
+    // The bishops are both defended: a7 protects b6 and the king's response
+    // protects f6, so the line captures one target and recaptures the
+    // forking knight for an even exchange instead of a settled gain.
+    let input = forkInput(
+        preFEN: "7k/p7/1b3b2/8/8/2N5/8/7K w - - 0 1",
+        postFEN: "7k/p7/1b3b2/3N4/8/8/8/7K b - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g7", "d5f6", "g7f6"]
+    )
+    #expect(ChessGame.attackedEnemySquares(from: "d5", in: "7k/p7/1b3b2/3N4/8/8/8/7K b - - 0 1").map { "\($0.square):\($0.kind.rawValue)" } == ["b6:bishop", "f6:bishop"])
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsATruncatedRankOneLine() {
+    let input = forkInput(
+        preFEN: "7k/8/1r3b2/8/8/2N5/8/7K w - - 0 1",
+        postFEN: "7k/8/1r3b2/3N4/8/8/8/7K b - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g8", "d5f6", "g8h8", "not-a-move"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsValuablePieceAndPawnOnly() {
+    let input = forkInput(
+        preFEN: "7k/8/1r6/8/8/2N5/8/7K w - - 0 1",
+        postFEN: "7k/8/1r6/3N4/5p2/8/8/7K b - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g8", "d5b6", "g8h8"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsAnOrdinaryMoveWithoutTwoQualifyingTargets() {
+    let input = forkInput(
+        preFEN: "7k/8/8/8/8/8/8/N6K w - - 0 1",
+        postFEN: "7k/8/8/8/8/2N5/8/7K b - - 0 1",
+        playedUCI: "b1c3",
+        pv: ["h8g8", "c3b5", "g8h8"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactDefersToMissedMateExplanation() {
+    let preFEN = "r1bqkb1r/pppp1ppp/2n2n2/r3p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4"
+    let postFEN = "r1bqkb1r/pppp1ppp/2n2n2/r3Q3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 5 4"
+    let input = forkInput(
+        preFEN: preFEN,
+        postFEN: postFEN,
+        playedUCI: "h5e5",
+        pv: ["d8e7", "e5a5", "e7e6"],
+        preLines: [line(rank: 1, cp: nil, mate: 1, pv: ["h5f7"])]
+    )
+    #expect(ThemeDetector.missedMate(input: input, ply: 1) != nil)
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactDefersToAllowedMateExplanation() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(
+                fen: "4r1k1/8/8/7N/8/8/5PPP/6K1 w - - 0 1",
+                lines: [line(rank: 1, cp: 20, mate: nil, pv: [])],
+                playedUCI: nil
+            ),
+            PlyRecord(
+                fen: "4r1k1/8/5N2/8/8/8/5PPP/6K1 b - - 0 1",
+                lines: [line(rank: 1, cp: nil, mate: -1, pv: ["e8e1"])],
+                playedUCI: "h5f6"
+            ),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.allowedMate(input: input, ply: 1) != nil)
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}

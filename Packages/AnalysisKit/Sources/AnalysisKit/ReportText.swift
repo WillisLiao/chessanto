@@ -97,6 +97,9 @@ public enum ReportText {
         if let ignoredThreat = moment.ignoredThreat {
             text += " " + ignoredThreatSentence(ignoredThreat)
         }
+        if let fork = moment.fork, moment.missedMate == nil, moment.allowedMate == nil {
+            text += " " + forkSentence(fork)
+        }
         if let missedMate = moment.missedMate {
             text += " " + missedMateSentence(missedMate)
         }
@@ -195,6 +198,13 @@ public enum ReportText {
         } else {
             return "This ignored the threat: \(fact.threatenedSAN)."
         }
+    }
+
+    private static func forkSentence(_ fact: ForkFact) -> String {
+        let targets = fact.targets
+            .map { "\($0.kind.rawValue) on \($0.square)" }
+            .joined(separator: " and ")
+        return "This fork by the \(fact.forkingPieceKind.rawValue) on \(fact.destinationSquare) attacked \(targets); it won the \(fact.wonTarget.kind.rawValue) on \(fact.wonTarget.square) (net material gain: \(fact.netMaterialGain))."
     }
 
     private static func missedMateSentence(_ fact: MissedMateFact) -> String {
