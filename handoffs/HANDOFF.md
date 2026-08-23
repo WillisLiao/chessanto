@@ -19,10 +19,11 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
 
 - **P4.2 fork detection is implemented on the dedicated branch.**
   `ChessGame.attackedEnemySquares(from:in:)` delegates to ChessKit legal moves, filters occupied enemy destinations, is independent of FEN side to move, and returns deterministic square and piece-kind pairs without hand-written attack geometry.
-  `ForkFact` and `ForkTarget` are audited through `KeyMoment`, `ReportBuilder`, `FactAuditor`, `KeyMomentSelector`, and a fixed `ReportText` sentence.
+  `ForkFact` and `ForkTarget` are carried through `KeyMoment`, `ReportBuilder`, and `FactAuditor`, then rendered by a fixed `ReportText` sentence while selector priority remains unchanged.
   The detector requires two valuable non-king targets or a king plus one valuable non-king target, excludes pawns, replays the post-move rank-1 line through an opponent response, the same forking piece capturing an original target, and one opponent reply, and requires at least one pawn-equivalent settled material gain.
-  Mate facts take precedence, incomplete or ambiguous replays return nil, target ordering is descending value then square, and all 55 real-fixture plies were scanned with zero fires.
-  ChessCore has 34 tests and AnalysisKit has 138 tests across 6 suites after this work.
+  Promotion suffixes label the resulting forking piece without changing `ReplayedMove`, and mate facts take precedence while incomplete or ambiguous replays return nil.
+  Target ordering is descending value then square, and all 55 real-fixture plies were scanned with zero fires.
+  ChessCore has 34 tests and AnalysisKit has 141 tests across 6 suites after this correction.
   The primitive is committed as `0da2ec7` and the detector/report integration as `1c40699` on `fork-detector-p4.2`.
 
 - **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**

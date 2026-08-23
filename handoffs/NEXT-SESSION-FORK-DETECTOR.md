@@ -56,7 +56,7 @@ Those are separate, later work - each has its own geometric definition and its o
 
 - TDD. Write the failing test before each piece of implementation.
 - After implementing, run the fork detector over the real fixture (`Packages/AnalysisKit/Tests/AnalysisKitTests/Resources/real-fixture-game-report-input.json`, loaded via `RealFixtureGoldenTests.swift`'s existing mechanism) across every ply, and **read every single fire by hand** - the actual position, the actual pieces, the actual squares. If you find even one case a competent player would not call a real fork, do not ship it as "matches the spec" - find the real reason (usually: the operational definition measures something adjacent to the concept, not the concept itself) and fix the definition itself, the way the brilliancy detector's k=2/k=4 false positive was fixed by reading the settled position instead of a fixed window, not by adding a special case.
-- Never use the em dash character ("—"); use a plain dash ("-"). One full sentence per physical line in long Markdown. Do not modify `CHANGELOG.md` or generated files. Do not add an agent name as a co-author in commit messages.
+- Never use the long dash character; use a plain dash ("-"). One full sentence per physical line in long Markdown. Do not modify `CHANGELOG.md` or generated files. Do not add an agent name as a co-author in commit messages.
 
 ## Test plan (minimum, in addition to Step 1's primitive tests)
 

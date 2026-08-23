@@ -194,6 +194,7 @@ public enum ThemeDetector {
         // Use the replayed result rather than trusting a possibly stale FEN
         // record; this is the position the played move actually produced.
         let postForkFEN = played.resultingFEN
+        let forkingPieceKind = forkPieceKind(played: played, playedUCI: playedUCI)
         let targets = ChessGame.attackedEnemySquares(from: playedDestination, in: postForkFEN)
             .filter { $0.kind == .king || ($0.kind != .pawn && pieceValue($0.kind) >= 3) }
             .map { ForkTarget(square: $0.square, kind: $0.kind) }
@@ -224,7 +225,7 @@ public enum ThemeDetector {
         guard response.movedPieceColor == opponentColor,
             capture.movedPieceColor == moverColor,
             reply.movedPieceColor == opponentColor,
-            capture.movedPieceKind == played.movedPieceKind,
+            capture.movedPieceKind == forkingPieceKind,
             String(capture.uci.prefix(2)) == playedDestination,
             let capturedKind = capture.capturedPieceKind,
             let wonTarget = nonKingTargets.first(where: {
@@ -242,12 +243,23 @@ public enum ThemeDetector {
 
         return ForkFact(
             ply: p,
-            forkingPieceKind: played.movedPieceKind,
+            forkingPieceKind: forkingPieceKind,
             destinationSquare: playedDestination,
             targets: targets,
             wonTarget: wonTarget,
             netMaterialGain: netGain
         )
+    }
+
+    private static func forkPieceKind(played: ReplayedMove, playedUCI: String) -> PieceKind {
+        guard played.movedPieceKind == .pawn, playedUCI.count == 5 else { return played.movedPieceKind }
+        switch playedUCI.last {
+        case "q": return .queen
+        case "r": return .rook
+        case "b": return .bishop
+        case "n": return .knight
+        default: return played.movedPieceKind
+        }
     }
 
     /// True when `record.mateIn` (white-perspective) is a forced mate that
