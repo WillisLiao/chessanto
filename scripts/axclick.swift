@@ -21,9 +21,12 @@ let preferLastMatch = CommandLine.arguments.dropFirst(3).contains("--last")
 
 func findPID(_ target: String) -> pid_t? {
     if let pid = pid_t(target) { return pid }
-    return NSWorkspace.shared.runningApplications
-        .first { $0.localizedName == target }?
-        .processIdentifier
+    if let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == target }) {
+        _ = app.activate()
+        Thread.sleep(forTimeInterval: 0.2)
+        return app.processIdentifier
+    }
+    return nil
 }
 
 func attribute(_ element: AXUIElement, _ name: String) -> String? {
@@ -85,10 +88,18 @@ guard let pid = findPID(target) else {
 }
 
 let app = AXUIElementCreateApplication(pid)
-var windowsValue: CFTypeRef?
-guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
-    let windows = windowsValue as? [AXUIElement], !windows.isEmpty
-else {
+var windows: [AXUIElement] = []
+for _ in 0..<10 {
+    var value: CFTypeRef?
+    if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+        let list = value as? [AXUIElement], !list.isEmpty
+    {
+        windows = list
+        break
+    }
+    Thread.sleep(forTimeInterval: 0.2)
+}
+guard !windows.isEmpty else {
     FileHandle.standardError.write("app pid \(pid) has zero windows\n".data(using: .utf8)!)
     exit(2)
 }

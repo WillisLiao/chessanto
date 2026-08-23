@@ -8,10 +8,37 @@ Read this first at session start; update it at session end.
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
-Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and the four board items below that have never been verified through a real visible window.
-`scripts/axdrag.swift` is committed and ready for that whenever a composited display is available to the agent.
+Priority 5's small UI details batch is now implemented; see below.
+Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), and visual-only rendering verification (arrival animation timing, coordinate point size, drawn annotation shapes) whenever a composited display is available to the agent - drag and drop itself is now confirmed live, see below.
+`scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 
 ## Current state (2026-08-24)
+
+- **Native QA of the four unverified board behaviors: drag and drop confirmed live.**
+  Full narrative in `devlogs/2026-08-24-board-qa.md`.
+  Screen capture and window compositing were refused by the OS in this non-interactive agent environment (`could not create image from window`), so verification fell back to direct AX-tree and synthesized event introspection.
+  Live database safety was strictly observed: backed up, executed all QA against a disposable copy under both required opt-in environment variables, and confirmed the live database remained untouched afterward (SHA-256 `173a3693267582696c9ce2415d83cf6d3e158089fab9116d6fe550a5ca72c133`, clean integrity check).
+  **Drag and drop was verified live** using `scripts/axdrag.swift` across multiple real moves (1. e4, 1... d6, 2. d4, 2... Nf6); piece positions updated correctly in the live app and all 64 `square-<algebraic>` accessibility identifiers survived intact - this is the first time in three sessions this has been observed running rather than only unit-tested.
+  Right-drag event routing via `RightDragCatcher`'s AppKit layer was verified with hit-testing separation (left clicks pass through to square buttons, right clicks/drags claimed by catcher), though the drawn arrow/circle shapes themselves remain visually unverified.
+  The arrival animation's timing and the coordinate labels' rendered point size remain unverified - both are inherently visual and the AX tree exposes neither frame-by-frame rendering nor rendered font size, and this environment still cannot composite a window for a screenshot.
+  No source bugs were found; only the QA scripts themselves were hardened. App test suite: 170 tests across 34 suites (unchanged, all green).
+
+- **Priority 5's small UI details batch is implemented (8 of 8 items).**
+  Full narrative in `devlogs/2026-08-24-ui-polish.md`.
+  Classification chips no longer wrap mid-word (`.lineLimit(1)` + `.fixedSize`); a collapsible legend for all 10 classification marks was added to the Game Audit card, sourcing its copy from `ChessGlossary.gloss(for:)` rather than new prose; accuracy now renders with a percent sign and marks the user's own side ("White (You) 93.8%") via a new `AccuracySummaryFormatter`; sidebar rows with no username render "White won"/"Black won"/"Draw" instead of raw "1-0" notation; `LinesPanelView` separates inspecting a line (hover) from adopting it as a variation (an explicit branch button) instead of adopting on click; eval-graph key-moment dots gained a real 24x24pt hit target; the eval bar's win-probability-vs-centipawn scale mismatch is now explained via tooltip/accessibility text rather than resolved by unifying the two (a deliberate choice, both currencies are kept); the disabled "Practice positions" button now explains why.
+  Stayed entirely in the App layer; `Packages/AnalysisKit` and `Packages/CoachKit` untouched.
+  App test suite: 174 tests across 34 suites (up from 170).
+
+- **The ignored-threat detector is implemented (P4.2 slice).**
+  Full narrative in `devlogs/2026-08-24.md`.
+  `ThemeDetector.ignoredThreat(input:ply:)` identifies when the mover ignored a concrete, pre-existing threat from the opponent (an immediate checkmate or a capture winning material) and the opponent executed it on the very next move.
+  Operational definition stays strictly within stored board replay: replays opponent's played move at ply `p + 1` from the post-move position, flips the active color in the pre-move position (`input.plies[p - 1].fen`) to verify the exact move was already legal and achieved the same result before the mover moved, and calculates settled net material gain using `ChessGame.hasLegalMove` and piece values.
+  An ignored threat attaches as an audited `IgnoredThreatFact` on `KeyMoment` and renders directly in `ReportText` across all registers ("This ignored the threat of checkmate: Qxf7#", "This ignored the threat to the bishop on c5: Bxc5 winning the bishop").
+  When an ignored threat explains the loss of an already-hanging piece on square X, `ReportText` renders `ignoredThreat` and suppresses the redundant `punishment` sentence to prevent duplicating the same square and capture in one summary.
+  `KeyMomentSelector`'s `prefersNameableConsequences` was extended to treat `IgnoredThreatFact` as a nameable consequence alongside punishment/missedMate/allowedMate.
+  Scanned all 55 plies of the real Carlsen fixture game by hand: 0 fires, confirmed correct as all captures in that game were immediate equal trades, recaptures, or new hanging pieces created on that move. All golden report fixtures pass unmodified.
+  Packages/AnalysisKit: 123 tests across 6 suites (was 105). App suite: 170 tests across 34 suites (unchanged).
+  This and the board-QA and UI-polish sessions above ran in parallel, in separate git worktrees, and were integrated by hand afterward - see this repository's commit history around 2026-08-24 for the merge.
 
 - **The ignored-threat detector is implemented (P4.2 slice).**
   Full narrative in `devlogs/2026-08-24.md`.
