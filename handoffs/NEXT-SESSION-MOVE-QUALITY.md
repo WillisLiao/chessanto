@@ -20,6 +20,12 @@ The validation requires well-formed FEN records, legal and exact UCI replay, exp
 
 Any missing, malformed, illegal, wrong-colored, or inconsistent historical record closes the whole fact.
 
+FEN validation requires exactly six fields, a nonnegative integer halfmove clock, and a positive integer fullmove number.
+
+Replay comparison checks all six FEN fields, with only the documented persisted en-passant normalization and the narrow ChessCore en-passant halfmove correction.
+
+The semantic halfmove clock for a real en-passant capture remains `0`; the correction accepts only ChessCore's observed replay value of `1` against that expected `0`.
+
 The tracker carries piece kind, color, move count, and original-queen identity.
 
 Only a pawn diagonal capture onto an empty square can remove an en-passant victim.
@@ -64,7 +70,11 @@ The corrected Black queen fixture starts with a White quiet move before the Blac
 
 The focused move-quality regression set has 20 passing tests.
 
-`swift test --package-path Packages/AnalysisKit` passes exactly 149 tests in 6 suites.
+The counter-validation RED run had 10 selected tests and 4 issues on the prior implementation.
+
+The counter-validation GREEN run has 10 selected tests and 0 issues.
+
+`swift test --package-path Packages/AnalysisKit` passes exactly 153 tests in 6 suites.
 
 `swift test --package-path Packages/CoachKit` passes exactly 76 tests in 8 suites.
 
@@ -74,11 +84,11 @@ The focused move-quality regression set has 20 passing tests.
 
 ## Real fixture hand check
 
-The real Magnus Carlsen versus artin10862 fixture has 54 played plies and all 54 produce audited facts.
+The real Magnus Carlsen versus artin10862 fixture has 56 stored positions and 55 played UCIs, all of which produce audited facts.
 
 Capture fires are at plies 8, 9, 15, 18, 21, 22, 23, 24, 25, 31, 32, 43, 44, and 45.
 
-Check fires are at plies 43, 45, 49, 51, and 55.
+Check fires are at plies 43, 45, 49, 51, and 55, with the ply-55 check valid.
 
 Ply 17 is the only redevelopment and moved-before-castling fire.
 

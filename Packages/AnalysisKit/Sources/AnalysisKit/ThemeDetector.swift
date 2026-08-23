@@ -458,7 +458,13 @@ public enum ThemeDetector {
 
     private static func fenFields(_ fen: String) -> [String]? {
         let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
-        return fields.count >= 4 ? fields : nil
+        guard fields.count == 6,
+            let halfmoveClock = Int(fields[4]), halfmoveClock >= 0,
+            let fullmoveNumber = Int(fields[5]), fullmoveNumber > 0
+        else {
+            return nil
+        }
+        return fields
     }
 
     private static func sideToMove(in fen: String) -> PieceColor? {
@@ -471,27 +477,35 @@ public enum ThemeDetector {
     }
 
     private static func fullmoveNumber(in fen: String) -> Int? {
-        guard let fields = fenFields(fen), fields.count >= 6, let number = Int(fields[5]), number > 0 else {
+        guard let fields = fenFields(fen), let number = Int(fields[5]), number > 0 else {
             return nil
         }
         return number
     }
 
-    private static func positionFields(in fen: String) -> [String]? {
-        guard let fields = fenFields(fen) else { return nil }
-        return Array(fields.prefix(4))
-    }
-
-    private static func positionMatches(replayedFEN: String, expectedFEN: String) -> Bool {
-        guard let replayed = positionFields(in: replayedFEN), let expected = positionFields(in: expectedFEN),
-            replayed[0...2] == expected[0...2]
+    private static func positionMatches(
+        replayedFEN: String,
+        expectedFEN: String,
+        allowingEnPassantHalfmoveCorrection: Bool
+    ) -> Bool {
+        guard let replayed = fenFields(replayedFEN), let expected = fenFields(expectedFEN),
+            replayed[0...2] == expected[0...2],
+            replayed[5] == expected[5]
         else {
             return false
         }
+
+        let halfmoveMatches = replayed[4] == expected[4]
+            || (allowingEnPassantHalfmoveCorrection && replayed[4] == "1" && expected[4] == "0")
+        guard halfmoveMatches else { return false }
+
         // The persisted game rows historically store "-" after a double
         // pawn push even when ChessGame emits the transient target square.
         // Preserve strict validation for every other position field while
-        // accepting that known storage normalization.
+        // accepting that known storage normalization. ChessCore also reports
+        // a halfmove clock of 1 for a real en-passant capture, while the
+        // semantic FEN counter is 0; that exact correction is allowed only
+        // for the tracked pawn diagonal capture onto an empty square.
         return replayed[3] == expected[3] || (expected[3] == "-" && replayed[3] != "-")
     }
 
@@ -582,7 +596,7 @@ public enum ThemeDetector {
             guard let expectedColor = sideToMove(in: preMoveFEN),
                 let preMoveFullmoveNumber = fullmoveNumber(in: preMoveFEN),
                 input.moverIsWhite(atPly: k) == (expectedColor == .white),
-                positionFields(in: postMoveFEN) != nil,
+                fenFields(postMoveFEN) != nil,
                 fullmoveNumber(in: postMoveFEN) != nil,
                 boardMatchesFEN(board, fen: preMoveFEN)
             else {
@@ -593,11 +607,22 @@ public enum ThemeDetector {
                 let replayed = replayedMoves.first,
                 replayed.movedPieceColor == expectedColor,
                 replayed.uci == uci,
-                positionMatches(replayedFEN: replayed.resultingFEN, expectedFEN: postMoveFEN),
                 let source = board[parsed.from],
                 source.color == expectedColor,
                 source.kind == replayed.movedPieceKind
             else {
+                return nil
+            }
+
+            let isEnPassantCapture = source.kind == .pawn
+                && replayed.capturedPieceKind != nil
+                && board[parsed.to] == nil
+                && parsed.from.first != parsed.to.first
+            guard positionMatches(
+                replayedFEN: replayed.resultingFEN,
+                expectedFEN: postMoveFEN,
+                allowingEnPassantHalfmoveCorrection: isEnPassantCapture
+            ) else {
                 return nil
             }
 

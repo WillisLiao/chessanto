@@ -724,6 +724,52 @@ private let allowedMatePostFEN = "4r1k1/8/8/8/8/8/5PPP/6K1 b - - 0 1"
     #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
 }
 
+@Test func moveQualityFactRejectsMalformedCurrentHalfmoveClock() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - malformed 1", lines: [], playedUCI: "e2e4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
+}
+
+@Test func moveQualityFactRejectsAnExtraCurrentFENField() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1 extra", lines: [], playedUCI: "e2e4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
+}
+
+@Test func moveQualityFactRejectsDiscontinuousPriorHalfmoveClock() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 9 1", lines: [], playedUCI: "e2e4"),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
+@Test func moveQualityFactRejectsDiscontinuousPriorFullmoveNumber() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 7", lines: [], playedUCI: "e2e4"),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 8", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
 @Test func moveQualityFactResetsDevelopmentCountAfterPromotion() {
     let input = ReportInput(
         plies: [

@@ -32,9 +32,13 @@ Every prior and current UCI is replayed through `ChessGame.replayLine`.
 
 The replayed move must match the stored UCI, the FEN side to move, `ReportInput.moverIsWhite(atPly:)`, the tracked source identity, and the stored pre-move and post-move board.
 
-Position identity compares the first four FEN fields.
-
 The repository's stored post-double-pawn-push rows intentionally use `-` for the transient en-passant target, so that one known normalization is accepted while the placement, side, and castling fields remain strict.
+
+FEN validation now requires exactly six fields, a nonnegative integer halfmove clock, and a positive integer fullmove number.
+
+Replay comparison checks all six FEN fields, with only the documented persisted en-passant normalization and the narrow ChessCore en-passant halfmove correction.
+
+The semantic halfmove clock for a real en-passant capture remains `0`; the correction accepts only ChessCore's observed replay value of `1` against that expected `0`.
 
 The tracker is a typed identity map carrying piece kind, color, pedagogical move count, and original-queen identity.
 
@@ -86,15 +90,19 @@ The early Black queen fixture starts with a White quiet move so ply parity canno
 
 The final focused move-quality regression set has 20 tests and passes.
 
+The counter-validation RED run had 10 selected tests and 4 issues on the prior implementation.
+
+The counter-validation GREEN run has 10 selected tests and 0 issues.
+
 ## Real fixture hand check
 
-The Magnus Carlsen versus artin10862 fixture contains 55 stored positions and 54 played plies.
+The Magnus Carlsen versus artin10862 fixture contains 56 stored positions and 55 played UCIs.
 
-All 54 played plies produce valid audited move-quality facts.
+All 55 played UCIs produce valid audited move-quality facts.
 
 Capture fires occur at plies 8, 9, 15, 18, 21, 22, 23, 24, 25, 31, 32, 43, 44, and 45.
 
-Check fires occur at plies 43, 45, 49, 51, and 55.
+Check fires occur at plies 43, 45, 49, 51, and 55, with the ply-55 check valid.
 
 Ply 17 is the only redevelopment and moved-before-castling fire in this fixture.
 
@@ -108,7 +116,7 @@ The standard and beginner report goldens, the Coach payload golden, and the Coac
 
 ## Validation
 
-`swift test --package-path Packages/AnalysisKit` passes with exactly 149 tests in 6 suites.
+`swift test --package-path Packages/AnalysisKit` passes with exactly 153 tests in 6 suites.
 
 `swift test --package-path Packages/CoachKit` passes with exactly 76 tests in 8 suites.
 

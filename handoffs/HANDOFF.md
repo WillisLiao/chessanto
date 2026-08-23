@@ -25,11 +25,13 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
   `MoveQualityFact` is composed from replayed capture, check, checkmate, typed piece identity, castling state, and original-queen state.
   `ThemeDetector.moveQuality(input:ply:)` closes the complete historical fact on missing, malformed, illegal, wrong-colored, or board-inconsistent history.
   Every prior and current UCI is replayed through `ChessGame.replayLine` and checked against the FEN side, `ReportInput.moverIsWhite(atPly:)`, tracked source identity, and stored boards.
+  FEN validation requires exactly six fields, a nonnegative halfmove clock, and a positive fullmove number; replay comparison checks all six fields with only the documented persisted en-passant normalization and narrow ChessCore en-passant halfmove correction.
+  The semantic halfmove clock for a real en-passant capture remains `0`; the correction accepts only ChessCore's observed replay value of `1` against that expected `0`.
   En-passant removal is limited to a pawn diagonal capture onto an empty destination, castling updates rook identity, and promotion resets the promoted piece's pedagogical move count.
   Redevelopment uses the pre-move FEN fullmove number through fullmove 10, and early queen requires the original queen leaving `d1` or `d8` before fullmove 5.
   `KeyMomentSelector` is unchanged, while `ReportText` and typed `CoachFactsPayload.moveQuality` expose deterministic neutral observations with backward-compatible decoding.
-  Scanned all 54 played plies of the real Magnus Carlsen versus artin10862 fixture and hand-checked capture fires at plies 8, 9, 15, 18, 21, 22, 23, 24, 25, 31, 32, 43, 44, and 45, check fires at plies 43, 45, 49, 51, and 55, and the sole redevelopment fire at ply 17.
-  Packages/AnalysisKit: 149 tests across 6 suites. Packages/CoachKit: 76 tests across 8 suites. App suite: 179 tests across 34 suites.
+  Scanned all 55 played UCIs from the 56 stored positions of the real Magnus Carlsen versus artin10862 fixture and hand-checked capture fires at plies 8, 9, 15, 18, 21, 22, 23, 24, 25, 31, 32, 43, 44, and 45, check fires at plies 43, 45, 49, 51, and 55 with the ply-55 check valid, and the sole redevelopment fire at ply 17.
+  Packages/AnalysisKit: 153 tests across 6 suites. Packages/CoachKit: 76 tests across 8 suites. App suite: 179 tests across 34 suites.
 
 - **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**
   Full narrative in `devlogs/2026-08-24-spaced-repetition.md`.
