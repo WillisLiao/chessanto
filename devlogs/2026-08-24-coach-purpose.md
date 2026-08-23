@@ -1,5 +1,7 @@
 # 2026-08-24 - What the LLM Coach is for (P4.8)
 
+The initial P4.8 record below describes the pre-audit implementation and is superseded by the bounded audit repair section at the end of this file.
+
 ## Context & Problem
 
 From a real captured interaction: asked "How should White continue here?", the Coach answered with tautologies ("e4 is a classic opening move for White, and it's a good choice to continue the game"), repeated the identical answer verbatim when asked the identical question again, and ended with "Let me check the evaluation to see which of these options is the best" without actually calling the evaluate tool.
@@ -87,3 +89,19 @@ All new behavior is verified through CoachKit's mock-based test suite.
 | Open-ended question, model correctly calls evaluate before answering | New test: passes through normally (CoachChatTests) |
 | Non-concrete response (clarifying question, conversational aside) | New test: no violation (CoachChatTests + CoachVerifierTests) |
 | Existing CoachVerifier test suite | All 20 original tests pass unmodified |
+
+## Bounded audit repair (2026-08-24)
+
+The independent audit found that the first P4.8 implementation let pre-existing payload lines, precheck evaluations, and seed evaluations bypass the required chat-turn evaluate call, and that attempted tool calls were counted even when evaluation failed.
+`CoachChat` now gates every concrete position claim on at least one successful `evaluate` invocation performed by the model's tool loop during the current user turn.
+`CoachNarrator.ConversationResult.successfulEvaluateCalls` increments only after the `evaluate` executor returns successfully, so invalid or failed calls do not satisfy the gate.
+`CoachChat` carries that successful-call signal across its one regeneration attempt and resets it for every new user turn.
+The contradictory `hadEngineData` bypass and the chat prompt's payload exception were removed.
+
+`CoachVerifier.containsConcreteClaim` now covers concrete evaluation assertions without move tokens, bounded tactical and plan language without move tokens, and developmental claims such as `Nf3 develops naturally` while keeping greetings, square references, and genuine clarifying questions tool-free.
+`CoachFactsPayload` now carries the audited `ignoredThreat` fact, and the moment prompt names and explains all five supported fact families: betterMove, punishment, ignoredThreat, missedMate, and allowedMate.
+
+The repair is verified against the CoachKit mock client only because no Ollama service was available at `127.0.0.1:11434` during this session.
+CoachKit now passes 98 tests across 8 suites, and the root macOS suite passes 179 tests across 34 suites.
+The root macOS build ends with `** BUILD SUCCEEDED **`, the root macOS test ends with `** TEST SUCCEEDED **`, and `git diff --check` is clean.
+The model-floor question remains report-only, and the current evidence still supports evaluating an 8B minimum later rather than changing `CoachModelCatalog` in this repair.

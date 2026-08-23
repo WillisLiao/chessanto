@@ -21,8 +21,23 @@ public struct CoachRankedLinePayload: Codable, Sendable, Equatable {
 public struct CoachFactsPayload: Codable, Sendable {
     public let betterMove: BetterMoveFact?
     public let punishment: PunishmentFact?
+    public let ignoredThreat: IgnoredThreatFact?
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
+
+    public init(
+        betterMove: BetterMoveFact?,
+        punishment: PunishmentFact?,
+        ignoredThreat: IgnoredThreatFact? = nil,
+        missedMate: MissedMateFact?,
+        allowedMate: AllowedMateFact?
+    ) {
+        self.betterMove = betterMove
+        self.punishment = punishment
+        self.ignoredThreat = ignoredThreat
+        self.missedMate = missedMate
+        self.allowedMate = allowedMate
+    }
 }
 
 public struct CoachMomentPayload: Codable, Sendable {
@@ -206,6 +221,7 @@ public enum CoachPayloadBuilder {
             facts: CoachFactsPayload(
                 betterMove: moment.betterMove,
                 punishment: moment.punishment,
+                ignoredThreat: moment.ignoredThreat,
                 missedMate: moment.missedMate,
                 allowedMate: moment.allowedMate
             )

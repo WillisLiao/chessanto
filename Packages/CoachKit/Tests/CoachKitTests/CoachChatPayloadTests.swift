@@ -98,4 +98,10 @@ struct CoachChatPayloadTests {
         #expect(withoutContext == "what about Nf3?")
         #expect(!withoutContext.contains("\"fen\""))
     }
+
+    @Test func chatPromptDoesNotGrantPreExistingEngineDataAnEvaluateException() {
+        let prompt = CoachPrompt.chatSystemPrompt(register: .intermediate)
+        #expect(prompt.contains("MUST call the `evaluate` tool"))
+        #expect(!prompt.contains("If the position data already includes engine lines"))
+    }
 }

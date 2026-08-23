@@ -223,6 +223,7 @@ public enum CoachNarrator {
     struct ConversationResult {
         let text: String?
         let toolCallsUsed: Int
+        let successfulEvaluateCalls: Int
         let newAnchors: [CoachVerifier.Anchor]
     }
 
@@ -239,6 +240,7 @@ public enum CoachNarrator {
         toolCallBudgetRemaining: Int
     ) async -> ConversationResult {
         var toolCallsUsed = 0
+        var successfulEvaluateCalls = 0
         var remainingBudget = toolCallBudgetRemaining
         var newAnchors: [CoachVerifier.Anchor] = []
 
@@ -260,11 +262,21 @@ public enum CoachNarrator {
                     }
                 }
             } catch {
-                return ConversationResult(text: nil, toolCallsUsed: toolCallsUsed, newAnchors: newAnchors)
+                return ConversationResult(
+                    text: nil,
+                    toolCallsUsed: toolCallsUsed,
+                    successfulEvaluateCalls: successfulEvaluateCalls,
+                    newAnchors: newAnchors
+                )
             }
 
             if toolCalls.isEmpty {
-                return ConversationResult(text: assembledContent, toolCallsUsed: toolCallsUsed, newAnchors: newAnchors)
+                return ConversationResult(
+                    text: assembledContent,
+                    toolCallsUsed: toolCallsUsed,
+                    successfulEvaluateCalls: successfulEvaluateCalls,
+                    newAnchors: newAnchors
+                )
             }
 
             messages.append(.init(role: "assistant", content: assembledContent, toolCalls: toolCalls))
@@ -284,6 +296,9 @@ public enum CoachNarrator {
                 let movesUCI = call.function.arguments["moves"]?.arrayValue?.compactMap(\.stringValue) ?? []
                 do {
                     let result = try await executor.evaluate(fen: fen, movesUCI: movesUCI)
+                    if call.function.name == "evaluate" {
+                        successfulEvaluateCalls += 1
+                    }
                     messages.append(.init(role: "tool", content: toolResultJSON(result), toolName: call.function.name))
                     newAnchors.append(CoachVerifier.Anchor(
                         fen: result.resultingFEN,
@@ -302,7 +317,12 @@ public enum CoachNarrator {
                 }
             }
         }
-        return ConversationResult(text: nil, toolCallsUsed: toolCallsUsed, newAnchors: newAnchors)
+        return ConversationResult(
+            text: nil,
+            toolCallsUsed: toolCallsUsed,
+            successfulEvaluateCalls: successfulEvaluateCalls,
+            newAnchors: newAnchors
+        )
     }
 
     static func errorMessage(_ error: Error) -> String {

@@ -182,6 +182,7 @@ public actor CoachChat {
 
         var toolCallTotal = 0
         var violationTotal = 0
+        var successfulEvaluateUsed = false
 
         var precheckAndSeedPooled = false
         func poolNewAnchors(_ newAnchors: [CoachVerifier.Anchor]) {
@@ -193,10 +194,6 @@ public actor CoachChat {
             anchorPool.append(contentsOf: newAnchors)
         }
 
-        // Whether the model had pre-existing engine data to cite (from the
-        // payload's position lines, precheck evaluations, or a seed eval).
-        let hadEngineData = !payload.currentPositionLines.isEmpty || !precheckNotes.isEmpty
-
         for attempt in 0..<2 {
             let conversation = await CoachNarrator.runConversation(
                 messages: &turnMessages,
@@ -206,6 +203,7 @@ public actor CoachChat {
                 toolCallBudgetRemaining: CoachNarrator.toolCallCap
             )
             toolCallTotal += conversation.toolCallsUsed
+            successfulEvaluateUsed = successfulEvaluateUsed || conversation.successfulEvaluateCalls > 0
             verifierContext.anchors.append(contentsOf: conversation.newAnchors)
 
             guard let text = conversation.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -221,13 +219,10 @@ public actor CoachChat {
             let verdict = await CoachVerifier.verify(text: text, context: verifierContext)
             switch verdict {
             case .verified(let verifiedText):
-                // P4.8 concreteness gate: if the response makes concrete
-                // claims about the position but the model never called the
-                // evaluate tool and had no pre-existing engine data to cite,
-                // treat this as a violation and force regeneration. This
-                // catches the observed failure where the Coach said "let me
-                // check the evaluation" and never did.
-                if conversation.toolCallsUsed == 0 && !hadEngineData
+                // P4.8 concreteness gate: pre-existing payload, precheck,
+                // and seed data do not satisfy the requirement. Only a
+                // successful evaluate call from this user turn does.
+                if !successfulEvaluateUsed
                     && CoachVerifier.containsConcreteClaim(in: verifiedText) {
                     let concreteViolation = CoachVerifier.Violation(
                         "response makes concrete position claims without calling the evaluate tool first - call the evaluate tool to verify your claims before answering"

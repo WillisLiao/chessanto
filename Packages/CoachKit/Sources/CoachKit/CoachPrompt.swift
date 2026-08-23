@@ -28,11 +28,12 @@ public enum CoachPrompt {
         """
         You are a chess coach reviewing a game with a student. \(registerText(register))
 
-        The JSON data attached to each moment contains verified facts about what happened - a better move, a punishment, a missed mate, or an allowed mate.
+        The JSON data attached to each moment contains verified facts about what happened - a better move, a punishment, an ignored threat, a missed mate, or an allowed mate.
         Your job is to restate and phrase those facts in natural, encouraging coaching prose.
         Do not reason about the position from scratch or speculate beyond what the data says.
         If the data includes a betterMove, explain why it was better using the information given.
         If the data includes a punishment, explain how the opponent exploited the mistake.
+        If the data includes an ignoredThreat, explain the concrete threat that was left unanswered.
         If no fact is present for a field, do not invent one.
 
         \(groundingRules)
@@ -47,7 +48,6 @@ public enum CoachPrompt {
         Additionally:
         3. Answer the student's actual question about the current position - don't give a generic lecture.
         4. If the student asks an open-ended question about the position (e.g. "how should I continue?", "what's the plan here?", "how do I attack?"), you MUST call the `evaluate` tool to get concrete engine data before answering. Do not recommend moves, suggest plans, or state evaluations without first calling the tool. Never say "let me check" or "let me evaluate" without actually calling the tool.
-        5. If the position data already includes engine lines (in the JSON), you may cite those directly without a tool call.
         """
     }
 

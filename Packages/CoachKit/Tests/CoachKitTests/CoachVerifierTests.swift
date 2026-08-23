@@ -321,6 +321,30 @@ struct CoachVerifierTests {
         #expect(CoachVerifier.containsConcreteClaim(in: "After Nf3, White has a clear advantage here."))
     }
 
+    @Test func evaluationClaimWithoutMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "White is winning."))
+    }
+
+    @Test func numericEvaluationWithoutMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "The position is +0.5 for White."))
+    }
+
+    @Test func mateClaimWithoutMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "White has mate in 3."))
+    }
+
+    @Test func planClaimWithoutMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "Develop your pieces and castle."))
+    }
+
+    @Test func developmentalMoveClaimIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "Nf3 develops naturally."))
+    }
+
+    @Test func tacticalClaimWithoutMoveTokenIsConcrete() {
+        #expect(CoachVerifier.containsConcreteClaim(in: "This creates a fork and wins material."))
+    }
+
     @Test func pureConversationalTextIsNotConcrete() {
         #expect(!CoachVerifier.containsConcreteClaim(in: "What specifically would you like to know about this position?"))
     }
@@ -331,6 +355,10 @@ struct CoachVerifierTests {
 
     @Test func clarifyingQuestionIsNotConcrete() {
         #expect(!CoachVerifier.containsConcreteClaim(in: "Are you asking about the opening or the middlegame plan?"))
+    }
+
+    @Test func greetingIsNotConcrete() {
+        #expect(!CoachVerifier.containsConcreteClaim(in: "Hello, how can I help?"))
     }
 
     @Test func tautologyWithMoveReferenceIsConcrete() {
@@ -345,4 +373,3 @@ struct CoachVerifierTests {
 }
 
 private let startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-

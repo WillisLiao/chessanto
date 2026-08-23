@@ -493,10 +493,12 @@ public enum CoachVerifier {
     /// - A numbered move chain (e.g. "1. e4", "12... Nf6") is always concrete.
     /// - A move-recommendation phrase ("you should play", "the best move is",
     ///   "I recommend", "consider playing") adjacent to a move token is concrete.
-    /// - An evaluation-assertion phrase ("winning", "losing", "equal",
-    ///   "advantage", "better position", "worse") combined with any
-    ///   non-exempt move token in the text is concrete.
-    /// - Bare conversational text with no move tokens at all is never concrete.
+    /// - An evaluation assertion ("White is winning", "the position is
+    ///   better") or a concrete plan/tactical phrase ("develop your pieces",
+    ///   "wins material") is concrete even without a move token.
+    /// - An evaluation/plan/tactical phrase combined with a non-exempt move
+    ///   token is concrete.
+    /// - Bare conversational text with no position claim is never concrete.
     public static func containsConcreteClaim(in text: String) -> Bool {
         let chains = citedLineChains(in: text)
 
@@ -514,9 +516,16 @@ public enum CoachVerifier {
         // Any move token at all, including bare squares like "e4".
         let hasAnyMoveTokens = !chains.isEmpty
 
-        guard hasAnyMoveTokens else { return false }
-
         let lower = text.lowercased()
+
+        // Signed evaluations, win percentages, and mate counts are concrete
+        // position claims even when the response names no move.
+        if !matches(of: evalPattern, in: text).isEmpty
+            || !matches(of: percentPattern, in: text).isEmpty
+            || !matches(of: matePattern, in: text).isEmpty
+            || !matches(of: mateInWordsPattern, in: text).isEmpty {
+            return true
+        }
 
         // Move-recommendation phrases.
         let recommendationPhrases = [
@@ -528,27 +537,63 @@ public enum CoachVerifier {
             "a good choice", "a good move", "is a good",
             "is a classic opening", "is the right",
         ]
-        for phrase in recommendationPhrases {
-            if lower.contains(phrase) { return true }
+        if hasAnyMoveTokens && recommendationPhrases.contains(where: lower.contains) {
+            return true
         }
 
-        // Evaluation assertions - only concrete when paired with strong
-        // (non-bare-square) move tokens, to avoid flagging "the pawn on e4
-        // controls important squares" as a concrete claim.
+        // These phrases make a position claim without needing a move token.
+        // Keep them specific enough that a genuine clarifying question about
+        // a "plan" or a greeting remains tool-free.
+        let standaloneEvaluationPhrases = [
+            "white is winning", "black is winning", "you are winning",
+            "white is losing", "black is losing", "you are losing",
+            "white is better", "black is better", "you are better",
+            "white is worse", "black is worse", "you are worse",
+            "the position is winning", "the position is losing",
+            "the position is equal", "the position is better",
+            "the position is worse", "this position is winning",
+            "this position is losing", "this position is equal",
+            "white has an advantage", "black has an advantage",
+            "you have an advantage", "the evaluation is",
+            "winning for white", "winning for black", "winning chances",
+        ]
+        if standaloneEvaluationPhrases.contains(where: lower.contains) {
+            return true
+        }
+
+        let standalonePlanPhrases = [
+            "develop your pieces", "develop the pieces", "bring out your pieces",
+            "castle your king", "control the center", "control the centre",
+            "attack the king", "create a threat", "look for a fork",
+            "trade queens", "keep your king safe", "connect your rooks",
+            "improve your pieces", "improve your position", "the plan is to",
+            "the best move is", "creates a fork", "creates a pin",
+            "creates a skewer", "wins material", "loses material",
+            "threatens mate", "allows mate", "tactical shot",
+        ]
+        if standalonePlanPhrases.contains(where: lower.contains) {
+            return true
+        }
+
+        // Evaluation, plan, and tactical words are concrete when attached to
+        // a real move token. Bare squares stay exempt so a positional square
+        // reference such as "the pawn on e4" remains conversational.
         if hasStrongMoveTokens {
-            let evalPhrases = [
+            let moveClaimPhrases = [
                 "winning", "losing", "equal", "advantage",
                 "better position", "worse", "clearly better",
                 "is strong", "is weak", "decisive",
-                "the evaluation", "the engine says",
-                "winning chances", "compensation",
+                "the evaluation", "the engine says", "winning chances",
+                "compensation", "develop", "castle", "control",
+                "attack", "threaten", "wins material", "loses material",
+                "creates a fork", "creates a pin", "creates a skewer",
+                "threatens mate", "allows mate", "tactical shot",
             ]
-            for phrase in evalPhrases {
-                if lower.contains(phrase) { return true }
+            if moveClaimPhrases.contains(where: lower.contains) {
+                return true
             }
         }
 
         return false
     }
 }
-

@@ -57,6 +57,36 @@ struct CoachPayloadBuilderTests {
         }
     }
 
+    @Test func momentPayloadCarriesIgnoredThreatIntoFactsAndPrompt() throws {
+        let input = try loadFixtureInput()
+        let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        #expect(report != nil)
+        guard let report, let moment = report.keyMoments.first else { return }
+
+        let ignoredThreat = IgnoredThreatFact(
+            ply: moment.ply,
+            threatenedSAN: "Bxc5",
+            capturedPieceKind: .bishop,
+            capturedSquare: "c5",
+            netMaterialGainForOpponent: 3
+        )
+        let momentWithThreat = KeyMoment(
+            ply: moment.ply,
+            evalSwing: moment.evalSwing,
+            betterMove: moment.betterMove,
+            punishment: moment.punishment,
+            ignoredThreat: ignoredThreat,
+            missedMate: moment.missedMate,
+            allowedMate: moment.allowedMate
+        )
+
+        let payload = CoachPayloadBuilder.momentPayload(momentWithThreat, input: input)
+        #expect(payload.facts.ignoredThreat == ignoredThreat)
+        let prompt = try CoachPrompt.momentUserMessage(payload: payload)
+        #expect(prompt.contains("ignoredThreat"))
+        #expect(CoachPrompt.systemPrompt(register: .intermediate).contains("ignoredThreat"))
+    }
+
     // MARK: - Rating register selection
 
     @Test func fixedRatingBandsResolveDirectly() {

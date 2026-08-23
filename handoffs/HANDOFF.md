@@ -5,6 +5,7 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
+P4.8's bounded audit repair is complete; the current gate and validation record are in the latest Coach purpose entry below and `devlogs/2026-08-24-coach-purpose.md`.
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.5 (multi-ply practice cards).
 P4.8 (what the LLM Coach is for) is now implemented; see below.
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
@@ -15,6 +16,20 @@ Also still open: visual-only rendering verification (arrival animation timing, c
 The only unimplemented Priority 2 item left is the dark-mode question, an open product decision rather than a scoped task.
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
+
+## Current state (2026-08-24) - P4.8 audit repair
+
+The independent audit repair closes the concrete-claim gate loopholes from the earlier P4.8 implementation.
+`CoachChat` no longer checks `hadEngineData`, and neither payload lines nor precheck or seed evaluations can satisfy the gate.
+`CoachNarrator.ConversationResult.successfulEvaluateCalls` records only a successful `evaluate` executor result, and `CoachChat` retains that signal across regeneration while resetting it between user turns.
+Invalid or failed evaluate calls therefore still regenerate and fall back when the final response is concrete.
+`CoachVerifier.containsConcreteClaim` now covers concrete evaluation, tactical, and plan language both with and without move tokens while preserving tool-free greetings, square references, and clarifying questions.
+The chat prompt no longer advertises a pre-existing-engine-data exception.
+`CoachFactsPayload` and `CoachPayloadBuilder` now carry `ignoredThreat`, and the moment prompt explicitly tells the model to phrase that audited fact alongside betterMove, punishment, missedMate, and allowedMate.
+The corrected behavior is covered by 98 CoachKit tests across 8 suites, including pre-existing, precheck, seed, successful, invalid, failed, and regeneration cases.
+The root macOS build passed with `** BUILD SUCCEEDED **`, the root macOS test passed with `179 tests in 34 suites` and `** TEST SUCCEEDED **`, and `git diff --check` passed.
+No real-model run was possible because Ollama was unavailable at `127.0.0.1:11434`, so this repair is mock-verified only.
+The model-floor decision remains report-only, with the earlier recommendation to consider disabling the Coach below 8B left for product direction.
 
 ## Current state (2026-08-24)
 
