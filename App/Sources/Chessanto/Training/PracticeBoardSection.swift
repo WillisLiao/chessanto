@@ -21,24 +21,9 @@ struct PracticeBoardSection: View {
                     flipped: viewModel.flipped,
                     theme: theme
                 )
+                .disabled(true)
             } else {
-                BoardView(
-                    position: viewModel.position,
-                    flipped: viewModel.flipped,
-                    theme: theme,
-                    selectedSquare: viewModel.selectedSquare,
-                    legalDestinations: viewModel.legalDestinations,
-                    hintSquares: viewModel.hintSquares,
-                    arrows: viewModel.revealArrow,
-                    pendingPromotion: viewModel.pendingPromotion,
-                    onSquareTapped: viewModel.select(square:),
-                    onPieceDragStarted: viewModel.beginDrag(from:),
-                    onPieceDropped: viewModel.drop(from:to:),
-                    onPromotionChosen: { kind in
-                        Task { await viewModel.completePromotion(with: kind) }
-                    },
-                    onPromotionCancelled: viewModel.cancelPromotion
-                )
+                interactiveBoard
             }
             BoardIdentityStripView(info: identityStrips.bottom)
             if let preview = viewModel.linePreview {
@@ -72,5 +57,38 @@ struct PracticeBoardSection: View {
     private var feedback: TrainingEvaluation? {
         guard case .feedback(let feedback) = viewModel.state else { return nil }
         return feedback
+    }
+
+    @ViewBuilder
+    private var interactiveBoard: some View {
+        if viewModel.isInteractionEnabled {
+            BoardView(
+                position: viewModel.position,
+                lastMove: viewModel.lastMove,
+                flipped: viewModel.flipped,
+                theme: theme,
+                selectedSquare: viewModel.selectedSquare,
+                legalDestinations: viewModel.legalDestinations,
+                hintSquares: viewModel.originHintSquares,
+                arrows: viewModel.revealArrow,
+                pendingPromotion: viewModel.pendingPromotion,
+                onSquareTapped: viewModel.select(square:),
+                onPieceDragStarted: viewModel.beginDrag(from:),
+                onPieceDropped: viewModel.drop(from:to:),
+                onPromotionChosen: { kind in
+                    Task { await viewModel.completePromotion(with: kind) }
+                },
+                onPromotionCancelled: viewModel.cancelPromotion
+            )
+        } else {
+            BoardView(
+                position: viewModel.position,
+                lastMove: viewModel.lastMove,
+                flipped: viewModel.flipped,
+                theme: theme,
+                arrows: viewModel.revealArrow
+            )
+            .disabled(true)
+        }
     }
 }

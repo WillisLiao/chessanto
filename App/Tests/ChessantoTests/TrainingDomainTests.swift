@@ -149,6 +149,63 @@ struct TrainingDomainTests {
     }
 
     @Test
+    func cardFactoryCarriesIgnoredThreatSANAsAnOpaqueThemeMarker() throws {
+        let input = ReportInput(
+            plies: [
+                PlyRecord(
+                    fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: 20, mateIn: nil, principalVariationUCI: ["e2e4"], depth: 20)],
+                    playedUCI: nil
+                ),
+                PlyRecord(
+                    fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: 25, mateIn: nil, principalVariationUCI: ["e7e5"], depth: 20)],
+                    playedUCI: "e2e4"
+                ),
+                PlyRecord(
+                    fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: 30, mateIn: nil, principalVariationUCI: ["f1c4"], depth: 20)],
+                    playedUCI: "e7e5"
+                ),
+                PlyRecord(
+                    fen: "rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: 25, mateIn: nil, principalVariationUCI: ["b8c6"], depth: 20)],
+                    playedUCI: "f1c4"
+                ),
+                PlyRecord(
+                    fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: 40, mateIn: nil, principalVariationUCI: ["d1h5"], depth: 20)],
+                    playedUCI: "b8c6"
+                ),
+                PlyRecord(
+                    fen: "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: 50, mateIn: nil, principalVariationUCI: ["g8e7"], depth: 20)],
+                    playedUCI: "d1h5"
+                ),
+                PlyRecord(
+                    fen: "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 1, principalVariationUCI: ["h5f7"], depth: 20)],
+                    playedUCI: "g8f6"
+                ),
+                PlyRecord(
+                    fen: "r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4",
+                    lines: [RankedLine(rank: 1, scoreCentipawns: nil, mateIn: 99, principalVariationUCI: [], depth: 20)],
+                    playedUCI: "h5f7"
+                )
+            ],
+            whiteName: "White",
+            blackName: "Black",
+            result: "1-0",
+            chessComUsername: "Black"
+        )
+        let report = try #require(ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: [])))
+        let draft = try #require(TrainingCardFactory.drafts(report: report, input: input).first)
+
+        #expect(draft.themes.contains(TrainingThemeMarker.ignoredThreat("Qxf7#")))
+        #expect(draft.themes.contains("Allowed forced mate"))
+    }
+
+    @Test
     func cachedTopLineIsAcceptedWithoutEngineSearch() async throws {
         let probe = SearchProbe()
         let evaluator = DefaultTrainingMoveEvaluator { _ in

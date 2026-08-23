@@ -93,6 +93,18 @@ struct TrainingCard: Identifiable, Equatable, Sendable {
         return ChessGame.replayLine(fromUCI: [bestMoveUCI], startingFEN: preMoveFEN).first?.san
     }
 
+    /// Themes are persisted as one JSON array for compatibility with the
+    /// existing training-card schema. The ignored-threat marker is an
+    /// application-owned data item in that array, not a learner-facing
+    /// recurring theme.
+    var displayThemes: [String] {
+        themes.filter { !TrainingThemeMarker.isIgnoredThreat($0) }
+    }
+
+    var ignoredThreatSAN: String? {
+        TrainingThemeMarker.threatSAN(from: themes)
+    }
+
     /// The depth this card's stored lines were searched to, which is the
     /// budget an attempted move has to be graded against to be comparable.
     var referenceDepth: Int {
@@ -202,7 +214,31 @@ enum TrainingCardFactory {
         if moment.punishment != nil { result.append("Material left en prise") }
         if moment.missedMate != nil { result.append("Missed forced mate") }
         if moment.allowedMate != nil { result.append("Allowed forced mate") }
+        if let ignoredThreat = moment.ignoredThreat {
+            result.append(TrainingThemeMarker.ignoredThreat(ignoredThreat.threatenedSAN))
+        }
         return result
+    }
+}
+
+/// Stable, typed application metadata carried through the existing themes JSON
+/// without adding a persistence column. It is deliberately opaque to report
+/// prose and recurring-theme aggregation.
+enum TrainingThemeMarker {
+    static let ignoredThreatPrefix = "__chessanto_ignored_threat_v1__:"
+
+    static func ignoredThreat(_ threatenedSAN: String) -> String {
+        ignoredThreatPrefix + threatenedSAN
+    }
+
+    static func threatSAN(from themes: [String]) -> String? {
+        guard let marker = themes.first(where: { $0.hasPrefix(ignoredThreatPrefix) }) else { return nil }
+        let san = String(marker.dropFirst(ignoredThreatPrefix.count))
+        return san.isEmpty ? nil : san
+    }
+
+    static func isIgnoredThreat(_ theme: String) -> Bool {
+        theme.hasPrefix(ignoredThreatPrefix)
     }
 }
 
