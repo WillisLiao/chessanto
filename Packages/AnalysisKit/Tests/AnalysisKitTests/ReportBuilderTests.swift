@@ -133,6 +133,37 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     #expect(!text.contains(" your "))
 }
 
+@Test func reportTextComposesMoveQualityFlagsWithoutImplyingCausation() {
+    let report = ReportBuilder.build(input: scholarsMateInput(), openingBook: OpeningBook.build(from: []))!
+    let base = report.keyMoments[0]
+    let quality = MoveQualityFact(
+        ply: base.ply,
+        movedPieceKind: .queen,
+        isCapture: true,
+        capturedPieceKind: .pawn,
+        isCheck: true,
+        isCheckmate: true,
+        isRedevelopedPiece: true,
+        isMovedTwiceBeforeCastling: true,
+        isEarlyQueenMove: true
+    )
+    let moment = KeyMoment(
+        ply: base.ply,
+        evalSwing: base.evalSwing,
+        betterMove: base.betterMove,
+        punishment: base.punishment,
+        ignoredThreat: base.ignoredThreat,
+        missedMate: base.missedMate,
+        allowedMate: base.allowedMate,
+        moveQuality: quality
+    )
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("Move quality: captured a pawn, delivered checkmate, moved the queen again before castling, and brought the queen out before move 5."))
+    #expect(!summary.contains("gave check"))
+    #expect(!summary.contains("moved the queen again in the opening"))
+    #expect(!summary.contains("because"))
+}
+
 @Test func reportTextRendersNoSignificantMistakesMessageOnACleanGame() {
     // Reuse the same fixture but strip the blunder ply down to "best" by
     // simply omitting keyMoments via a trivially clean 1-move game.

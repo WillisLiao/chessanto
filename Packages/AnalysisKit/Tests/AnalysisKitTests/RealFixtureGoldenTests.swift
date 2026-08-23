@@ -158,4 +158,3 @@ private enum TestFixtureError: Error {
     #expect(ply43.isCheck == true)
     #expect(ply43.isCheckmate == false)
 }
-

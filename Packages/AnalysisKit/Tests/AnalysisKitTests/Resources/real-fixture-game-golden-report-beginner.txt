@@ -6,7 +6,7 @@ artin10862: 16 best, 4 excellent, 2 good, 1 inaccuracies, 1 blunders, 2 book, 1 
 Opening: Pirc Defense (B00). White left book on move 3. with Nc3.
 
 Key moments:
-- 9... cxd5 makes things worse for Black: White is better now. Better was Qe7 (Qe7 Nd4). This also left the bishop on c5 hanging: Bxc5 winning material.
+- 9... cxd5 makes things worse for Black: White is better now. Better was Qe7 (Qe7 Nd4). This also left the bishop on c5 hanging: Bxc5 winning material. Move quality: captured a pawn.
 - 27. Rc8 makes things worse for White: the position is level now. Better was Rd6 (Rd6 f6).
 - 27... f6 makes things much worse for Black: White is winning now. Better was Qe4+ (Qe4+ Ka2).
 

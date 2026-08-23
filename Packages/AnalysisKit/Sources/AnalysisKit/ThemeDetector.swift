@@ -360,40 +360,43 @@ public enum ThemeDetector {
     /// Structural characteristics of a played mainline move at ply `p` (1-based):
     /// - Whether it was a capture (and what kind of piece was taken)
     /// - Whether it delivered check or checkmate
-    /// - Whether it moved an already-developed piece again in the opening (moves 1-10 / plies 1-20)
-    /// - Whether the same piece moved twice before that side castled (moves 1-10 / plies 1-20)
+    /// - Whether it moved an already-developed piece again in the opening (pre-move fullmove <= 10)
+    /// - Whether the same piece moved twice before that side castled (pre-move fullmove <= 10)
     /// - Whether the queen first left its starting square before move five (moves 1-4 / plies 1-8)
     public static func moveQuality(input: ReportInput, ply p: Int) -> MoveQualityFact? {
         guard p >= 1, p < input.plies.count, let playedUCI = input.plies[p].playedUCI else {
             return nil
         }
-        let preMoveFEN = input.plies[p - 1].fen
-        guard let replayed = ChessGame.replayLine(fromUCI: [playedUCI], startingFEN: preMoveFEN).first else {
+        guard let tracking = trackMainline(input: input, upToPly: p),
+            tracking.replayed.uci == playedUCI
+        else {
             return nil
         }
 
-        let movedPieceKind = replayed.movedPieceKind
+        let replayed = tracking.replayed
+        let movedPieceKind = tracking.pieceBeforeCurrentMove.kind
         let capturedPieceKind = replayed.capturedPieceKind
         let isCapture = (capturedPieceKind != nil)
-        let isCheck = replayed.isCheck
+        let isCheck = replayed.isCheck || replayed.isCheckmate
         let isCheckmate = replayed.isCheckmate
 
-        let tracking = trackMainline(input: input, upToPly: p)
-        let moveCountBeforeCurrentMove = tracking.moveCountOnSquareBeforePlyP
-        let moverCastledBeforeCurrentMove = input.moverIsWhite(atPly: p)
+        let moveCountBeforeCurrentMove = tracking.pieceBeforeCurrentMove.moveCount
+        let moverCastledBeforeCurrentMove = tracking.pieceBeforeCurrentMove.color == .white
             ? tracking.whiteCastledBeforePlyP
             : tracking.blackCastledBeforePlyP
 
         let isPiece = (movedPieceKind != .pawn && movedPieceKind != .king)
-        let isOpeningPhase = (p <= 20)
+        let isOpeningPhase = tracking.preMoveFullmoveNumber <= 10
         let hasMovedBefore = (moveCountBeforeCurrentMove >= 1)
 
         let isRedevelopedPiece = isOpeningPhase && isPiece && hasMovedBefore
         let isMovedTwiceBeforeCastling = isOpeningPhase && isPiece && hasMovedBefore && !moverCastledBeforeCurrentMove
 
-        let moveNumber = (p + 1) / 2
-        let isBeforeMoveFive = (moveNumber < 5)
-        let isEarlyQueenMove = (movedPieceKind == .queen) && isBeforeMoveFive && (moveCountBeforeCurrentMove == 0)
+        let isEarlyQueenMove = movedPieceKind == .queen
+            && tracking.pieceBeforeCurrentMove.isOriginalQueen
+            && tracking.fromSquare == (tracking.pieceBeforeCurrentMove.color == .white ? "d1" : "d8")
+            && tracking.preMoveFullmoveNumber < 5
+            && moveCountBeforeCurrentMove == 0
 
         return MoveQualityFact(
             ply: p,
@@ -409,109 +412,302 @@ public enum ThemeDetector {
     }
 
     private struct MainlineTracking {
-        let moveCountOnSquareBeforePlyP: Int
+        let pieceBeforeCurrentMove: TrackedPiece
         let whiteCastledBeforePlyP: Bool
         let blackCastledBeforePlyP: Bool
+        let fromSquare: String
+        let preMoveFullmoveNumber: Int
+        let replayed: ReplayedMove
     }
 
-    private struct TrackedPiece {
+    private struct TrackedPiece: Equatable {
+        var kind: PieceKind
+        let color: PieceColor
         var moveCount: Int
+        let isOriginalQueen: Bool
     }
 
-    private static func parseInitialBoard(fen: String) -> [String: TrackedPiece] {
-        var board: [String: TrackedPiece] = [:]
-        guard let piecePlacement = fen.split(separator: " ").first else { return board }
-        let ranks = piecePlacement.split(separator: "/")
-        guard ranks.count == 8 else { return board }
+    private struct ParsedUCI {
+        let from: String
+        let to: String
+        let promotion: PieceKind?
+    }
 
-        let files = ["a", "b", "c", "d", "e", "f", "g", "h"]
-        for (rankIndex, rankStr) in ranks.enumerated() {
-            let rankNum = 8 - rankIndex
-            var fileIndex = 0
-            for ch in rankStr {
-                if let digit = ch.wholeNumberValue {
-                    fileIndex += digit
-                } else if fileIndex < 8 {
-                    let square = "\(files[fileIndex])\(rankNum)"
-                    board[square] = TrackedPiece(moveCount: 0)
-                    fileIndex += 1
-                }
+    private static func parseUCI(_ uci: String) -> ParsedUCI? {
+        let chars = Array(uci)
+        guard chars.count == 4 || chars.count == 5,
+            ("a"..."h").contains(chars[0]), ("1"..."8").contains(chars[1]),
+            ("a"..."h").contains(chars[2]), ("1"..."8").contains(chars[3])
+        else {
+            return nil
+        }
+        let promotion: PieceKind?
+        if chars.count == 5 {
+            switch chars[4] {
+            case "q": promotion = .queen
+            case "r": promotion = .rook
+            case "b": promotion = .bishop
+            case "n": promotion = .knight
+            default: return nil
             }
+        } else {
+            promotion = nil
+        }
+        return ParsedUCI(from: String(chars[0...1]), to: String(chars[2...3]), promotion: promotion)
+    }
+
+    private static func fenFields(_ fen: String) -> [String]? {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        return fields.count >= 4 ? fields : nil
+    }
+
+    private static func sideToMove(in fen: String) -> PieceColor? {
+        guard let fields = fenFields(fen) else { return nil }
+        switch fields[1] {
+        case "w": return .white
+        case "b": return .black
+        default: return nil
+        }
+    }
+
+    private static func fullmoveNumber(in fen: String) -> Int? {
+        guard let fields = fenFields(fen), fields.count >= 6, let number = Int(fields[5]), number > 0 else {
+            return nil
+        }
+        return number
+    }
+
+    private static func positionFields(in fen: String) -> [String]? {
+        guard let fields = fenFields(fen) else { return nil }
+        return Array(fields.prefix(4))
+    }
+
+    private static func positionMatches(replayedFEN: String, expectedFEN: String) -> Bool {
+        guard let replayed = positionFields(in: replayedFEN), let expected = positionFields(in: expectedFEN),
+            replayed[0...2] == expected[0...2]
+        else {
+            return false
+        }
+        // The persisted game rows historically store "-" after a double
+        // pawn push even when ChessGame emits the transient target square.
+        // Preserve strict validation for every other position field while
+        // accepting that known storage normalization.
+        return replayed[3] == expected[3] || (expected[3] == "-" && replayed[3] != "-")
+    }
+
+    private static func parsePieceBoard(fen: String) -> [String: (kind: PieceKind, color: PieceColor)]? {
+        guard let fields = fenFields(fen) else { return nil }
+        let ranks = fields[0].split(separator: "/", omittingEmptySubsequences: false)
+        guard ranks.count == 8 else { return nil }
+
+        var board: [String: (kind: PieceKind, color: PieceColor)] = [:]
+        let files = ["a", "b", "c", "d", "e", "f", "g", "h"]
+        for (rankIndex, rankString) in ranks.enumerated() {
+            let rank = 8 - rankIndex
+            var fileIndex = 0
+            for character in rankString {
+                if let emptySquares = character.wholeNumberValue {
+                    guard (1...8).contains(emptySquares), fileIndex + emptySquares <= 8 else { return nil }
+                    fileIndex += emptySquares
+                    continue
+                }
+
+                let piece: (kind: PieceKind, color: PieceColor)
+                switch character {
+                case "P": piece = (.pawn, .white)
+                case "N": piece = (.knight, .white)
+                case "B": piece = (.bishop, .white)
+                case "R": piece = (.rook, .white)
+                case "Q": piece = (.queen, .white)
+                case "K": piece = (.king, .white)
+                case "p": piece = (.pawn, .black)
+                case "n": piece = (.knight, .black)
+                case "b": piece = (.bishop, .black)
+                case "r": piece = (.rook, .black)
+                case "q": piece = (.queen, .black)
+                case "k": piece = (.king, .black)
+                default: return nil
+                }
+                guard fileIndex < 8 else { return nil }
+                board["\(files[fileIndex])\(rank)"] = piece
+                fileIndex += 1
+            }
+            guard fileIndex == 8 else { return nil }
         }
         return board
     }
 
-    private static func trackMainline(input: ReportInput, upToPly p: Int) -> MainlineTracking {
-        guard !input.plies.isEmpty else {
-            return MainlineTracking(moveCountOnSquareBeforePlyP: 0, whiteCastledBeforePlyP: false, blackCastledBeforePlyP: false)
+    private static func parseInitialBoard(fen: String) -> [String: TrackedPiece]? {
+        guard let pieces = parsePieceBoard(fen: fen) else { return nil }
+        var board: [String: TrackedPiece] = [:]
+        for (square, piece) in pieces {
+            board[square] = TrackedPiece(
+                kind: piece.kind,
+                color: piece.color,
+                moveCount: 0,
+                isOriginalQueen: piece.kind == .queen
+                    && ((piece.color == .white && square == "d1") || (piece.color == .black && square == "d8"))
+            )
+        }
+        return board
+    }
+
+    private static func boardMatchesFEN(_ board: [String: TrackedPiece], fen: String) -> Bool {
+        guard let expected = parsePieceBoard(fen: fen), expected.count == board.count else { return false }
+        for (square, piece) in expected {
+            guard let tracked = board[square], tracked.kind == piece.kind, tracked.color == piece.color else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func trackMainline(input: ReportInput, upToPly p: Int) -> MainlineTracking? {
+        guard p >= 1, p < input.plies.count,
+            let initialBoard = parseInitialBoard(fen: input.plies[0].fen),
+            sideToMove(in: input.plies[0].fen) != nil,
+            fullmoveNumber(in: input.plies[0].fen) != nil
+        else {
+            return nil
         }
 
-        var board = parseInitialBoard(fen: input.plies[0].fen)
+        var board = initialBoard
         var whiteCastled = false
         var blackCastled = false
 
-        var countBeforeP = 0
-        var whiteCastledBeforeP = false
-        var blackCastledBeforeP = false
-
         for k in 1...p {
-            guard k < input.plies.count, let uci = input.plies[k].playedUCI, uci.count >= 4 else {
-                continue
+            guard let uci = input.plies[k].playedUCI, let parsed = parseUCI(uci) else { return nil }
+            let preMoveFEN = input.plies[k - 1].fen
+            let postMoveFEN = input.plies[k].fen
+            guard let expectedColor = sideToMove(in: preMoveFEN),
+                let preMoveFullmoveNumber = fullmoveNumber(in: preMoveFEN),
+                input.moverIsWhite(atPly: k) == (expectedColor == .white),
+                positionFields(in: postMoveFEN) != nil,
+                fullmoveNumber(in: postMoveFEN) != nil,
+                boardMatchesFEN(board, fen: preMoveFEN)
+            else {
+                return nil
             }
-            let fromSquare = String(uci.prefix(2))
-            let toSquare = String(uci.dropFirst(2).prefix(2))
+            let replayedMoves = ChessGame.replayLine(fromUCI: [uci], startingFEN: preMoveFEN)
+            guard replayedMoves.count == 1,
+                let replayed = replayedMoves.first,
+                replayed.movedPieceColor == expectedColor,
+                replayed.uci == uci,
+                positionMatches(replayedFEN: replayed.resultingFEN, expectedFEN: postMoveFEN),
+                let source = board[parsed.from],
+                source.color == expectedColor,
+                source.kind == replayed.movedPieceKind
+            else {
+                return nil
+            }
+
+            let sourceBeforeCurrentMove = source
+            let whiteCastledBeforePlyP = whiteCastled
+            let blackCastledBeforePlyP = blackCastled
+
+            guard applyTrackedMove(
+                board: &board,
+                parsed: parsed,
+                replayed: replayed,
+                whiteCastled: &whiteCastled,
+                blackCastled: &blackCastled
+            ), boardMatchesFEN(board, fen: postMoveFEN) else {
+                return nil
+            }
 
             if k == p {
-                countBeforeP = board[fromSquare]?.moveCount ?? 0
-                whiteCastledBeforeP = whiteCastled
-                blackCastledBeforeP = blackCastled
-                break
+                return MainlineTracking(
+                    pieceBeforeCurrentMove: sourceBeforeCurrentMove,
+                    whiteCastledBeforePlyP: whiteCastledBeforePlyP,
+                    blackCastledBeforePlyP: blackCastledBeforePlyP,
+                    fromSquare: parsed.from,
+                    preMoveFullmoveNumber: preMoveFullmoveNumber,
+                    replayed: replayed
+                )
             }
-
-            var piece = board.removeValue(forKey: fromSquare) ?? TrackedPiece(moveCount: 0)
-            piece.moveCount += 1
-
-            // Castling checks
-            if fromSquare == "e1" && toSquare == "g1" {
-                if var rook = board.removeValue(forKey: "h1") {
-                    rook.moveCount += 1
-                    board["f1"] = rook
-                }
-                whiteCastled = true
-            } else if fromSquare == "e1" && toSquare == "c1" {
-                if var rook = board.removeValue(forKey: "a1") {
-                    rook.moveCount += 1
-                    board["d1"] = rook
-                }
-                whiteCastled = true
-            } else if fromSquare == "e8" && toSquare == "g8" {
-                if var rook = board.removeValue(forKey: "h8") {
-                    rook.moveCount += 1
-                    board["f8"] = rook
-                }
-                blackCastled = true
-            } else if fromSquare == "e8" && toSquare == "c8" {
-                if var rook = board.removeValue(forKey: "a8") {
-                    rook.moveCount += 1
-                    board["d8"] = rook
-                }
-                blackCastled = true
-            }
-
-            // En passant check: pawn moving diagonally to empty square
-            if fromSquare.prefix(1) != toSquare.prefix(1) && board[toSquare] == nil {
-                let epSquare = "\(toSquare.prefix(1))\(fromSquare.suffix(1))"
-                board.removeValue(forKey: epSquare)
-            }
-
-            board[toSquare] = piece
         }
 
-        return MainlineTracking(
-            moveCountOnSquareBeforePlyP: countBeforeP,
-            whiteCastledBeforePlyP: whiteCastledBeforeP,
-            blackCastledBeforePlyP: blackCastledBeforeP
-        )
+        return nil
+    }
+
+    private static func applyTrackedMove(
+        board: inout [String: TrackedPiece],
+        parsed: ParsedUCI,
+        replayed: ReplayedMove,
+        whiteCastled: inout Bool,
+        blackCastled: inout Bool
+    ) -> Bool {
+        guard var piece = board.removeValue(forKey: parsed.from) else { return false }
+
+        if let capturedKind = replayed.capturedPieceKind {
+            if let captured = board[parsed.to] {
+                guard captured.kind == capturedKind, captured.color != piece.color else { return false }
+                board.removeValue(forKey: parsed.to)
+            } else {
+                // The only legal capture onto an empty destination is a pawn's
+                // diagonal en-passant capture. ChessGame has already verified
+                // the move, so this branch only updates the identity map.
+                guard piece.kind == .pawn,
+                    parsed.from.first != parsed.to.first,
+                    let capturedSquare = enPassantSquare(from: parsed.from, to: parsed.to),
+                    let captured = board[capturedSquare],
+                    captured.kind == .pawn,
+                    captured.color != piece.color
+                else {
+                    return false
+                }
+                board.removeValue(forKey: capturedSquare)
+            }
+        } else {
+            guard board[parsed.to] == nil else { return false }
+        }
+
+        piece.moveCount += 1
+        if let promotion = parsed.promotion {
+            guard piece.kind == .pawn else { return false }
+            piece.kind = promotion
+            piece.moveCount = 0
+        } else {
+            guard piece.kind != .pawn || !isBackRank(parsed.to) else { return false }
+        }
+        board[parsed.to] = piece
+
+        let isKingSideCastle = replayed.san.hasPrefix("O-O") && !replayed.san.hasPrefix("O-O-O")
+        let isQueenSideCastle = replayed.san.hasPrefix("O-O-O")
+        guard isKingSideCastle || isQueenSideCastle || piece.kind != .king || !replayed.san.hasPrefix("O-") else {
+            return false
+        }
+        if isKingSideCastle || isQueenSideCastle {
+            let rookFrom: String
+            let rookTo: String
+            switch (piece.color, isKingSideCastle) {
+            case (.white, true): rookFrom = "h1"; rookTo = "f1"
+            case (.white, false): rookFrom = "a1"; rookTo = "d1"
+            case (.black, true): rookFrom = "h8"; rookTo = "f8"
+            case (.black, false): rookFrom = "a8"; rookTo = "d8"
+            }
+            guard var rook = board.removeValue(forKey: rookFrom), rook.kind == .rook, rook.color == piece.color, board[rookTo] == nil else {
+                return false
+            }
+            rook.moveCount += 1
+            board[rookTo] = rook
+            if piece.color == .white {
+                whiteCastled = true
+            } else {
+                blackCastled = true
+            }
+        }
+        return true
+    }
+
+    private static func isBackRank(_ square: String) -> Bool {
+        guard let rank = square.last else { return false }
+        return rank == "1" || rank == "8"
+    }
+
+    private static func enPassantSquare(from: String, to: String) -> String? {
+        guard let rank = from.last, let file = to.first else { return nil }
+        return "\(file)\(rank)"
     }
 
     private static func switchActiveColor(_ fen: String, to color: PieceColor) -> String {

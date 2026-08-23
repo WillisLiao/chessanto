@@ -103,6 +103,9 @@ public enum ReportText {
         if let allowedMate = moment.allowedMate {
             text += " " + allowedMateSentence(allowedMate)
         }
+        if let moveQuality = moment.moveQuality, let sentence = moveQualitySentence(moveQuality) {
+            text += " " + sentence
+        }
         return ["- \(text)"]
     }
 
@@ -211,6 +214,38 @@ public enum ReportText {
             text += " (\(line.joined(separator: " ")))"
         }
         return text + "."
+    }
+
+    private static func moveQualitySentence(_ fact: MoveQualityFact) -> String? {
+        var clauses: [String] = []
+        if fact.isCapture {
+            if let capturedPieceKind = fact.capturedPieceKind {
+                clauses.append("captured a \(capturedPieceKind.rawValue)")
+            } else {
+                clauses.append("made a capture")
+            }
+        }
+        if fact.isCheckmate {
+            clauses.append("delivered checkmate")
+        } else if fact.isCheck {
+            clauses.append("delivered check")
+        }
+        if fact.isMovedTwiceBeforeCastling {
+            clauses.append("moved the \(fact.movedPieceKind.rawValue) again before castling")
+        } else if fact.isRedevelopedPiece {
+            clauses.append("moved the \(fact.movedPieceKind.rawValue) again in the opening")
+        }
+        if fact.isEarlyQueenMove {
+            clauses.append("brought the queen out before move 5")
+        }
+        guard !clauses.isEmpty else { return nil }
+        let body: String
+        if clauses.count == 1 {
+            body = clauses[0]
+        } else {
+            body = clauses.dropLast().joined(separator: ", ") + ", and " + clauses.last!
+        }
+        return "Move quality: \(body)."
     }
 
     /// "White"/"Black" rather than the player's real name (user decision,

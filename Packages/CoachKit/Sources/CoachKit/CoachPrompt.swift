@@ -50,6 +50,7 @@ public enum CoachPrompt {
             \(json)
 
             Write a short coaching explanation (2-4 sentences) of what happened at this moment: why the played move (\(payload.playedSAN)) was a problem (or, if it was a good move, why it worked), and what the better idea was if one is given in the data.
+            When move-quality facts are present, describe them as neutral observations. Do not claim they caused the evaluation change, and do not repeat redevelopment and moved-before-castling observations as separate points.
             """
     }
 

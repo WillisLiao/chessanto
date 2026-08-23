@@ -18,17 +18,18 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
 
 ## Current state (2026-08-24)
 
-- **Move-quality flags implemented and verified against real fixtures (P4.2 slice).**
+- **Move-quality repair completed and verified against real fixtures (P4.2 slice).**
   Full narrative in `devlogs/2026-08-24-move-quality.md`.
-  Re-verified the backlog premise claiming `[%clk]` time data was already parsed: confirmed false across all packages (PGNs are stored raw, no clock parsing exists in `ChessComKit`, `ChessCore`, `AnalysisKit`, or `App`).
+  Re-verified the backlog premise claiming `[%clk]` time data was already parsed: confirmed false across all packages, with no clock parsing in `ChessComKit`, `ChessCore`, `AnalysisKit`, or `App`.
   Added `MoveQualityFact` in `Facts.swift` and `ThemeDetector.moveQuality(input:ply:)` in `ThemeDetector.swift`.
-  Flags captured piece kind, check, and checkmate directly from move replay via `ChessGame.replayLine`.
-  Tracks piece development and origin squares throughout the game: flags redevelopment when a non-pawn/non-king piece makes its second or subsequent move in the opening phase (moves 1-10 / plies 1-20).
-  Tracks castling events per side: flags `isMovedTwiceBeforeCastling` when a piece moves multiple times in the opening while the mover's king remains uncastled, maintaining pedagogical distinction from post-castling tactical maneuvers.
-  Flags early queen moves when a queen first departs from its home square (`d1` or `d8`) before move 5 (move number < 5 / ply <= 8).
-  Integrated with `FactAuditor` and `ReportBuilder.build`, attaching audited `MoveQualityFact` records to `KeyMoment`.
-  Scanned and hand-verified all 55 plies of the real Magnus Carlsen vs artin10862 fixture game (`real-fixture-game-report-input.json`): 54 played plies produced audited facts with zero false positives or dropped facts.
-  Packages/AnalysisKit: 135 tests across 6 suites (was 126). App suite: 179 tests across 34 suites (all green).
+  `MoveQualityFact` is composed from replayed capture, check, checkmate, typed piece identity, castling state, and original-queen state.
+  `ThemeDetector.moveQuality(input:ply:)` closes the complete historical fact on missing, malformed, illegal, wrong-colored, or board-inconsistent history.
+  Every prior and current UCI is replayed through `ChessGame.replayLine` and checked against the FEN side, `ReportInput.moverIsWhite(atPly:)`, tracked source identity, and stored boards.
+  En-passant removal is limited to a pawn diagonal capture onto an empty destination, castling updates rook identity, and promotion resets the promoted piece's pedagogical move count.
+  Redevelopment uses the pre-move FEN fullmove number through fullmove 10, and early queen requires the original queen leaving `d1` or `d8` before fullmove 5.
+  `KeyMomentSelector` is unchanged, while `ReportText` and typed `CoachFactsPayload.moveQuality` expose deterministic neutral observations with backward-compatible decoding.
+  Scanned all 54 played plies of the real Magnus Carlsen versus artin10862 fixture and hand-checked capture fires at plies 8, 9, 15, 18, 21, 22, 23, 24, 25, 31, 32, 43, 44, and 45, check fires at plies 43, 45, 49, 51, and 55, and the sole redevelopment fire at ply 17.
+  Packages/AnalysisKit: 149 tests across 6 suites. Packages/CoachKit: 76 tests across 8 suites. App suite: 179 tests across 34 suites.
 
 - **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**
   Full narrative in `devlogs/2026-08-24-spaced-repetition.md`.

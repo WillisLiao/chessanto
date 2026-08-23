@@ -57,6 +57,26 @@ struct CoachPayloadBuilderTests {
         }
     }
 
+    @Test func momentPayloadAndStructuredPromptExposeMoveQualityFacts() throws {
+        let input = try loadFixtureInput()
+        let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        #expect(report != nil)
+        guard let report, let moment = report.keyMoments.first else { return }
+        let payload = CoachPayloadBuilder.momentPayload(moment, input: input)
+        let encoded = String(data: try JSONEncoder().encode(payload), encoding: .utf8)!
+        #expect(encoded.contains("\"moveQuality\""))
+        let prompt = try CoachPrompt.momentUserMessage(payload: payload)
+        #expect(prompt.contains("\"moveQuality\""))
+        #expect(prompt.contains("describe them as neutral observations"))
+        #expect(prompt.contains("Do not claim they caused the evaluation change"))
+    }
+
+    @Test func legacyCoachFactsPayloadHasAReservedMoveQualityField() throws {
+        let legacy = "{\"betterMove\":null,\"punishment\":null,\"missedMate\":null,\"allowedMate\":null}"
+        let payload = try JSONDecoder().decode(CoachFactsPayload.self, from: Data(legacy.utf8))
+        #expect(payload.moveQuality == nil)
+    }
+
     // MARK: - Rating register selection
 
     @Test func fixedRatingBandsResolveDirectly() {
