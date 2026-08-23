@@ -1108,3 +1108,18 @@ The companion implementation has been fully audited, finalized, committed, and p
 
 Repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.
 Post-v1 priorities not yet decided with the user - ask before starting new work here.
+
+## Multi-ply practice exchange (2026-08-24)
+
+P4.5 multi-ply practice is implemented on branch multiply-practice-p4.5.
+PracticeSessionViewModel now owns one Equatable PracticeExchange value containing the legal rank-one prefix, learner cursor, applied prefix, stage, learner evaluations, outcomes, and first-attempt flag.
+The rank-one line is replayed once at card load and malformed tails are truncated to the legal prefix.
+Board position, legal-move context, promotion checks, and last-move highlighting all derive from the applied prefix.
+Rich lines grade exact UCI moves without engine calls, automatically show one stored opponent reply at a time, and terminate on line exhaustion or checkmate.
+Wrong learner moves persist one incorrect attempt, reset the whole exchange on retry, and permanently clear first-attempt success for that card.
+A fully correct exchange persists one strong attempt and increments first-attempt success once, while intermediate learner moves and opponent replies do not schedule or persist attempts.
+Legacy one-learner cards retain the evaluator path and existing alternative-move feedback semantics.
+Hint level one reads a typed ignored-threat marker carried in the existing themes JSON, and marker strings are excluded from display themes and recurring-theme aggregation.
+The practice view shows step progress, three stable hint slots, an accessible opponent-reply status, and a disabled display-only board outside learner prompts.
+Focused PracticeSessionViewModel and TrainingDomain tests pass, including successful exchanges, wrong-ply reset, both checkmate endings, stale reply cancellation, scheduler atomicity, marker generation and compatibility, and malformed lines.
+Native visual capture remains unavailable in this agent environment, so the reply flow was verified through injected-delay tests, compiled SwiftUI state paths, and accessibility-oriented source checks.

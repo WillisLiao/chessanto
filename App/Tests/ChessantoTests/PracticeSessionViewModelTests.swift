@@ -4,6 +4,15 @@ import Persistence
 import Testing
 @testable import Chessanto
 
+private final class RecordingReviewScheduler: ReviewScheduling {
+    private(set) var outcomes: [TrainingOutcome] = []
+
+    func next(card: TrainingCardRecord, outcome: TrainingOutcome, now: Date) -> TrainingCardRecord {
+        outcomes.append(outcome)
+        return card
+    }
+}
+
 @MainActor
 struct PracticeSessionViewModelTests {
     @Test
@@ -353,7 +362,7 @@ struct PracticeSessionViewModelTests {
     }
 
     @Test
-    func feedbackAutomaticallyStartsTheFullBetterLine() async throws {
+    func completingEveryLearnerPlyStartsTheFullBetterLine() async throws {
         let store = try GameStore()
         let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
         let card = try await store.upsertTrainingCard(TrainingCardRecord(
@@ -370,11 +379,19 @@ struct PracticeSessionViewModelTests {
         let viewModel = PracticeSessionViewModel(
             store: store,
             loadCards: { [card] },
-            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(40) }
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                Issue.record("The multi-ply path must not call the evaluator")
+                return .centipawns(40)
+            },
+            replyDelay: { }
         )
 
         await viewModel.load()
         await viewModel.submit(attemptedUCI: "e2e4")
+        #expect(viewModel.state == .replying("e5"))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        #expect(viewModel.state == .prompt)
+        await viewModel.submit(attemptedUCI: "g1f3")
 
         let preview = try #require(viewModel.linePreview)
         #expect(preview.label == "Better line")
@@ -512,6 +529,360 @@ struct PracticeSessionViewModelTests {
         #expect(viewModel.pendingPromotion == nil)
         #expect(viewModel.state == .prompt)
         #expect(try await store.trainingAttempts(cardId: card.id!).isEmpty)
+    }
+
+    @Test
+    func multiPlyExchangeShowsReplyThenPromptsForTheNextLearnerMove() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5 2. Nf3", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5","g1f3"],"depth":12}]
+            """,
+            classification: "mistake",
+            explanation: "Better was e4."
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                Issue.record("A rich multi-ply card must use exact UCI grading without an engine search")
+                return .centipawns(0)
+            },
+            replyDelay: {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.exchange?.legalPVPrefix == ["e2e4", "e7e5", "g1f3"])
+        #expect(viewModel.exchange?.nextLearnerIndex == 0)
+        #expect(viewModel.stepProgressText == "Step 1 of 2")
+
+        await viewModel.submit(attemptedUCI: "e2e4")
+        guard case .replying(let san) = viewModel.state else {
+            Issue.record("Expected the automatic reply state")
+            return
+        }
+        #expect(san == "e5")
+        #expect(viewModel.exchange?.appliedUCI == ["e2e4"])
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(viewModel.state == .prompt)
+        #expect(viewModel.exchange?.appliedUCI == ["e2e4", "e7e5"])
+        #expect(viewModel.exchange?.nextLearnerIndex == 2)
+        #expect(viewModel.position.pieces[BoardSquare(algebraic: "e5")!] != nil)
+        #expect(viewModel.lastMove?.from.algebraic == "e7")
+        #expect(viewModel.lastMove?.to.algebraic == "e5")
+
+        await viewModel.submit(attemptedUCI: "g1f3")
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected final feedback")
+            return
+        }
+        #expect(feedback.outcome == .strong)
+        #expect(viewModel.exchange?.stage == .completed(.lineExhausted))
+        #expect(viewModel.exchange?.appliedUCI == ["e2e4", "e7e5", "g1f3"])
+        #expect(viewModel.exchange?.learnerOutcomes == [.strong, .strong])
+        #expect(viewModel.linePreview != nil)
+
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(attempts.count == 1)
+        #expect(attempts[0].outcome == "strong")
+    }
+
+    @Test
+    func wrongSecondLearnerMoveResetsWholeExchangeAndKeepsFirstAttemptFalse() async throws {
+        let store = try GameStore()
+        let scheduler = RecordingReviewScheduler()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5 2. Nf3", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5","g1f3"],"depth":12}]
+            """,
+            classification: "mistake",
+            explanation: "The center needed attention."
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) },
+            scheduler: scheduler,
+            replyDelay: { try? await Task.sleep(nanoseconds: 1_000_000) }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "e2e4")
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await viewModel.submit(attemptedUCI: "d2d4")
+
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected wrong feedback on the second learner ply")
+            return
+        }
+        #expect(feedback.outcome == .incorrect)
+        #expect(feedback.attemptedMoveSAN == "d4")
+        #expect(feedback.bestMoveSAN == "Nf3")
+        #expect(feedback.explanation.contains("The center needed attention."))
+        #expect(feedback.explanation.contains("Nf3"))
+        #expect(viewModel.exchange?.stage == .wrongFeedback(feedback))
+        #expect(viewModel.exchange?.appliedUCI == ["e2e4", "e7e5"])
+        #expect(viewModel.exchange?.allPliesFirstAttempt == false)
+        #expect(scheduler.outcomes == [.incorrect])
+
+        viewModel.tryAgain()
+        #expect(viewModel.exchange?.appliedUCI == [])
+        #expect(viewModel.exchange?.nextLearnerIndex == 0)
+        #expect(viewModel.exchange?.allPliesFirstAttempt == false)
+
+        await viewModel.submit(attemptedUCI: "e2e4")
+        try await Task.sleep(nanoseconds: 20_000_000)
+        await viewModel.submit(attemptedUCI: "g1f3")
+        await viewModel.next()
+
+        guard case .completed(let summary) = viewModel.state else {
+            Issue.record("Expected completion after a successful retry")
+            return
+        }
+        #expect(summary.firstAttemptSuccesses == 0)
+        #expect(scheduler.outcomes == [.incorrect, .strong])
+        let attempts = try await store.trainingAttempts(cardId: card.id!)
+        #expect(attempts.count == 2)
+        #expect(attempts.map(\.outcome) == ["incorrect", "strong"])
+    }
+
+    @Test
+    func learnerCheckmateCompletesWithoutAnOpponentReply() async throws {
+        let store = try GameStore()
+        let scheduler = RecordingReviewScheduler()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5","d1h5","b8c6","f1c4","g8f6","h5f7"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                Issue.record("A rich multi-ply card must not invoke engine grading")
+                return .centipawns(0)
+            },
+            scheduler: scheduler,
+            replyDelay: { }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "e2e4")
+        try await Task.sleep(nanoseconds: 10_000_000)
+        await viewModel.submit(attemptedUCI: "d1h5")
+        try await Task.sleep(nanoseconds: 10_000_000)
+        await viewModel.submit(attemptedUCI: "f1c4")
+        try await Task.sleep(nanoseconds: 10_000_000)
+        await viewModel.submit(attemptedUCI: "h5f7")
+
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected learner checkmate to complete the exchange")
+            return
+        }
+        #expect(feedback.outcome == .strong)
+        #expect(viewModel.exchange?.stage == .completed(.checkmate))
+        #expect(viewModel.exchange?.appliedUCI == [
+            "e2e4", "e7e5", "d1h5", "b8c6", "f1c4", "g8f6", "h5f7"
+        ])
+        #expect(viewModel.exchange?.learnerOutcomes == [.strong, .strong, .strong, .strong])
+        #expect(scheduler.outcomes == [.strong])
+        #expect(viewModel.firstAttemptSuccesses == 1)
+        #expect(try await store.trainingAttempts(cardId: card.id!).count == 1)
+    }
+
+    @Test
+    func opponentCheckmateCompletesAfterShowingTheReply() async throws {
+        let store = try GameStore()
+        let scheduler = RecordingReviewScheduler()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "f2f3",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["f2f3","e7e5","g2g4","d8h4"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                Issue.record("A rich multi-ply card must not invoke engine grading")
+                return .centipawns(0)
+            },
+            scheduler: scheduler,
+            replyDelay: { }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.exchange?.legalPVPrefix == ["f2f3", "e7e5", "g2g4", "d8h4"])
+        await viewModel.submit(attemptedUCI: "f2f3")
+        guard case .replying(let firstReply) = viewModel.state else {
+            Issue.record("Expected the first automatic reply")
+            return
+        }
+        #expect(firstReply == "e5")
+        try await Task.sleep(nanoseconds: 10_000_000)
+        await viewModel.submit(attemptedUCI: "g2g4")
+        guard case .replying(let mateReply) = viewModel.state else {
+            Issue.record("Expected the checkmating automatic reply, state=\(String(describing: viewModel.state)), exchange=\(String(describing: viewModel.exchange))")
+            return
+        }
+        #expect(mateReply == "Qh4#")
+        try await Task.sleep(nanoseconds: 10_000_000)
+
+        guard case .feedback(let feedback) = viewModel.state else {
+            Issue.record("Expected opponent checkmate to complete after the reply")
+            return
+        }
+        #expect(feedback.outcome == .strong)
+        #expect(viewModel.exchange?.stage == .completed(.checkmate))
+        #expect(viewModel.exchange?.appliedUCI == ["f2f3", "e7e5", "g2g4", "d8h4"])
+        #expect(viewModel.exchange?.learnerOutcomes == [.strong, .strong])
+        #expect(scheduler.outcomes == [.strong])
+    }
+
+    @Test
+    func staleReplyCannotMutateTheNextCard() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5 2. Nf3 Nc6", white: "Alice", black: "Bob"))
+        let firstCard = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5","g1f3"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let secondCard = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 2,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5","g1f3"],"depth":12}]
+            """,
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [firstCard, secondCard] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) },
+            replyDelay: {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "e2e4")
+        #expect(viewModel.state == .replying("e5"))
+        await viewModel.next()
+        #expect(viewModel.currentIndex == 1)
+        #expect(viewModel.state == .prompt)
+        try await Task.sleep(nanoseconds: 150_000_000)
+        #expect(viewModel.currentCard?.id == secondCard.id)
+        #expect(viewModel.exchange?.appliedUCI == [])
+        #expect(viewModel.exchange?.stage == .awaitingLearner)
+    }
+
+    @Test
+    func threatHintUsesOnlyTheStableMarkerAndLeavesLegacyCardsGeneric() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let marker = TrainingThemeMarker.ignoredThreat("Qxf7#")
+        let markedCard = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: "[{\"rank\":1,\"scoreCentipawns\":40,\"principalVariationUCI\":[\"e2e4\"],\"depth\":12}]",
+            classification: "mistake",
+            themesJSON: try String(decoding: JSONEncoder().encode([marker, "Material left en prise"]), as: UTF8.self)
+        ))
+        let marked = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [markedCard] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await marked.load()
+        #expect(marked.themeHintTextIgnoringHintCount == "Material left en prise - left where the opponent can capture it for free")
+        #expect(marked.threatHintTextIgnoringHintCount == "What is your opponent threatening? Qxf7#")
+        marked.hint()
+        #expect(marked.threatHintText == "What is your opponent threatening? Qxf7#")
+        await marked.submit(attemptedUCI: "e2e4")
+        await marked.next()
+        guard case .completed(let summary) = marked.state else {
+            Issue.record("Expected the marked card to complete")
+            return
+        }
+        #expect(summary.recurringTheme == "Material left en prise")
+
+        var legacyCard = markedCard
+        legacyCard.themesJSON = "[]"
+        let legacy = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [legacyCard] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+        await legacy.load()
+        #expect(legacy.threatHintTextIgnoringHintCount == "Look for the forcing idea.")
+    }
+
+    @Test
+    func malformedOrEmptyLegacyLineDoesNotCrashOrCreateAReply() async throws {
+        let store = try GameStore()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "",
+            rankedLinesJSON: "[{\"rank\":1,\"scoreCentipawns\":40,\"principalVariationUCI\":[],\"depth\":12}]",
+            classification: "mistake"
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in .centipawns(0) }
+        )
+
+        await viewModel.load()
+        #expect(viewModel.exchange?.legalPVPrefix.isEmpty == true)
+        await viewModel.submit(attemptedUCI: "e2e4")
+        #expect(viewModel.state != .replying(""))
+        #expect(viewModel.linePreview == nil)
     }
 }
 

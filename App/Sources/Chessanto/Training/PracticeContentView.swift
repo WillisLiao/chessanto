@@ -27,6 +27,9 @@ struct PracticeContentView: View {
                     Text("Card \(viewModel.currentIndex + 1) of \(viewModel.cards.count) - move \(moveNumberLabel(ply: card.sourcePly))")
                         .font(.dsSecondary)
                         .foregroundStyle(DesignColors.textSecondary)
+                    Text(viewModel.stepProgressText)
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.textSecondary)
                 }
             }
             Spacer()
@@ -49,7 +52,7 @@ struct PracticeContentView: View {
             )
         case .failed(let message):
             ContentUnavailableView("Practice unavailable", systemImage: "exclamationmark.triangle", description: Text(message))
-        case .prompt, .evaluating, .feedback:
+        case .prompt, .evaluating, .replying, .feedback:
             promptCard
         case .completed(let summary):
             completion(summary)
@@ -73,19 +76,25 @@ struct PracticeContentView: View {
                     }
                 }
 
-                // Both hint lines reserve their space from the start of the
-                // card (DD6) - toggling opacity rather than inserting the
-                // text keeps the card's height constant, so a second `Hint`
-                // press at the same screen point still lands on the button.
+                // All three hint lines reserve their final space from the
+                // start of the card (DD6). Opacity changes never move the
+                // controls, including while the level-one threat is shown.
                 VStack(alignment: .leading, spacing: DesignSpacing.xs) {
-                    Text(viewModel.themeHintTextIgnoringHintCount)
+                    Text(viewModel.threatHintTextIgnoringHintCount)
                         .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
                         .opacity(viewModel.hintCount >= 1 ? 1 : 0)
-                    Text(hintSquareText(card: card))
+                        .accessibilityHidden(viewModel.hintCount < 1)
+                    Text(viewModel.themeHintTextIgnoringHintCount)
                         .font(.dsBody)
                         .foregroundStyle(DesignColors.textSecondary)
                         .opacity(viewModel.hintCount >= 2 ? 1 : 0)
+                        .accessibilityHidden(viewModel.hintCount < 2)
+                    Text(viewModel.originHintTextIgnoringHintCount)
+                        .font(.dsBody)
+                        .foregroundStyle(DesignColors.textSecondary)
+                        .opacity(viewModel.hintCount >= 3 ? 1 : 0)
+                        .accessibilityHidden(viewModel.hintCount < 3)
                 }
             }
 
@@ -97,6 +106,12 @@ struct PracticeContentView: View {
                         .font(.dsSecondary)
                         .foregroundStyle(DesignColors.textSecondary)
                 }
+            case .replying(let san):
+                Text("Opponent replies \(san)")
+                    .font(.dsBody.weight(.semibold))
+                    .foregroundStyle(DesignColors.textPrimary)
+                    .accessibilityLabel("Opponent replies \(san)")
+                    .accessibilityAddTraits(.updatesFrequently)
             case .feedback(let feedback):
                 feedbackView(feedback)
             default:
@@ -115,7 +130,7 @@ struct PracticeContentView: View {
             HStack(spacing: DesignSpacing.sm) {
                 Button("Hint") { viewModel.hint() }
                     .buttonStyle(.bordered)
-                    .disabled(viewModel.hintCount >= 2)
+                    .disabled(viewModel.hintCount >= 3)
                     .accessibilityLabel("Show hint")
                 Button("Reveal") { viewModel.reveal() }
                     .buttonStyle(.bordered)
@@ -179,11 +194,6 @@ struct PracticeContentView: View {
             Button("Back to game") { onExit() }
                 .buttonStyle(.borderedProminent)
         }
-    }
-
-    private func hintSquareText(card: TrainingCard) -> String {
-        guard let best = card.bestMoveUCI else { return " " }
-        return "Start from \(String(best.prefix(2))) - highlighted on the board."
     }
 
     private func moveNumberLabel(ply: Int) -> String {
