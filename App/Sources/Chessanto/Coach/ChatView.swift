@@ -62,6 +62,14 @@ struct ChatView: View {
             HStack {
                 Text("Coach").font(.dsSectionHeader).foregroundStyle(DesignColors.textPrimary)
                 Spacer()
+                if !coachService.chatMessages.isEmpty {
+                    Button("Clear chat") {
+                        Task { await clearChat() }
+                    }
+                    .font(.dsSecondary)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DesignColors.textSecondary)
+                }
                 if let onClose {
                     Button {
                         onClose()
@@ -75,46 +83,121 @@ struct ChatView: View {
                 }
             }
 
-            HStack(spacing: DesignSpacing.xs) {
-                Image(systemName: viewModel.isChatPinned ? "pin.fill" : "circle.fill")
-                    .font(.system(size: 6))
-                    .foregroundStyle(viewModel.isChatPinned ? DesignColors.accent : DesignColors.textSecondary)
-                Text(
-                    viewModel.isChatPinned
-                        ? "Pinned to \(moveNotation.text(viewModel.chatPositionLabel))"
-                        : "Following board · \(moveNotation.text(viewModel.chatPositionLabel))"
-                )
-                    .font(.dsSecondary)
-                    .foregroundStyle(DesignColors.textSecondary)
-                Spacer()
-                Button {
-                    if viewModel.isChatPinned {
-                        viewModel.unpinChat()
-                    } else {
-                        viewModel.pinChat(to: viewModel.currentIndex)
-                    }
-                } label: {
-                    Label(viewModel.isChatPinned ? "Pinned" : "Pin", systemImage: viewModel.isChatPinned ? "pin.slash" : "pin")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityLabel(viewModel.isChatPinned ? "Unpin position" : "Pin to current position")
-            }
-
-            if !coachService.chatMessages.isEmpty {
-                Button("Clear chat") {
-                    Task { await clearChat() }
-                }
-                .font(.dsSecondary)
-                .buttonStyle(.plain)
-                .foregroundStyle(DesignColors.textSecondary)
-            }
+            positionModeBanner
         }
         .padding(DesignSpacing.sm)
         .background(DesignColors.surface1)
         .overlay(alignment: .bottom) {
             Rectangle().fill(DesignColors.hairline).frame(height: 1)
         }
+    }
+
+    @ViewBuilder
+    private var positionModeBanner: some View {
+        if viewModel.isChatPinned {
+            pinnedModeBanner
+        } else {
+            followingModeBanner
+        }
+    }
+
+    private var pinnedModeBanner: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+            HStack(alignment: .center) {
+                HStack(spacing: DesignSpacing.xs) {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(DesignColors.accent)
+                    Text("PINNED POSITION")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundStyle(DesignColors.accentText)
+                }
+                Spacer()
+                Button {
+                    viewModel.unpinChat()
+                } label: {
+                    Label("Follow board", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityLabel("Unpin and follow board")
+            }
+
+            Text(moveNotation.text(viewModel.chatPositionLabel))
+                .font(.dsBody.weight(.semibold))
+                .foregroundStyle(DesignColors.textPrimary)
+
+            if let pinned = viewModel.pinnedChatIndex, pinned != viewModel.currentIndex {
+                HStack(spacing: DesignSpacing.xs) {
+                    Text("Board is at \(moveNotation.text(viewModel.currentPositionLabel))")
+                        .font(.dsSecondary)
+                        .foregroundStyle(DesignColors.textSecondary)
+                    Spacer()
+                    Button("View on board") {
+                        viewModel.jumpToPinnedPosition()
+                    }
+                    .font(.dsSecondary.weight(.medium))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DesignColors.accentText)
+                    .accessibilityLabel("Jump board to pinned position: \(moveNotation.text(viewModel.chatPositionLabel))")
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(DesignSpacing.sm)
+        .background(DesignColors.selection.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: DesignShape.cardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignShape.cardRadius)
+                .stroke(DesignColors.accent.opacity(0.35), lineWidth: 1)
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(DesignColors.accent)
+                .frame(width: 3)
+                .padding(.vertical, 3)
+        }
+    }
+
+    private var followingModeBanner: some View {
+        VStack(alignment: .leading, spacing: DesignSpacing.xs) {
+            HStack(alignment: .center) {
+                HStack(spacing: DesignSpacing.xs) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DesignColors.textSecondary)
+                    Text("FOLLOWING BOARD")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundStyle(DesignColors.textSecondary)
+                }
+                Spacer()
+                Button {
+                    viewModel.pinChat(to: viewModel.currentIndex)
+                } label: {
+                    Label("Pin position", systemImage: "pin")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityLabel("Pin Coach to current board position")
+            }
+
+            Text(moveNotation.text(viewModel.chatPositionLabel))
+                .font(.dsBody.weight(.medium))
+                .foregroundStyle(DesignColors.textPrimary)
+
+            Text("Questions and suggestions track the board move by move.")
+                .font(.dsSecondary)
+                .foregroundStyle(DesignColors.textSecondary)
+        }
+        .padding(DesignSpacing.sm)
+        .background(DesignColors.surface0)
+        .clipShape(RoundedRectangle(cornerRadius: DesignShape.cardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignShape.cardRadius)
+                .stroke(DesignColors.hairline, lineWidth: 1)
+        )
     }
 
     // MARK: - Availability

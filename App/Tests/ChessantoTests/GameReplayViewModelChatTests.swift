@@ -33,19 +33,60 @@ struct GameReplayViewModelChatTests {
         #expect(viewModel.chatPositionLabel == "Move 1. e4")
         #expect(viewModel.chatContext()?.mainlineMovesSAN == ["e4"])
 
+        #expect(viewModel.isMovePinned(pinnedIndex))
+        #expect(viewModel.isPlyPinned(1))
+        #expect(!viewModel.isPlyPinned(4))
+
         viewModel.jump(to: viewModel.moveIndices[4])
 
         #expect(viewModel.chatContext()?.currentFEN == pinnedFEN)
         #expect(viewModel.chatSubjectGraphPly == 1)
         #expect(viewModel.chatPositionLabel == "Move 1. e4")
+        #expect(viewModel.currentPositionLabel == "Move 2... Nc6")
         #expect(viewModel.chatContext()?.mainlineMovesSAN == ["e4"])
+        #expect(viewModel.isMovePinned(pinnedIndex))
+        #expect(!viewModel.isMovePinned(viewModel.moveIndices[4]))
+
+        viewModel.jumpToPinnedPosition()
+        #expect(viewModel.currentIndex == pinnedIndex)
+        #expect(viewModel.currentPositionLabel == "Move 1. e4")
 
         viewModel.unpinChat()
 
         #expect(!viewModel.isChatPinned)
+        #expect(!viewModel.isPlyPinned(1))
+        #expect(viewModel.chatSubjectGraphPly == 1)
+        #expect(viewModel.chatPositionLabel == "Move 1. e4")
+
+        viewModel.jump(to: viewModel.moveIndices[4])
         #expect(viewModel.chatSubjectGraphPly == 4)
         #expect(viewModel.chatContext()?.currentFEN != pinnedFEN)
         #expect(viewModel.chatPositionLabel == "Move 2... Nc6")
+        #expect(viewModel.currentPositionLabel == "Move 2... Nc6")
         #expect(viewModel.chatContext()?.mainlineMovesSAN == ["e4", "e5", "Nf3", "Nc6"])
+    }
+
+    @Test
+    func pinQueriesReturnFalseWhenUnpinned() throws {
+        let store = try GameStore()
+        let record = GameRecord(
+            source: .pgnImport,
+            pgn: "1. e4 e5 2. Nf3 Nc6 1-0",
+            white: "Alice",
+            black: "Bob",
+            result: "1-0"
+        )
+        let viewModel = GameReplayViewModel(record: record, store: store)
+
+        #expect(!viewModel.isChatPinned)
+        #expect(!viewModel.isPlyPinned(1))
+        #expect(!viewModel.isMovePinned(viewModel.moveIndices[1]))
+
+        viewModel.pinChat(to: viewModel.moveIndices[2])
+        #expect(viewModel.isChatPinned)
+        #expect(viewModel.isPlyPinned(2))
+        #expect(!viewModel.isPlyPinned(1))
+        #expect(viewModel.isMovePinned(viewModel.moveIndices[2]))
+        #expect(!viewModel.isMovePinned(viewModel.moveIndices[1]))
     }
 }

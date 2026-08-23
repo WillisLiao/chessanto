@@ -6,11 +6,12 @@ Read this first at session start; update it at session end.
 ## Next up
 
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.5 (multi-ply practice cards), P4.8 (what the LLM Coach is for).
-P4.3 (takeaways that actually say something) and P4.6 (real spaced repetition) are now implemented; see below.
+P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
 Priority 5's small UI details batch is now implemented; see below.
-Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), and visual-only rendering verification (arrival animation timing, coordinate point size, drawn annotation shapes) whenever a composited display is available to the agent - drag and drop itself is now confirmed live, see below.
+Also still open: visual-only rendering verification (arrival animation timing, coordinate point size, drawn annotation shapes) whenever a composited display is available to the agent - drag and drop itself is now confirmed live, see below.
+The only unimplemented Priority 2 item left is the dark-mode question, an open product decision rather than a scoped task.
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 
 ## Current state (2026-08-24)
@@ -33,6 +34,18 @@ Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4
   Takeaways are prioritized deterministically: decisive tactical moments (missed/allowed forced mates) > recurring tactical blindspots (punishments, ignored threats) > opening deviations leading to disadvantage > general error frequencies > clean-game/no-pattern fallback.
   The real Carlsen fixture report now surfaces concrete error-frequency takeaways for both players (`artin10862 made 2 errors across 24 scored moves (1 inaccuracy, 1 blunder).`, `MagnusCarlsen made 1 error across 26 scored moves (1 inaccuracy).`) instead of the empty fallback.
   Packages/AnalysisKit: 126 tests across 6 suites (was 123). App suite: 174 tests across 34 suites at the time this branch was written (both branches ran in parallel from the same starting point; see the combined counts after this merge below).
+
+- **Coach entry points clarity is implemented (P2.5).**
+  Full narrative in `devlogs/2026-08-24-coach-entry-points.md`.
+  Live diagnosis verified the backlog finding: toggling the Coach open via the header toggle retained stale pins from previous context-menu or button actions rather than following the board, the caption line was the sole differentiator between modes, and neither the scoresheet nor the report indicated which move the Coach was talking about.
+  In `ChatView`, replaced the understated single caption line with two distinct, warm-neutral mode banners.
+  Following mode features a clear status header ("FOLLOWING BOARD"), live position subtitle, descriptive helper text ("Questions and suggestions track the board move by move."), and an explicit "Pin position" button.
+  Pinned mode features a warm-brass bordered callout card with a bold "PINNED POSITION" brass badge, the pinned move label, an explicit "Follow board" button to unpin, and when the board scrubs away, a live delta note ("Board is at Move Y") paired with a "View pinned move" jump button.
+  Opening Coach via the header toggle now unpins (`unpinChat()`), ensuring the top toggle always delivers the promised "following the board" behavior.
+  Move rows in `MoveListView` and key-moment cards in `GameReportView` now render persistent brass pin badges (`pin.fill`) and updated accessibility announcements ("pinned in Coach") on whatever move is currently pinned.
+  Action copy was standardized to "Ask Coach about this move" in `MoveListView` and "Ask Coach about this moment" in `GameReportView`.
+  Stayed strictly within the warm-neutral and brass design system; `Packages/AnalysisKit` and `Packages/CoachKit` were untouched.
+  App test suite: 175 tests across 34 suites (up from 174, all green).
 
 - **Native QA of the four unverified board behaviors: drag and drop confirmed live.**
   Full narrative in `devlogs/2026-08-24-board-qa.md`.
