@@ -78,6 +78,9 @@ private enum TestFixtureError: Error {
         if let allowedMate = moment.allowedMate {
             #expect(FactAuditor.verify(allowedMate, input: input))
         }
+        if let moveQuality = moment.moveQuality {
+            #expect(FactAuditor.verify(moveQuality, input: input))
+        }
     }
 }
 
@@ -99,3 +102,60 @@ private enum TestFixtureError: Error {
         print("Fire at ply \(p) (\(mover) move \(moveLabel) played \(input.plies[p].playedUCI ?? "")): threatened \(fact.threatenedSAN), isMate: \(fact.isCheckmate), piece: \(String(describing: fact.capturedPieceKind)), square: \(String(describing: fact.capturedSquare)), gain: \(fact.netMaterialGainForOpponent)")
     }
 }
+
+@Test func realFixtureGameMoveQualityScannedAcrossAllPlies() throws {
+    let input = try loadFixtureInput()
+    var moveQualityFacts: [(ply: Int, fact: MoveQualityFact)] = []
+    for p in 1..<input.plies.count {
+        if let fact = ThemeDetector.moveQuality(input: input, ply: p) {
+            moveQualityFacts.append((p, fact))
+            #expect(FactAuditor.verify(fact, input: input))
+        }
+    }
+
+    #expect(moveQualityFacts.count == input.plies.count - 1)
+
+    // Hand-verify specific key moves in the MagnusCarlsen vs artin10862 game:
+    // Game: 1. d4 d6 2. e4 Nf6 3. Nc3 e5 4. f4 exd4 5. Qxd4 Nbd7 6. Nf3 c6 7. Be3 d5 8. exd5 Bc5 9. Qd3 cxd5 10. O-O-O O-O ...
+    //
+    // Ply 8 (4... exd4): Pawn capture
+    let ply8 = try #require(moveQualityFacts.first(where: { $0.ply == 8 })?.fact)
+    #expect(ply8.isCapture == true)
+    #expect(ply8.capturedPieceKind == .pawn)
+    #expect(ply8.movedPieceKind == .pawn)
+    #expect(ply8.isCheck == false)
+    #expect(ply8.isRedevelopedPiece == false)
+
+    // Ply 9 (5. Qxd4): White Queen captures d4 on move 5
+    // Note: Move 5 is ply 9 -> moveNumber = (9 + 1)/2 = 5 (not before move 5)
+    let ply9 = try #require(moveQualityFacts.first(where: { $0.ply == 9 })?.fact)
+    #expect(ply9.isCapture == true)
+    #expect(ply9.capturedPieceKind == .pawn)
+    #expect(ply9.movedPieceKind == .queen)
+    #expect(ply9.isEarlyQueenMove == false) // Move 5 is not < 5
+    #expect(ply9.isRedevelopedPiece == false) // First queen move
+
+    // Ply 17 (9. Qd3): Queen moves a second time in opening (moves 1-10) before White castled (White castled at ply 19)
+    let ply17 = try #require(moveQualityFacts.first(where: { $0.ply == 17 })?.fact)
+    #expect(ply17.movedPieceKind == .queen)
+    #expect(ply17.isRedevelopedPiece == true)
+    #expect(ply17.isMovedTwiceBeforeCastling == true)
+
+    // Ply 21 (11. Nxd5): White Knight (Nf3 or Nc3) captures on d5.
+    // Nc3 moved on move 3 (ply 5). On move 11 (ply 21, move 11 > 10, after castling O-O-O at ply 19):
+    // Move 11 is past opening phase (ply 21 > 20)
+    let ply21 = try #require(moveQualityFacts.first(where: { $0.ply == 21 })?.fact)
+    #expect(ply21.isCapture == true)
+    #expect(ply21.capturedPieceKind == .pawn)
+    #expect(ply21.movedPieceKind == .knight)
+    #expect(ply21.isRedevelopedPiece == false) // Ply 21 > 20 is past opening phase
+    #expect(ply21.isMovedTwiceBeforeCastling == false) // White already castled at ply 19
+
+    // Ply 43 (22. Qxd8+): Queen capture with check!
+    let ply43 = try #require(moveQualityFacts.first(where: { $0.ply == 43 })?.fact)
+    #expect(ply43.isCapture == true)
+    #expect(ply43.capturedPieceKind == .rook)
+    #expect(ply43.isCheck == true)
+    #expect(ply43.isCheckmate == false)
+}
+

@@ -6,6 +6,8 @@ Read this first at session start; update it at session end.
 ## Next up
 
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.5 (multi-ply practice cards), P4.8 (what the LLM Coach is for).
+P4.2's move-quality flags (capture/check/mate, piece redevelopment in opening, same piece moved twice before castling, early queen) are now implemented; see below.
+The [%clk] backlog claim was investigated and confirmed false (no clock parsing exists in the codebase today).
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
@@ -15,6 +17,18 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 
 ## Current state (2026-08-24)
+
+- **Move-quality flags implemented and verified against real fixtures (P4.2 slice).**
+  Full narrative in `devlogs/2026-08-24-move-quality.md`.
+  Re-verified the backlog premise claiming `[%clk]` time data was already parsed: confirmed false across all packages (PGNs are stored raw, no clock parsing exists in `ChessComKit`, `ChessCore`, `AnalysisKit`, or `App`).
+  Added `MoveQualityFact` in `Facts.swift` and `ThemeDetector.moveQuality(input:ply:)` in `ThemeDetector.swift`.
+  Flags captured piece kind, check, and checkmate directly from move replay via `ChessGame.replayLine`.
+  Tracks piece development and origin squares throughout the game: flags redevelopment when a non-pawn/non-king piece makes its second or subsequent move in the opening phase (moves 1-10 / plies 1-20).
+  Tracks castling events per side: flags `isMovedTwiceBeforeCastling` when a piece moves multiple times in the opening while the mover's king remains uncastled, maintaining pedagogical distinction from post-castling tactical maneuvers.
+  Flags early queen moves when a queen first departs from its home square (`d1` or `d8`) before move 5 (move number < 5 / ply <= 8).
+  Integrated with `FactAuditor` and `ReportBuilder.build`, attaching audited `MoveQualityFact` records to `KeyMoment`.
+  Scanned and hand-verified all 55 plies of the real Magnus Carlsen vs artin10862 fixture game (`real-fixture-game-report-input.json`): 54 played plies produced audited facts with zero false positives or dropped facts.
+  Packages/AnalysisKit: 135 tests across 6 suites (was 126). App suite: 179 tests across 34 suites (all green).
 
 - **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**
   Full narrative in `devlogs/2026-08-24-spaced-repetition.md`.

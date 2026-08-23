@@ -307,10 +307,33 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     #expect(!FactAuditor.verify(corrupted, input: input))
 }
 
+@Test func factAuditorDropsAMoveQualityFactWithCorruptedField() {
+    let input = scholarsMateInput()
+    let real = ThemeDetector.moveQuality(input: input, ply: 6)!
+    let corrupted = MoveQualityFact(
+        ply: real.ply,
+        movedPieceKind: .queen, // was .knight
+        isCapture: real.isCapture,
+        capturedPieceKind: real.capturedPieceKind,
+        isCheck: real.isCheck,
+        isCheckmate: real.isCheckmate,
+        isRedevelopedPiece: real.isRedevelopedPiece,
+        isMovedTwiceBeforeCastling: real.isMovedTwiceBeforeCastling,
+        isEarlyQueenMove: real.isEarlyQueenMove
+    )
+    #expect(!FactAuditor.verify(corrupted, input: input))
+}
+
 @Test func fullReportKeyMomentSurvivesAuditUnchanged() {
     // Sanity check the positive path: a genuine, correctly-built moment is
     // never dropped by the auditor.
     let input = scholarsMateInput()
     let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
     #expect(report?.keyMoments.count == 1)
+    guard let moment = report?.keyMoments.first else { return }
+    #expect(moment.moveQuality != nil)
+    #expect(moment.moveQuality?.movedPieceKind == .knight)
+    #expect(moment.moveQuality?.isCapture == false)
+    #expect(moment.moveQuality?.isCheck == false)
+    #expect(moment.moveQuality?.isRedevelopedPiece == false)
 }
