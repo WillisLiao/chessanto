@@ -112,3 +112,93 @@ private func makeMoment(before: Double, after: Double, moverIsWhite: Bool = true
         #expect(summary.contains(band.expectedSubstring))
     }
 }
+
+// MARK: - IgnoredThreatFact rendering
+
+@Test func ignoredThreatSentenceRendersCheckmate() {
+    let moment = KeyMoment(
+        ply: 6,
+        evalSwing: EvalSwingFact(
+            ply: 6, moverIsWhite: false, playedSAN: "Nf6",
+            moverWinProbabilityBefore: 50, moverWinProbabilityAfter: 0, classification: .blunder
+        ),
+        betterMove: nil,
+        punishment: nil,
+        ignoredThreat: IgnoredThreatFact(
+            ply: 6, threatenedSAN: "Qxf7#", capturedPieceKind: .pawn, capturedSquare: "f7",
+            netMaterialGainForOpponent: 0, isCheckmate: true
+        ),
+        missedMate: nil,
+        allowedMate: nil
+    )
+    let report = makeReport(register: .advanced, keyMoments: [moment])
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("This ignored the threat of checkmate: Qxf7#."))
+}
+
+@Test func ignoredThreatSentenceRendersPieceWon() {
+    let moment = KeyMoment(
+        ply: 2,
+        evalSwing: EvalSwingFact(
+            ply: 2, moverIsWhite: false, playedSAN: "h6",
+            moverWinProbabilityBefore: 50, moverWinProbabilityAfter: 20, classification: .mistake
+        ),
+        betterMove: nil,
+        punishment: nil,
+        ignoredThreat: IgnoredThreatFact(
+            ply: 2, threatenedSAN: "Bxc5", capturedPieceKind: .bishop, capturedSquare: "c5",
+            netMaterialGainForOpponent: 3, isCheckmate: false
+        ),
+        missedMate: nil,
+        allowedMate: nil
+    )
+    let report = makeReport(register: .advanced, keyMoments: [moment])
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("This ignored the threat to the bishop on c5: Bxc5 winning the bishop."))
+}
+
+@Test func ignoredThreatSentenceRendersMaterialWon() {
+    let moment = KeyMoment(
+        ply: 2,
+        evalSwing: EvalSwingFact(
+            ply: 2, moverIsWhite: false, playedSAN: "a6",
+            moverWinProbabilityBefore: 50, moverWinProbabilityAfter: 30, classification: .inaccuracy
+        ),
+        betterMove: nil,
+        punishment: nil,
+        ignoredThreat: IgnoredThreatFact(
+            ply: 2, threatenedSAN: "Bxd8", capturedPieceKind: .rook, capturedSquare: "d8",
+            netMaterialGainForOpponent: 2, isCheckmate: false
+        ),
+        missedMate: nil,
+        allowedMate: nil
+    )
+    let report = makeReport(register: .beginner, keyMoments: [moment])
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("This ignored the threat to the rook on d8: Bxd8 winning material."))
+}
+
+@Test func ignoredThreatSuppressesRedundantUnrelatedHangPunishmentSentence() {
+    let moment = KeyMoment(
+        ply: 2,
+        evalSwing: EvalSwingFact(
+            ply: 2, moverIsWhite: false, playedSAN: "h6",
+            moverWinProbabilityBefore: 50, moverWinProbabilityAfter: 20, classification: .mistake
+        ),
+        betterMove: nil,
+        punishment: PunishmentFact(
+            ply: 2, refutingSAN: "Bxc5", capturedPieceKind: .bishop, capturedSquare: "c5",
+            capturesJustMovedPiece: false, netMaterialGainForOpponent: 3
+        ),
+        ignoredThreat: IgnoredThreatFact(
+            ply: 2, threatenedSAN: "Bxc5", capturedPieceKind: .bishop, capturedSquare: "c5",
+            netMaterialGainForOpponent: 3, isCheckmate: false
+        ),
+        missedMate: nil,
+        allowedMate: nil
+    )
+    let report = makeReport(register: .advanced, keyMoments: [moment])
+    let summary = ReportText.momentSummary(moment, report: report)
+    #expect(summary.contains("This ignored the threat to the bishop on c5: Bxc5 winning the bishop."))
+    #expect(!summary.contains("This also left the bishop on c5 hanging"))
+}

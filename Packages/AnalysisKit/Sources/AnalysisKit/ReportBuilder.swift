@@ -57,6 +57,7 @@ public enum ReportBuilder {
                 evalSwing: evalSwing,
                 betterMove: ThemeDetector.betterMove(input: input, ply: p),
                 punishment: ThemeDetector.punishment(input: input, ply: p),
+                ignoredThreat: ThemeDetector.ignoredThreat(input: input, ply: p),
                 missedMate: ThemeDetector.missedMate(input: input, ply: p),
                 allowedMate: ThemeDetector.allowedMate(input: input, ply: p)
             )

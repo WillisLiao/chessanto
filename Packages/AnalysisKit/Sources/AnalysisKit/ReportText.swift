@@ -87,7 +87,15 @@ public enum ReportText {
             text += " " + betterMoveSentence(betterMove, report: report)
         }
         if let punishment = moment.punishment {
-            text += " " + punishmentSentence(punishment)
+            if let ignored = moment.ignoredThreat, !punishment.capturesJustMovedPiece, punishment.capturedSquare == ignored.capturedSquare {
+                // If an ignored threat already explains the loss of this exact piece on this square,
+                // the ignored threat sentence provides the more complete explanation of why it happened.
+            } else {
+                text += " " + punishmentSentence(punishment)
+            }
+        }
+        if let ignoredThreat = moment.ignoredThreat {
+            text += " " + ignoredThreatSentence(ignoredThreat)
         }
         if let missedMate = moment.missedMate {
             text += " " + missedMateSentence(missedMate)
@@ -169,6 +177,23 @@ public enum ReportText {
             return "This left it where it could be taken: \(fact.refutingSAN)\(materialClause)."
         } else {
             return "This also left the \(fact.capturedPieceKind.rawValue) on \(fact.capturedSquare) hanging: \(fact.refutingSAN)\(materialClause)."
+        }
+    }
+
+    private static func ignoredThreatSentence(_ fact: IgnoredThreatFact) -> String {
+        if fact.isCheckmate {
+            return "This ignored the threat of checkmate: \(fact.threatenedSAN)."
+        }
+        guard let kind = fact.capturedPieceKind, let square = fact.capturedSquare else {
+            return "This ignored the threat: \(fact.threatenedSAN)."
+        }
+        let pieceValue = value(of: kind)
+        if fact.netMaterialGainForOpponent >= pieceValue {
+            return "This ignored the threat to the \(kind.rawValue) on \(square): \(fact.threatenedSAN) winning the \(kind.rawValue)."
+        } else if fact.netMaterialGainForOpponent > 0 {
+            return "This ignored the threat to the \(kind.rawValue) on \(square): \(fact.threatenedSAN) winning material."
+        } else {
+            return "This ignored the threat: \(fact.threatenedSAN)."
         }
     }
 

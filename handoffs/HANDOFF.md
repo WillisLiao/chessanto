@@ -5,10 +5,23 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: P4.2 (new detectors - threats, forks/pins, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
-P1.6/P4.4 (`brilliant`) is now implemented; see below.
+Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
+P4.2's ignored-threat detector is now implemented; see below.
+P1.6/P4.4 (`brilliant`) is implemented; see below.
 Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and the four board items below that have never been verified through a real visible window.
 `scripts/axdrag.swift` is committed and ready for that whenever a composited display is available to the agent.
+
+## Current state (2026-08-24)
+
+- **The ignored-threat detector is implemented (P4.2 slice).**
+  Full narrative in `devlogs/2026-08-24.md`.
+  `ThemeDetector.ignoredThreat(input:ply:)` identifies when the mover ignored a concrete, pre-existing threat from the opponent (an immediate checkmate or a capture winning material) and the opponent executed it on the very next move.
+  Operational definition stays strictly within stored board replay: replays opponent's played move at ply `p + 1` from the post-move position, flips the active color in the pre-move position (`input.plies[p - 1].fen`) to verify the exact move was already legal and achieved the same result before the mover moved, and calculates settled net material gain using `ChessGame.hasLegalMove` and piece values.
+  An ignored threat attaches as an audited `IgnoredThreatFact` on `KeyMoment` and renders directly in `ReportText` across all registers ("This ignored the threat of checkmate: Qxf7#", "This ignored the threat to the bishop on c5: Bxc5 winning the bishop").
+  When an ignored threat explains the loss of an already-hanging piece on square X, `ReportText` renders `ignoredThreat` and suppresses the redundant `punishment` sentence to prevent duplicating the same square and capture in one summary.
+  `KeyMomentSelector`'s `prefersNameableConsequences` was extended to treat `IgnoredThreatFact` as a nameable consequence alongside punishment/missedMate/allowedMate.
+  Scanned all 55 plies of the real Carlsen fixture game by hand: 0 fires, confirmed correct as all captures in that game were immediate equal trades, recaptures, or new hanging pieces created on that move. All golden report fixtures pass unmodified.
+  Packages/AnalysisKit: 123 tests across 6 suites (was 105). App suite: 170 tests across 34 suites (unchanged).
 
 ## Current state (2026-08-22)
 

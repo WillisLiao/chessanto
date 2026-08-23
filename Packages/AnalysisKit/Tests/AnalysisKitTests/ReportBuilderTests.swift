@@ -47,6 +47,9 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     #expect(moment.punishment?.capturesJustMovedPiece == false)
     #expect(moment.punishment?.netMaterialGainForOpponent == 1)
 
+    #expect(moment.ignoredThreat?.isCheckmate == true)
+    #expect(moment.ignoredThreat?.threatenedSAN == "Qxf7#")
+
     #expect(moment.allowedMate?.mateInN == 1)
     #expect(moment.allowedMate?.matingLineSANs == ["Qxf7#"])
     #expect(moment.missedMate == nil)
@@ -222,6 +225,28 @@ private func scholarsMateInput(chessComUsername: String? = "BlackPlayer") -> Rep
     // whose cited "mating" line does not actually end in checkmate.
     let bogus = MissedMateFact(ply: 6, mateInN: 1, matingLineSANs: ["Nf6"])
     #expect(!FactAuditor.verify(bogus, input: input))
+}
+
+@Test func factAuditorDropsAnIgnoredThreatFactWithACorruptedSAN() {
+    let input = scholarsMateInput()
+    let real = ThemeDetector.ignoredThreat(input: input, ply: 6)!
+    let corrupted = IgnoredThreatFact(
+        ply: real.ply, threatenedSAN: "Qxf7##", capturedPieceKind: real.capturedPieceKind,
+        capturedSquare: real.capturedSquare, netMaterialGainForOpponent: real.netMaterialGainForOpponent,
+        isCheckmate: real.isCheckmate
+    )
+    #expect(!FactAuditor.verify(corrupted, input: input))
+}
+
+@Test func factAuditorDropsAnIgnoredThreatFactWithAWrongMaterialGain() {
+    let input = scholarsMateInput()
+    let real = ThemeDetector.ignoredThreat(input: input, ply: 6)!
+    let corrupted = IgnoredThreatFact(
+        ply: real.ply, threatenedSAN: real.threatenedSAN, capturedPieceKind: real.capturedPieceKind,
+        capturedSquare: real.capturedSquare, netMaterialGainForOpponent: 99,
+        isCheckmate: real.isCheckmate
+    )
+    #expect(!FactAuditor.verify(corrupted, input: input))
 }
 
 @Test func fullReportKeyMomentSurvivesAuditUnchanged() {

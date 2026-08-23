@@ -69,11 +69,33 @@ private enum TestFixtureError: Error {
         if let punishment = moment.punishment {
             #expect(FactAuditor.verify(punishment, input: input))
         }
+        if let ignoredThreat = moment.ignoredThreat {
+            #expect(FactAuditor.verify(ignoredThreat, input: input))
+        }
         if let missedMate = moment.missedMate {
             #expect(FactAuditor.verify(missedMate, input: input))
         }
         if let allowedMate = moment.allowedMate {
             #expect(FactAuditor.verify(allowedMate, input: input))
         }
+    }
+}
+
+@Test func realFixtureGameIgnoredThreatsScannedAcrossAllPlies() throws {
+    let input = try loadFixtureInput()
+    var fires: [(ply: Int, fact: IgnoredThreatFact)] = []
+    for p in 1..<input.plies.count {
+        if let fact = ThemeDetector.ignoredThreat(input: input, ply: p) {
+            fires.append((p, fact))
+        }
+    }
+    // Hand-verification of every fire in the real fixture game:
+    // In this 55-ply game (MagnusCarlsen vs artin10862), let's inspect all fires.
+    print("Real fixture ignoredThreat fires count: \(fires.count)")
+    for (p, fact) in fires {
+        let mover = input.moverIsWhite(atPly: p) ? "White" : "Black"
+        let moveNum = (p + 1) / 2
+        let moveLabel = input.moverIsWhite(atPly: p) ? "\(moveNum)." : "\(moveNum)..."
+        print("Fire at ply \(p) (\(mover) move \(moveLabel) played \(input.plies[p].playedUCI ?? "")): threatened \(fact.threatenedSAN), isMate: \(fact.isCheckmate), piece: \(String(describing: fact.capturedPieceKind)), square: \(String(describing: fact.capturedSquare)), gain: \(fact.netMaterialGainForOpponent)")
     }
 }

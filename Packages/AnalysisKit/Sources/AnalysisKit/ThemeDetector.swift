@@ -232,4 +232,138 @@ public enum ThemeDetector {
         }
         return AllowedMateFact(ply: p, mateInN: n, matingLineSANs: verifiedLine)
     }
+
+    /// Fires when the opponent had a concrete threat in the pre-move position
+    /// (a capture winning material or an immediate checkmate) that the played
+    /// move failed to address, and the opponent executed that threat on the
+    /// very next move.
+    ///
+    /// The operational path asks the board directly rather than inferring from
+    /// an engine evaluation or line length:
+    ///
+    /// 1. We inspect what the opponent actually played on the move immediately
+    ///    following the mover's move (`input.plies[p + 1].playedUCI`, if it exists).
+    ///    If the game ended or no follow-up move exists, there is no executed
+    ///    threat to verify, so we return `nil`.
+    ///
+    /// 2. We replay the opponent's played move from the post-move position
+    ///    (`input.plies[p].fen`) to determine what it achieved: either delivering
+    ///    checkmate or capturing a target piece.
+    ///
+    /// 3. We ask whether that exact same move was already available and winning
+    ///    for the opponent one move earlier - in the pre-move position
+    ///    (`input.plies[p - 1].fen`) with the side-to-move switched to the opponent.
+    ///    Replaying the opponent's move from that pre-move position confirms that:
+    ///    - The move was already legal (the line of attack was not opened by the
+    ///      mover's move, the attacking piece was not unpinned by the mover, and
+    ///      the target piece was already standing on the target square).
+    ///    - If the threat was checkmate, it was already checkmate before the move.
+    ///    - If the threat was a capture, it targeted the same piece on the same square.
+    ///
+    /// 4. For captures, we verify that the capture was materially winning both
+    ///    before and after the mover's move:
+    ///    - An undefended piece is won in full.
+    ///    - A defended piece attacked by a lesser-valued piece nets the difference
+    ///      in piece values (e.g. Bishop takes Queen on a defended square nets +6).
+    ///    - If the mover's move defended the target piece or captured the attacker,
+    ///      or if it was an equal exchange (e.g. Bishop takes defended Bishop),
+    ///      no material is won and the detector returns `nil`.
+    ///
+    /// This ensures we only report threats that were genuinely sitting on the board
+    /// before the move, ignored by the player, and carried out by the opponent.
+    public static func ignoredThreat(input: ReportInput, ply p: Int) -> IgnoredThreatFact? {
+        guard p >= 1, p + 1 < input.plies.count else { return nil }
+        let preMove = input.plies[p - 1]
+        let postMove = input.plies[p]
+        let opponentPly = input.plies[p + 1]
+
+        guard let opponentUCI = opponentPly.playedUCI else { return nil }
+
+        let moverIsWhite = input.moverIsWhite(atPly: p)
+        let opponentColor: PieceColor = moverIsWhite ? .black : .white
+
+        // 1. Replay the opponent's played move from the post-move position.
+        guard let postOpponentMove = ChessGame.replayLine(fromUCI: [opponentUCI], startingFEN: postMove.fen).first else {
+            return nil
+        }
+
+        // 2. The opponent's move must be a concrete threat execution: either checkmate or a capture.
+        let isCheckmate = postOpponentMove.isCheckmate
+        let capturedKind = postOpponentMove.capturedPieceKind
+        guard isCheckmate || capturedKind != nil else { return nil }
+
+        // 3. Switch active color in pre-move FEN to test if the opponent could already play this move.
+        let preMoveOpponentFEN = switchActiveColor(preMove.fen, to: opponentColor)
+        guard let preOpponentMove = ChessGame.replayLine(fromUCI: [opponentUCI], startingFEN: preMoveOpponentFEN).first else {
+            return nil
+        }
+
+        // 4. If checkmate, it must have been an immediate checkmate in the pre-move position as well.
+        if isCheckmate {
+            guard preOpponentMove.isCheckmate else { return nil }
+            return IgnoredThreatFact(
+                ply: p,
+                threatenedSAN: postOpponentMove.san,
+                capturedPieceKind: capturedKind,
+                capturedSquare: capturedKind != nil ? postOpponentMove.endSquare : nil,
+                netMaterialGainForOpponent: 0,
+                isCheckmate: true
+            )
+        }
+
+        // 5. If a capture, it must have captured the same piece kind on the same square in pre-move.
+        guard let targetKind = capturedKind,
+            preOpponentMove.capturedPieceKind == targetKind,
+            preOpponentMove.endSquare == postOpponentMove.endSquare
+        else { return nil }
+
+        let targetSquare = postOpponentMove.endSquare
+        let attackerKind = postOpponentMove.movedPieceKind
+        let targetValue = pieceValue(targetKind)
+        let attackerValue = pieceValue(attackerKind)
+
+        // 6. Calculate whether the capture was materially winning in pre-move.
+        let preCanRecapture = ChessGame.hasLegalMove(fen: preOpponentMove.resultingFEN, endingOn: targetSquare)
+        let preGain: Int
+        if !preCanRecapture {
+            preGain = targetValue
+        } else if targetValue > attackerValue {
+            preGain = targetValue - attackerValue
+        } else {
+            return nil
+        }
+
+        // 7. Calculate whether the capture was still materially winning in post-move.
+        let postCanRecapture = ChessGame.hasLegalMove(fen: postOpponentMove.resultingFEN, endingOn: targetSquare)
+        let postGain: Int
+        if !postCanRecapture {
+            postGain = targetValue
+        } else if targetValue > attackerValue {
+            postGain = targetValue - attackerValue
+        } else {
+            return nil
+        }
+
+        let netGain = min(preGain, postGain)
+        guard netGain > 0 else { return nil }
+
+        return IgnoredThreatFact(
+            ply: p,
+            threatenedSAN: postOpponentMove.san,
+            capturedPieceKind: targetKind,
+            capturedSquare: targetSquare,
+            netMaterialGainForOpponent: netGain,
+            isCheckmate: false
+        )
+    }
+
+    private static func switchActiveColor(_ fen: String, to color: PieceColor) -> String {
+        var parts = fen.split(separator: " ").map(String.init)
+        guard parts.count >= 2 else { return fen }
+        parts[1] = color == .white ? "w" : "b"
+        if parts.count >= 4 {
+            parts[3] = "-"
+        }
+        return parts.joined(separator: " ")
+    }
 }

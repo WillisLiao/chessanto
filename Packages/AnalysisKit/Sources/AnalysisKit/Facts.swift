@@ -69,6 +69,35 @@ public struct AllowedMateFact: Sendable, Equatable, Codable {
     public let matingLineSANs: [String]?
 }
 
+/// Fires when the pre-move position had a concrete threat from the opponent
+/// (a capture winning material or an immediate checkmate) that the played
+/// move failed to address, and the opponent executed that threat on the
+/// very next move.
+public struct IgnoredThreatFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let threatenedSAN: String
+    public let capturedPieceKind: PieceKind?
+    public let capturedSquare: String?
+    public let netMaterialGainForOpponent: Int
+    public let isCheckmate: Bool
+
+    public init(
+        ply: Int,
+        threatenedSAN: String,
+        capturedPieceKind: PieceKind? = nil,
+        capturedSquare: String? = nil,
+        netMaterialGainForOpponent: Int = 0,
+        isCheckmate: Bool = false
+    ) {
+        self.ply = ply
+        self.threatenedSAN = threatenedSAN
+        self.capturedPieceKind = capturedPieceKind
+        self.capturedSquare = capturedSquare
+        self.netMaterialGainForOpponent = netMaterialGainForOpponent
+        self.isCheckmate = isCheckmate
+    }
+}
+
 /// The game's opening name/deviation point, from the bundled opening book.
 public struct OpeningFact: Sendable, Equatable, Codable {
     public let eco: String
@@ -86,6 +115,25 @@ public struct KeyMoment: Sendable, Equatable, Codable {
     public let evalSwing: EvalSwingFact
     public let betterMove: BetterMoveFact?
     public let punishment: PunishmentFact?
+    public let ignoredThreat: IgnoredThreatFact?
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
+
+    public init(
+        ply: Int,
+        evalSwing: EvalSwingFact,
+        betterMove: BetterMoveFact? = nil,
+        punishment: PunishmentFact? = nil,
+        ignoredThreat: IgnoredThreatFact? = nil,
+        missedMate: MissedMateFact? = nil,
+        allowedMate: AllowedMateFact? = nil
+    ) {
+        self.ply = ply
+        self.evalSwing = evalSwing
+        self.betterMove = betterMove
+        self.punishment = punishment
+        self.ignoredThreat = ignoredThreat
+        self.missedMate = missedMate
+        self.allowedMate = allowedMate
+    }
 }

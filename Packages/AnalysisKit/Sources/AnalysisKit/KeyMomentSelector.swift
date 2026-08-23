@@ -46,6 +46,7 @@ public enum KeyMomentSelector {
             // fills from the drop-sorted pool.
             func hasConsequence(_ ply: Int) -> Bool {
                 ThemeDetector.punishment(input: input, ply: ply) != nil
+                    || ThemeDetector.ignoredThreat(input: input, ply: ply) != nil
                     || ThemeDetector.missedMate(input: input, ply: ply) != nil
                     || ThemeDetector.allowedMate(input: input, ply: ply) != nil
             }
