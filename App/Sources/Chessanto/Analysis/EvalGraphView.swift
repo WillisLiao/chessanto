@@ -42,10 +42,19 @@ struct EvalGraphView: View {
                     .position(x: width / 2, y: height / 2)
 
                 ForEach(keyMoments, id: \.ply) { moment in
-                    Circle()
-                        .fill(moment.evalSwing.classification.color)
-                        .frame(width: 6, height: 6)
-                        .position(point(forPly: moment.ply, width: width, height: height, count: count))
+                    Button {
+                        onScrub(moment.ply)
+                    } label: {
+                        Circle()
+                            .fill(moment.evalSwing.classification.color)
+                            .frame(width: 6, height: 6)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .position(point(forPly: moment.ply, width: width, height: height, count: count))
+                    .help("\(moment.evalSwing.classification.abbreviation) on move \((moment.ply + 1) / 2)")
+                    .accessibilityLabel("Key moment: \(moment.evalSwing.classification.abbreviation), move \((moment.ply + 1) / 2)")
                 }
 
                 if !series.isEmpty {

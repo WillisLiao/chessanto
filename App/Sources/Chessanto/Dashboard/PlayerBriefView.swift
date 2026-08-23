@@ -181,11 +181,22 @@ struct PlayerBriefView: View {
             }
             .buttonStyle(.bordered)
             .disabled(fallbackTrainingCards.isEmpty)
+            .help(
+                fallbackTrainingCards.isEmpty
+                    ? "Analyze a game first to generate practice cards"
+                    : "Practice positions from your analyzed games"
+            )
+            .accessibilityLabel(
+                fallbackTrainingCards.isEmpty
+                    ? "Practice positions (disabled: analyze a game first to generate practice cards)"
+                    : "Practice positions"
+            )
         } else {
             Button("Review \(dueTrainingCardCount) position\(dueTrainingCardCount == 1 ? "" : "s")") {
                 startPractice(cards: dueTrainingCards)
             }
             .buttonStyle(.dsPrimary)
+            .help("Review due practice cards")
         }
     }
 

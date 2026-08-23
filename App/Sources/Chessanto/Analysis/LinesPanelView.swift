@@ -30,22 +30,31 @@ struct LinesPanelView: View {
                     .frame(height: Self.rowHeight, alignment: .top)
             } else {
                 ForEach(Array(lines.prefix(3).enumerated()), id: \.offset) { _, line in
-                    Button {
-                        onAdopt(Array(line.principalVariation.prefix(6)))
-                    } label: {
-                        HStack(alignment: .top, spacing: 6) {
-                            Text(evalLabel(line))
-                                .font(.caption.monospacedDigit().bold())
-                                .frame(width: 44, alignment: .leading)
-                            Text(sanLine(line))
-                                .font(.caption)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                    HStack(alignment: .center, spacing: 6) {
+                        Text(evalLabel(line))
+                            .font(.caption.monospacedDigit().bold())
+                            .frame(width: 44, alignment: .leading)
+                        Text(sanLine(line))
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(fullSANLine(line))
+
+                        Spacer(minLength: 0)
+
+                        Button {
+                            onAdopt(Array(line.principalVariation.prefix(6)))
+                        } label: {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.caption2)
+                                .foregroundStyle(DesignColors.textSecondary)
                         }
-                        .accessibilityElement(children: .combine)
+                        .buttonStyle(.plain)
+                        .help("Adopt this line as a variation")
+                        .accessibilityLabel("Adopt variation: \(evalLabel(line)), \(spokenSANLine(line))")
                     }
-                    .buttonStyle(.plain)
-                    .frame(height: Self.rowHeight, alignment: .top)
+                    .frame(height: Self.rowHeight, alignment: .center)
+                    .accessibilityElement(children: .contain)
                     .accessibilityLabel(
                         "\(evalLabel(line)), \(spokenSANLine(line))"
                     )
@@ -69,6 +78,11 @@ struct LinesPanelView: View {
 
     private func sanLine(_ line: AnalysisEngine.EngineInfo) -> String {
         let sans = ChessGame.sanLine(fromUCI: Array(line.principalVariation.prefix(6)), startingFEN: fen)
+        return sans.isEmpty ? "-" : moveNotation.line(sans)
+    }
+
+    private func fullSANLine(_ line: AnalysisEngine.EngineInfo) -> String {
+        let sans = ChessGame.sanLine(fromUCI: line.principalVariation, startingFEN: fen)
         return sans.isEmpty ? "-" : moveNotation.line(sans)
     }
 

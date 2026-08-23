@@ -40,16 +40,6 @@ Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4
   Packages/AnalysisKit: 123 tests across 6 suites (was 105). App suite: 170 tests across 34 suites (unchanged).
   This and the board-QA and UI-polish sessions above ran in parallel, in separate git worktrees, and were integrated by hand afterward - see this repository's commit history around 2026-08-24 for the merge.
 
-- **The ignored-threat detector is implemented (P4.2 slice).**
-  Full narrative in `devlogs/2026-08-24.md`.
-  `ThemeDetector.ignoredThreat(input:ply:)` identifies when the mover ignored a concrete, pre-existing threat from the opponent (an immediate checkmate or a capture winning material) and the opponent executed it on the very next move.
-  Operational definition stays strictly within stored board replay: replays opponent's played move at ply `p + 1` from the post-move position, flips the active color in the pre-move position (`input.plies[p - 1].fen`) to verify the exact move was already legal and achieved the same result before the mover moved, and calculates settled net material gain using `ChessGame.hasLegalMove` and piece values.
-  An ignored threat attaches as an audited `IgnoredThreatFact` on `KeyMoment` and renders directly in `ReportText` across all registers ("This ignored the threat of checkmate: Qxf7#", "This ignored the threat to the bishop on c5: Bxc5 winning the bishop").
-  When an ignored threat explains the loss of an already-hanging piece on square X, `ReportText` renders `ignoredThreat` and suppresses the redundant `punishment` sentence to prevent duplicating the same square and capture in one summary.
-  `KeyMomentSelector`'s `prefersNameableConsequences` was extended to treat `IgnoredThreatFact` as a nameable consequence alongside punishment/missedMate/allowedMate.
-  Scanned all 55 plies of the real Carlsen fixture game by hand: 0 fires, confirmed correct as all captures in that game were immediate equal trades, recaptures, or new hanging pieces created on that move. All golden report fixtures pass unmodified.
-  Packages/AnalysisKit: 123 tests across 6 suites (was 105). App suite: 170 tests across 34 suites (unchanged).
-
 ## Current state (2026-08-22)
 
 - **`MoveClassification.brilliant` is implemented (P1.6 + P4.4): sacrifice detection.**

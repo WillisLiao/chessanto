@@ -74,6 +74,8 @@ struct ClassificationChip: View {
             }
         }
         .font(.dsSecondary.weight(.semibold))
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(classification.color)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
