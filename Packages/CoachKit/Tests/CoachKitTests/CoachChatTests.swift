@@ -11,6 +11,7 @@ import Testing
 private final class MockChatClient: OllamaChatStreaming, @unchecked Sendable {
     enum ScriptedResponse {
         case content(String)
+        case toolCall(name: String, arguments: [String: JSONValue])
         case failure
     }
 
@@ -36,6 +37,11 @@ private final class MockChatClient: OllamaChatStreaming, @unchecked Sendable {
             switch next {
             case .content(let text):
                 continuation.yield(OllamaChatChunk.stub(content: text, done: false))
+                continuation.yield(OllamaChatChunk.stub(content: "", done: true))
+                continuation.finish()
+            case .toolCall(let name, let arguments):
+                let call = OllamaToolCall(id: "call_1", function: .init(index: 0, name: name, arguments: arguments))
+                continuation.yield(OllamaChatChunk.stub(content: "", toolCalls: [call], done: false))
                 continuation.yield(OllamaChatChunk.stub(content: "", done: true))
                 continuation.finish()
             case .failure:
@@ -82,11 +88,23 @@ private func sampleContext(fen: String = startFEN, lines: [RankedLine]? = nil) -
 struct CoachChatTests {
 
     @Test func happyPathReturnsVerifiedCoachReply() async throws {
-        let client = MockChatClient([.content("Focus on developing your pieces and controlling the center.")])
+        let client = MockChatClient([.content("Hello!")])
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
         let reply = await chat.send(question: "how should I continue?", context: sampleContext())
         #expect(reply.source == .coach)
-        #expect(reply.text == "Focus on developing your pieces and controlling the center.")
+        #expect(reply.text == "Hello!")
+    }
+
+    @Test func inflectedConcretePlanWithoutToolCallTriggersViolation() async throws {
+        let client = MockChatClient([
+            .content("Focus on developing your pieces and controlling the center."),
+            .content("Focus on developing your pieces and controlling the center."),
+        ])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext())
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(client.callCount == 2)
     }
 
     // MARK: - Precheck: illegal proposal never reaches the LLM
@@ -104,19 +122,23 @@ struct CoachChatTests {
 
     // MARK: - Precheck: legal proposal is pre-evaluated and cited
 
-    @Test func legalProposalIsPreEvaluatedAndItsEvalIsSentToTheModel() async throws {
+    @Test func legalProposalIsPreEvaluatedButStillRequiresModelEvaluateForConcreteReply() async throws {
         let executor = StubExecutor(default: .failure(EngineToolArgumentError("unexpected default call")))
         executor.resultsByMovesKey["g1f3"] = EngineToolResult(
             resultingFEN: "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1",
             scoreCentipawnsWhitePerspective: 35, mateInWhitePerspective: nil,
             evalLabel: "+0.4", principalVariationUCI: ["g1f3", "b8c6"], principalVariationSAN: ["Nf3", "Nc6"], depth: 12
         )
-        let client = MockChatClient([.content("Nf3 develops naturally and keeps things balanced (+0.4).")])
+        let client = MockChatClient([
+            .content("Nf3 develops naturally and keeps things balanced (+0.4)."),
+            .content("Nf3 develops naturally and keeps things balanced (+0.4)."),
+        ])
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: executor)
         let reply = await chat.send(question: "what about Nf3?", context: sampleContext())
 
-        #expect(reply.source == .coach)
-        #expect(client.callCount == 1)
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(client.callCount == 2)
         let sentUserText = client.requestedMessages[0].last { $0.role == "user" }?.content ?? ""
         #expect(sentUserText.contains("+0.4"))
         #expect(sentUserText.contains("Nf3"))
@@ -150,9 +172,9 @@ struct CoachChatTests {
     @Test func contextBlockIsOmittedWhenPositionUnchangedAndReincludedOnFENChange() async throws {
         let secondFEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
         let client = MockChatClient([
-            .content("First reply, no citations."),
-            .content("Second reply, same position, no citations."),
-            .content("Third reply, new position, no citations."),
+            .content("Okay."),
+            .content("Thanks."),
+            .content("Got it."),
         ])
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
 
@@ -173,8 +195,8 @@ struct CoachChatTests {
 
     @Test func historyIsPrunedToPlainTurnsAndCappedAtTwelveMessages() async throws {
         var responses: [MockChatClient.ScriptedResponse] = []
-        for i in 0..<8 {
-            responses.append(.content("Reply number \(i), no citations."))
+        for _ in 0..<8 {
+            responses.append(.content("Okay."))
         }
         let client = MockChatClient(responses)
         let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
@@ -189,5 +211,119 @@ struct CoachChatTests {
         #expect(lastRequest.first?.role == "system")
         // No tool or violation-feedback roles should ever survive pruning.
         #expect(lastRequest.allSatisfy { $0.role == "system" || $0.role == "user" || $0.role == "assistant" })
+    }
+
+    // MARK: - P4.8 Concreteness gate
+
+    @Test func concreteClaimWithNoToolCallAndNoEngineDataTriggersViolation() async throws {
+        // The model answers with a concrete move recommendation without
+        // calling the evaluate tool, and no engine lines are in the context.
+        // Both attempts produce the same concrete claim -> falls back.
+        let client = MockChatClient([
+            .content("You should play Nf3 to develop your knight and control the center."),
+            .content("You should play Nf3 to develop your knight and control the center."),
+        ])
+        let noLinesContext = sampleContext(lines: [])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: noLinesContext)
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(client.callCount == 2)
+    }
+
+    @Test func concreteClaimAfterToolCallPassesThrough() async throws {
+        // The model correctly calls evaluate first, then gives a concrete answer.
+        let executor = StubExecutor(default: .success(EngineToolResult(
+            resultingFEN: startFEN, scoreCentipawnsWhitePerspective: 30, mateInWhitePerspective: nil,
+            evalLabel: "+0.3", principalVariationUCI: ["e2e4"], principalVariationSAN: ["e4"], depth: 12
+        )))
+        let client = MockChatClient([
+            .toolCall(name: "evaluate", arguments: ["fen": .string(startFEN)]),
+            .content("You should play 1. e4 to control the center (+0.3)."),
+        ])
+        let noLinesContext = sampleContext(lines: [])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: executor)
+        let reply = await chat.send(question: "how should I continue?", context: noLinesContext)
+        #expect(reply.source == .coach)
+        #expect(reply.violationCount == 0)
+    }
+
+    @Test func failedEvaluateDoesNotSatisfyConcreteClaimGate() async throws {
+        let executor = StubExecutor(default: .failure(EngineToolArgumentError("engine rejected arguments")))
+        let client = MockChatClient([
+            .toolCall(name: "evaluate", arguments: ["fen": .string(startFEN)]),
+            .content("White is winning."),
+            .content("White is winning."),
+        ])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: executor)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext(lines: []))
+
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(reply.toolCallCount == 1)
+        #expect(executor.calls.count == 2)
+    }
+
+    @Test func seedEvaluationDoesNotSatisfyConcreteClaimGate() async throws {
+        let executor = StubExecutor(default: .success(EngineToolResult(
+            resultingFEN: startFEN, scoreCentipawnsWhitePerspective: 30, mateInWhitePerspective: nil,
+            evalLabel: "+0.3", principalVariationUCI: ["e2e4"], principalVariationSAN: ["e4"], depth: 12
+        )))
+        let client = MockChatClient([
+            .content("White is winning."),
+            .content("White is winning."),
+        ])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: executor)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext(lines: []))
+
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(reply.toolCallCount == 0)
+        #expect(executor.calls.count == 1)
+    }
+
+    @Test func successfulEvaluateRemainsSatisfiedThroughRegeneration() async throws {
+        let executor = StubExecutor(default: .success(EngineToolResult(
+            resultingFEN: startFEN, scoreCentipawnsWhitePerspective: 30, mateInWhitePerspective: nil,
+            evalLabel: "+0.3", principalVariationUCI: ["e2e4"], principalVariationSAN: ["e4"], depth: 12
+        )))
+        let client = MockChatClient([
+            .toolCall(name: "evaluate", arguments: ["fen": .string(startFEN)]),
+            .content("You should play 1. e4 to control the center (+9.9)."),
+            .content("White is winning."),
+        ])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: executor)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext())
+
+        #expect(reply.source == .coach)
+        #expect(reply.violationCount > 0)
+        #expect(reply.toolCallCount == 1)
+        #expect(client.callCount == 3)
+    }
+
+    @Test func nonConcreteResponseWithNoToolCallPassesThrough() async throws {
+        // A conversational response with no concrete claims - no gate trigger.
+        let client = MockChatClient([
+            .content("What specifically would you like to know about this position?"),
+        ])
+        let noLinesContext = sampleContext(lines: [])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: noLinesContext)
+        #expect(reply.source == .coach)
+        #expect(reply.violationCount == 0)
+    }
+
+    @Test func concreteClaimWithPreExistingEngineDataStillRequiresEvaluateCall() async throws {
+        // Stored lines are context, not an evaluate tool invocation in this
+        // user turn, so they cannot satisfy the hard gate.
+        let client = MockChatClient([
+            .content("You should play 1. e4 to control the center."),
+            .content("You should play 1. e4 to control the center."),
+        ])
+        let chat = CoachChat(client: client, model: "test-model", register: .intermediate, executor: nil)
+        let reply = await chat.send(question: "how should I continue?", context: sampleContext())
+        #expect(reply.source == .fallback)
+        #expect(reply.violationCount > 0)
+        #expect(client.callCount == 2)
     }
 }

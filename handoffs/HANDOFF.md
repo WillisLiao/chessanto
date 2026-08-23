@@ -5,8 +5,9 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-P4.2 fork detection is now implemented on the dedicated fork-detector-p4.2 branch; its primitive and detector commits are pushed there for integration.
-Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.5 (multi-ply practice cards), P4.8 (what the LLM Coach is for).
+P4.2 fork detection is now integrated; see the fork detector entry below and `devlogs/2026-08-24-fork-detector.md`.
+P4.8's bounded audit repair is now integrated; see the Coach purpose entry below and `devlogs/2026-08-24-coach-purpose.md`.
+Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 detectors and P4.5 multi-ply practice cards.
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
@@ -14,6 +15,39 @@ Priority 5's small UI details batch is now implemented; see below.
 Also still open: visual-only rendering verification (arrival animation timing, coordinate point size, drawn annotation shapes) whenever a composited display is available to the agent - drag and drop itself is now confirmed live, see below.
 The only unimplemented Priority 2 item left is the dark-mode question, an open product decision rather than a scoped task.
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
+Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
+
+## Current state (2026-08-24) - P4.8 audit repair
+
+The independent audit repair closes the concrete-claim gate loopholes from the earlier P4.8 implementation.
+`CoachChat` no longer checks `hadEngineData`, and neither payload lines nor precheck or seed evaluations can satisfy the gate.
+`CoachNarrator.ConversationResult.successfulEvaluateCalls` records only a successful `evaluate` executor result, and `CoachChat` retains that signal across regeneration while resetting it between user turns.
+Invalid or failed evaluate calls therefore still regenerate and fall back when the final response is concrete.
+`CoachVerifier.requiresEvaluateCall` now uses a default-closed policy in which every non-empty response requires a successful current-turn evaluate call unless its normalized text exactly matches the tiny whitelist of greetings, thanks, acknowledgments, or pure clarifying questions.
+The clarifier whitelist includes `Are you asking whether White is winning?`, `What do you mean?`, and `Can you clarify your question?`, while advice-bearing and close-variant questions remain gated without a prefix parser or phrase-list detector.
+The chat prompt no longer advertises a pre-existing-engine-data exception.
+`CoachFactsPayload` and `CoachPayloadBuilder` now carry `ignoredThreat`, and the moment prompt explicitly tells the model to phrase that audited fact alongside betterMove, punishment, missedMate, and allowedMate.
+The corrected behavior is covered by 109 CoachKit tests across 8 suites, including pre-existing, precheck, seed, successful, invalid, failed, regeneration, default-closed, safe-response, and clarifying-question cases.
+The root macOS build passed with `** BUILD SUCCEEDED **`, the root macOS test passed with `179 tests in 34 suites` and `** TEST SUCCEEDED **`, and `git diff --check` passed.
+No real-model run was possible because Ollama was unavailable at `127.0.0.1:11434`, so this repair is mock-verified only.
+The model-floor decision remains report-only, with the earlier recommendation to consider disabling the Coach below 8B left for product direction.
+
+## Current state (2026-08-24)
+
+The original P4.8 record below is historical and is superseded by the bounded audit repair section above.
+
+- **LLM Coach purpose clarified and enforced (P4.8).**
+  Full narrative in `devlogs/2026-08-24-coach-purpose.md`.
+  The observed failure - Coach answering "e4 is a classic opening move" tautologies and saying "let me check the evaluation" without checking - is now addressed at two levels.
+  `CoachPrompt.systemPrompt` (moment-specific) now explicitly instructs the model to restate and phrase the attached verified facts (betterMove, punishment, missedMate, allowedMate) rather than reasoning about the position from scratch.
+  `CoachPrompt.chatSystemPrompt` (open-ended chat) strengthened the evaluate-tool instruction from a soft suggestion to a hard directive with explicit "never say 'let me check' without actually calling the tool" language.
+  A new concreteness gate in `CoachChat.send()` mechanically enforces what the prompt now requests: if the model's response passes `CoachVerifier` (no false claims) but makes concrete position claims (move recommendations, evaluation assertions, plans involving specific moves) without having called the evaluate tool and without pre-existing engine data in the payload, the response is treated as a violation and triggers regeneration via the existing `CoachPrompt.regenerationUserMessage(violations:)` machinery. Double failure falls back to canned text.
+  `CoachVerifier.containsConcreteClaim(in:)` detects concrete claims via a combination of numbered move chains, recommendation phrases, and evaluation-assertion phrases paired with move tokens.
+  `CoachVerifier`'s grounding guarantee is not weakened - the concreteness gate adds a check on top, never bypasses existing verification.
+  The verifier may reject more responses and fall back more often; this is an expected tradeoff (canned fallback is better than tautological advice).
+  Model floor recommendation (report only, not implemented): `qwen3:4b` is likely too weak to reliably follow the strengthened instructions or call tools; the backlog's suggestion to disable the Coach below 8B deserves action.
+  Verified against the test mock only - no running Ollama instance was available.
+  Packages/CoachKit: 86 tests across 8 suites (was 74). App suite unchanged.
 
 ## Current state (2026-08-24)
 

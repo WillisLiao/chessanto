@@ -182,6 +182,7 @@ public actor CoachChat {
 
         var toolCallTotal = 0
         var violationTotal = 0
+        var successfulEvaluateUsed = false
 
         var precheckAndSeedPooled = false
         func poolNewAnchors(_ newAnchors: [CoachVerifier.Anchor]) {
@@ -202,6 +203,7 @@ public actor CoachChat {
                 toolCallBudgetRemaining: CoachNarrator.toolCallCap
             )
             toolCallTotal += conversation.toolCallsUsed
+            successfulEvaluateUsed = successfulEvaluateUsed || conversation.successfulEvaluateCalls > 0
             verifierContext.anchors.append(contentsOf: conversation.newAnchors)
 
             guard let text = conversation.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -217,12 +219,27 @@ public actor CoachChat {
             let verdict = await CoachVerifier.verify(text: text, context: verifierContext)
             switch verdict {
             case .verified(let verifiedText):
-                poolNewAnchors(conversation.newAnchors)
-                recordTurn(question: question, reply: verifiedText)
-                return CoachChatReply(
-                    text: verifiedText, source: .coach,
-                    toolCallCount: toolCallTotal, violationCount: violationTotal, duration: Date().timeIntervalSince(start)
-                )
+                // P4.8 evaluate gate: only a successful evaluate call from
+                // this user turn can authorize a non-safe final response.
+                if !successfulEvaluateUsed
+                    && CoachVerifier.requiresEvaluateCall(in: verifiedText) {
+                    let concreteViolation = CoachVerifier.Violation(
+                        "response requires an evaluate tool call before answering - call the evaluate tool before answering"
+                    )
+                    violationTotal += 1
+                    poolNewAnchors(conversation.newAnchors)
+                    if attempt == 0 {
+                        turnMessages.append(.init(role: "assistant", content: text))
+                        turnMessages.append(.init(role: "user", content: CoachPrompt.regenerationUserMessage(violations: [concreteViolation])))
+                    }
+                } else {
+                    poolNewAnchors(conversation.newAnchors)
+                    recordTurn(question: question, reply: verifiedText)
+                    return CoachChatReply(
+                        text: verifiedText, source: .coach,
+                        toolCallCount: toolCallTotal, violationCount: violationTotal, duration: Date().timeIntervalSince(start)
+                    )
+                }
             case .violations(let violations):
                 violationTotal += violations.count
                 poolNewAnchors(conversation.newAnchors)

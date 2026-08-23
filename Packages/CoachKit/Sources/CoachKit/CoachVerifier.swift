@@ -477,4 +477,36 @@ public enum CoachVerifier {
             )
         }
     }
+
+    // MARK: - Evaluate-tool gate (P4.8)
+
+    /// Returns true for every non-empty response that is not explicitly proven
+    /// to be safe without a current-turn evaluate call.
+    public static func requiresEvaluateCall(in text: String) -> Bool {
+        let normalized = normalizedResponse(in: text)
+        guard !normalized.isEmpty else { return false }
+        return !isPureToolFreeResponse(normalized)
+    }
+
+    private static func normalizedResponse(in text: String) -> String {
+        text
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private static func isPureToolFreeResponse(_ normalized: String) -> Bool {
+        let safeResponses: Set<String> = [
+            "hello", "hi", "hey", "thanks", "thank you",
+            "ok", "okay", "got it", "okay got it", "understood", "sounds good",
+            "yes", "no",
+            "are you asking whether white is winning",
+            "what specifically would you like to know about this position",
+            "are you asking about the opening or the middlegame plan",
+            "what do you mean",
+            "can you clarify your question",
+        ]
+        return safeResponses.contains(normalized)
+    }
 }

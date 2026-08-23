@@ -306,6 +306,140 @@ struct CoachVerifierTests {
             return
         }
     }
+
+    // MARK: - Concreteness detection (P4.8)
+
+    @Test func numberedMoveChainRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "1. e4 is a classic opening move."))
+    }
+
+    @Test func defaultClosedPolicyRequiresEvaluateForGeneralChessLanguage() {
+        for response in [
+            "Development is important before attacking.",
+            "Attacking the king is the plan.",
+            "Castling is the plan.",
+            "White has a slight advantage.",
+        ] {
+            #expect(CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func safeToolFreeResponsesAreExactGreetingThanksAndAcknowledgments() {
+        for response in ["Hello!", "Thanks.", "Thank you", "Okay, got it."] {
+            #expect(!CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func exactClarifyingWhitelistNormalizesCaseSpacingAndPunctuation() {
+        for response in [
+            "  are YOU asking whether white is winning?! ",
+            "What   do you mean???",
+            "CAN YOU CLARIFY YOUR QUESTION.",
+            "what specifically would you like to know about this position?",
+        ] {
+            #expect(!CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func clarifyingAdviceVariantsRequireEvaluate() {
+        for response in [
+            "Are you asking whether White is winning, and I recommend e4?",
+            "What specifically would you like to know about this position, and you should play e4?",
+            "Can you clarify, I recommend e4?",
+            "Are you asking whether White is winning and I recommend e4?",
+        ] {
+            #expect(CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func closeClarifyingVariantsOutsideWhitelistRequireEvaluate() {
+        for response in [
+            "Are you asking whether White is losing?",
+            "What do you mean about the position?",
+            "Can you clarify what White should play?",
+        ] {
+            #expect(CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func pureClarifyingQuestionIsSafeWithoutEvaluate() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking whether White is winning?"))
+    }
+
+    @Test func advicePlusQuestionRequiresEvaluateByDefaultClosedPolicy() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "You should play Nf3, right?"))
+    }
+
+    @Test func moveRecommendationRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "You should play Nf3 to develop your knight."))
+    }
+
+    @Test func evalAssertionWithMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "After Nf3, White has a clear advantage here."))
+    }
+
+    @Test func evaluationClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "White is winning."))
+    }
+
+    @Test func numericEvaluationWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "The position is +0.5 for White."))
+    }
+
+    @Test func mateClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "White has mate in 3."))
+    }
+
+    @Test func planClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Develop your pieces and castle."))
+    }
+
+    @Test func inflectedPlanClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Focus on developing your pieces and controlling the center."))
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Try developing your pieces and controlling the centre."))
+    }
+
+    @Test func developmentalMoveClaimRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Nf3 develops naturally."))
+    }
+
+    @Test func tacticalClaimWithoutMoveTokenRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "This creates a fork and wins material."))
+    }
+
+    @Test func pureClarifyingQuestionIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "What specifically would you like to know about this position?"))
+    }
+
+    @Test func boardFactWithBareSquareRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "The pawn on e4 controls some important squares."))
+    }
+
+    @Test func clarifyingQuestionIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking about the opening or the middlegame plan?"))
+    }
+
+    @Test func clarifyingQuestionWithEvaluationWordsIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking whether White is winning?"))
+    }
+
+    @Test func declarativeAdviceWithTrailingQuestionRequiresEvaluate() {
+        #expect(CoachVerifier.requiresEvaluateCall(in: "You should play Nf3, right?"))
+    }
+
+    @Test func greetingIsToolFree() {
+        #expect(!CoachVerifier.requiresEvaluateCall(in: "Hello!"))
+    }
+
+    @Test func tautologyWithMoveReferenceRequiresEvaluate() {
+        // The observed failure case: tautologies that sound like advice
+        #expect(CoachVerifier.requiresEvaluateCall(in: "e4 is a classic opening move for White, and it's a good choice to continue the game."))
+    }
+
+    @Test func letMeCheckWithNoToolCallRequiresEvaluate() {
+        // The specific failure: "Let me check the evaluation" + move recommendation
+        #expect(CoachVerifier.requiresEvaluateCall(in: "Let me check the evaluation to see which of these options is the best. You should play Nf3."))
+    }
 }
 
 private let startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
