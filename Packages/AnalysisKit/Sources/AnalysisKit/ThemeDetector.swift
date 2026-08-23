@@ -190,6 +190,8 @@ public enum ThemeDetector {
 
         let playedDestination = String(playedUCI.dropFirst(2).prefix(2))
         guard played.endSquare == playedDestination else { return nil }
+        let expectedMoverColor: PieceColor = input.moverIsWhite(atPly: p) ? .white : .black
+        guard played.movedPieceColor == expectedMoverColor else { return nil }
 
         // Use the replayed result rather than trusting a possibly stale FEN
         // record; this is the position the played move actually produced.

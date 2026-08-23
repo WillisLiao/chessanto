@@ -514,6 +514,43 @@ private func forkInput(
     #expect(fact?.netMaterialGain == 5)
 }
 
+@Test func forkFactLabelsAPromotedKnightAndVerifiesItsCapture() {
+    let input = forkInput(
+        preFEN: "8/P1r4k/1r6/8/8/8/8/7K w - - 0 1",
+        postFEN: "N7/2r4k/1r6/8/8/8/8/7K b - - 0 1",
+        playedUCI: "a7a8n",
+        pv: ["h7g7", "a8b6", "g7h7"]
+    )
+    let fact = ThemeDetector.fork(input: input, ply: 1)
+    #expect(fact?.forkingPieceKind == .knight)
+    #expect(fact?.targets == [
+        ForkTarget(square: "b6", kind: .rook),
+        ForkTarget(square: "c7", kind: .rook),
+    ])
+    #expect(fact?.wonTarget == ForkTarget(square: "b6", kind: .rook))
+    #expect(fact?.netMaterialGain == 5)
+}
+
+@Test func forkFactRejectsAWhiteMoveWhenTheFENSaysBlackToMove() {
+    let input = forkInput(
+        preFEN: "4r3/P6k/2n5/8/8/8/8/7K b - - 0 1",
+        postFEN: "Q3r3/7k/2n5/8/8/8/8/7K w - - 0 1",
+        playedUCI: "a7a8q",
+        pv: ["h7g7", "a8e8", "g7h7"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
+@Test func forkFactRejectsAWrongColoredOrdinaryMove() {
+    let input = forkInput(
+        preFEN: "7k/8/1r3b2/8/1p6/2N5/8/7K b - - 0 1",
+        postFEN: "7k/8/1r3b2/3N4/1p6/8/8/7K w - - 0 1",
+        playedUCI: "c3d5",
+        pv: ["h8g8", "d5f6", "g8h8"]
+    )
+    #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
+}
+
 @Test func forkFactRejectsARecapturedForkingPiece() {
     let input = forkInput(
         preFEN: "7k/8/1r3b2/8/8/2N5/8/7K w - - 0 1",

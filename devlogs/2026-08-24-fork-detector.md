@@ -25,6 +25,7 @@ Targets are ordered by descending material value and then by square for determin
 The detector replays the played move from the prior FEN and requires the replayed move to land on its UCI destination.
 It queries the ChessCore primitive in the resulting position rather than relying on hand-written geometry or stale stored board state.
 Promotion suffixes derive the resulting forking piece kind for the fact while preserving the existing pre-promotion `ReplayedMove.movedPieceKind` semantics.
+The detector also requires the replayed moved-piece color to match the FEN mover color before it derives any fork fact.
 The post-move rank-1 principal variation must replay completely and contain at least three plies.
 The first replayed ply must be an opponent response, the second must be the same forking piece capturing an original qualifying non-king target on its original square, and the third must be an opponent reply.
 The forking side's material balance after that reply must improve by at least one pawn-equivalent relative to the post-fork position.
@@ -44,12 +45,12 @@ No CoachKit payload or persistence schema was changed.
 The real fixture scan evaluated all 55 plies through `ThemeDetector.fork(input:ply:)`.
 The scan produced zero fork fires.
 Because there were no real-fixture fires, there were no questionable fires requiring a fixture-specific root-cause repair or manual response-capture-reply hand check.
-Synthetic focused tests cover a knight fork, a royal fork, a promoted queen fork, defended-target rejection with an even settled line, strict truncated-line rejection, valuable-piece-plus-pawn rejection, ordinary moves, both mate precedence paths, report auditing, and fixed sentence rendering.
+Synthetic focused tests cover a knight fork, a royal fork, promoted queen and knight forks, defended-target rejection with an even settled line, wrong-colored move rejection, strict truncated-line rejection, valuable-piece-plus-pawn rejection, ordinary moves, selector neutrality, both mate precedence paths, report auditing, and fixed sentence rendering.
 
 ## Validation
 
 `swift test` in `Packages/ChessCore` passed 34 tests in 1 suite.
-`swift test` in `Packages/AnalysisKit` passed 141 tests in 6 suites.
+`swift test` in `Packages/AnalysisKit` passed 145 tests in 6 suites.
 `xcodebuild -project Chessanto.xcodeproj -scheme Chessanto -destination 'platform=macOS' build` completed with `** BUILD SUCCEEDED **`.
 `xcodebuild -project Chessanto.xcodeproj -scheme Chessanto -destination 'platform=macOS' test` passed 179 tests in 34 suites and completed with `** TEST SUCCEEDED **`.
 The ignored `Chessanto.xcodeproj` was regenerated from the tracked `project.yml` because the checkout did not contain the generated project before root validation.
