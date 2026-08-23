@@ -338,6 +338,9 @@ struct GameReplayView: View {
     /// the subject following the board (default mode).
     private var coachToggleButton: some View {
         Button {
+            if !isCoachOpen {
+                viewModel.unpinChat()
+            }
             isCoachOpen.toggle()
         } label: {
             Label("Coach", systemImage: isCoachOpen ? "bubble.left.fill" : "bubble.left")
@@ -829,7 +832,7 @@ struct GameReplayView: View {
                     .font(.dsSecondary.weight(.semibold))
             }
             .buttonStyle(.bordered)
-            .accessibilityLabel("Ask the coach about this position")
+            .accessibilityLabel("Ask Coach about current position (pins position)")
         }
         .padding(.bottom)
     }
@@ -975,6 +978,8 @@ private struct MoveListView: View {
     @ViewBuilder
     private func moveCell(_ index: MoveIndex?) -> some View {
         if let index, let san = viewModel.san(at: index) {
+            let isCurrent = index == viewModel.currentIndex
+            let isPinned = viewModel.isMovePinned(index)
             Button {
                 viewModel.jump(to: index)
             } label: {
@@ -986,28 +991,34 @@ private struct MoveListView: View {
                         .font(.dsNotation)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                    if isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(DesignColors.accent)
+                            .accessibilityHidden(true)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, DesignSpacing.xs)
                 .padding(.vertical, 3)
                 .background(
-                    index == viewModel.currentIndex
-                        ? DesignColors.selection : Color.clear
+                    isCurrent
+                        ? DesignColors.selection
+                        : (isPinned ? DesignColors.selection.opacity(0.4) : Color.clear)
                 )
                 .overlay(alignment: .leading) {
-                    if index == viewModel.currentIndex {
+                    if isCurrent {
                         Rectangle().fill(DesignColors.accent).frame(width: 2)
                     }
                 }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
-                viewModel.classification(at: index).map {
-                    "\(moveNotation.move(san).spoken), \($0.abbreviation)"
-                } ?? moveNotation.move(san).spoken
+                moveAccessibilityLabel(index: index, san: san, isPinned: isPinned)
             )
             .contextMenu {
-                Button("Ask the coach about this move") {
+                Button("Ask Coach about this move") {
                     guard let ply = viewModel.moveIndices.firstIndex(of: index) else { return }
                     onAskCoach(ply)
                 }
@@ -1015,6 +1026,13 @@ private struct MoveListView: View {
         } else {
             Spacer().frame(maxWidth: .infinity)
         }
+    }
+
+    private func moveAccessibilityLabel(index: MoveIndex, san: String, isPinned: Bool) -> String {
+        let base = viewModel.classification(at: index).map {
+            "\(moveNotation.move(san).spoken), \($0.abbreviation)"
+        } ?? moveNotation.move(san).spoken
+        return isPinned ? "\(base), pinned in Coach" : base
     }
 
     @ViewBuilder
@@ -1036,36 +1054,54 @@ private struct MoveListView: View {
     }
 
     private func variationRow(index: MoveIndex, depth: Int) -> some View {
-        HStack(spacing: DesignSpacing.xs) {
+        let isCurrent = index == viewModel.currentIndex
+        let isPinned = viewModel.isMovePinned(index)
+        let san = viewModel.san(at: index) ?? ""
+        return HStack(spacing: DesignSpacing.xs) {
             Button {
                 viewModel.jump(to: index)
             } label: {
-                Text(
-                    viewModel.san(at: index)
-                        .map { moveNotation.move($0).visual } ?? ""
-                )
-                    .font(.dsNotation.italic())
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundStyle(DesignColors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, DesignSpacing.xs)
-                    .padding(.vertical, 2)
-                    .background(
-                        index == viewModel.currentIndex
-                            ? DesignColors.selection : Color.clear
+                HStack(spacing: DesignSpacing.xs) {
+                    Text(
+                        viewModel.san(at: index)
+                            .map { moveNotation.move($0).visual } ?? ""
                     )
-                    .overlay(alignment: .leading) {
-                        if index == viewModel.currentIndex {
-                            Rectangle().fill(DesignColors.accent).frame(width: 2)
-                        }
+                        .font(.dsNotation.italic())
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(DesignColors.textSecondary)
+                    Spacer(minLength: 0)
+                    if isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(DesignColors.accent)
+                            .accessibilityHidden(true)
                     }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, DesignSpacing.xs)
+                .padding(.vertical, 2)
+                .background(
+                    isCurrent
+                        ? DesignColors.selection
+                        : (isPinned ? DesignColors.selection.opacity(0.4) : Color.clear)
+                )
+                .overlay(alignment: .leading) {
+                    if isCurrent {
+                        Rectangle().fill(DesignColors.accent).frame(width: 2)
+                    }
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
-                viewModel.san(at: index)
-                    .map { moveNotation.move($0).spoken } ?? ""
+                isPinned ? "\(moveNotation.move(san).spoken), pinned in Coach" : moveNotation.move(san).spoken
             )
+            .contextMenu {
+                Button("Ask Coach about this move") {
+                    guard let ply = viewModel.moveIndices.firstIndex(of: index) else { return }
+                    onAskCoach(ply)
+                }
+            }
 
             Button {
                 Task { await viewModel.deleteVariation(at: index) }
@@ -1075,7 +1111,7 @@ private struct MoveListView: View {
                     .foregroundStyle(DesignColors.textSecondary)
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("delete-variation-\(viewModel.san(at: index) ?? "")")
+            .accessibilityIdentifier("delete-variation-\(san)")
         }
         .padding(.leading, CGFloat(depth) * 16)
     }

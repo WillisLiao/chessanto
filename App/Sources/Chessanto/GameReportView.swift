@@ -230,6 +230,7 @@ struct GameReportView: View {
     @ViewBuilder
     private func keyMomentRow(_ moment: KeyMoment, report: GameReport) -> some View {
         let summary = ReportText.momentSummary(moment, report: report, includingMoveLabel: false)
+        let isPinned = viewModel.isPlyPinned(moment.ply)
         VStack(alignment: .leading, spacing: DesignSpacing.xs) {
             Button {
                 onSelectMoment(moment)
@@ -242,6 +243,19 @@ struct GameReportView: View {
                         Text(moveNotation.move(moment.evalSwing.playedSAN).visual)
                             .font(.dsNotation.weight(.semibold))
                         ClassificationChip(classification: moment.evalSwing.classification)
+                        if isPinned {
+                            HStack(spacing: 2) {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 8, weight: .bold))
+                                Text("Pinned in Coach")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .foregroundStyle(DesignColors.accentText)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(DesignColors.selection)
+                            .clipShape(Capsule())
+                        }
                         Spacer()
                     }
 
@@ -261,10 +275,12 @@ struct GameReportView: View {
             }
             .buttonStyle(KeyMomentRowButtonStyle())
             .accessibilityLabel(
-                "Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moveNotation.move(moment.evalSwing.playedSAN).spoken). \(moveNotation.accessibilityText(summary))"
+                isPinned
+                    ? "Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moveNotation.move(moment.evalSwing.playedSAN).spoken), pinned in Coach. \(moveNotation.accessibilityText(summary))"
+                    : "Key moment, move \(moveNumberLabel(ply: moment.ply)), \(moveNotation.move(moment.evalSwing.playedSAN).spoken). \(moveNotation.accessibilityText(summary))"
             )
             .contextMenu {
-                Button("Ask the coach about this moment") {
+                Button("Ask Coach about this moment") {
                     onAskCoach(moment.ply)
                 }
             }

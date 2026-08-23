@@ -675,6 +675,20 @@ final class GameReplayViewModel: ObservableObject {
         pinnedChatIndex = nil
     }
 
+    func isMovePinned(_ index: MoveIndex) -> Bool {
+        pinnedChatIndex == index
+    }
+
+    func isPlyPinned(_ ply: Int) -> Bool {
+        guard let pinnedChatIndex else { return false }
+        return moveIndices.firstIndex(of: pinnedChatIndex) == ply
+    }
+
+    func jumpToPinnedPosition() {
+        guard let pinnedChatIndex else { return }
+        jump(to: pinnedChatIndex)
+    }
+
     /// The ply the Coach panel is actually about - the pin if set, else
     /// whatever the board is currently showing.
     private var chatSubjectIndex: MoveIndex {
@@ -786,8 +800,16 @@ final class GameReplayViewModel: ObservableObject {
     /// "Move 12. Nf3", "Variation after 12...Nf3") - the chat subject (pin
     /// if set, else whatever's displayed), not necessarily the board ply.
     var chatPositionLabel: String {
+        positionLabel(for: chatSubjectIndex)
+    }
+
+    /// A short label for the current board position.
+    var currentPositionLabel: String {
+        positionLabel(for: currentIndex)
+    }
+
+    private func positionLabel(for index: MoveIndex) -> String {
         guard let chessGame else { return "Current position" }
-        let index = chatSubjectIndex
         guard index != chessGame.startIndex else { return "Start position" }
         guard let san = san(at: index) else { return "Current position" }
         // `history(upTo:)` contains the moves themselves but not the start
