@@ -560,7 +560,7 @@ private let allowedMatePostFEN = "4r1k1/8/8/8/8/8/5PPP/6K1 b - - 0 1"
 
 @Test func moveQualityFactDoesNotFlagLateQueenMoveOrUnmovedQueen() {
     // 15 plies, Queen first moves at move 8 (ply 15: 8. Qd2)
-    var plies = [
+    let plies = [
         PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
         PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
         PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),

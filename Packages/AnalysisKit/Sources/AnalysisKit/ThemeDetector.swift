@@ -667,8 +667,6 @@ public enum ThemeDetector {
             guard piece.kind == .pawn else { return false }
             piece.kind = promotion
             piece.moveCount = 0
-        } else {
-            guard piece.kind != .pawn || !isBackRank(parsed.to) else { return false }
         }
         board[parsed.to] = piece
 
@@ -698,11 +696,6 @@ public enum ThemeDetector {
             }
         }
         return true
-    }
-
-    private static func isBackRank(_ square: String) -> Bool {
-        guard let rank = square.last else { return false }
-        return rank == "1" || rank == "8"
     }
 
     private static func enPassantSquare(from: String, to: String) -> String? {
