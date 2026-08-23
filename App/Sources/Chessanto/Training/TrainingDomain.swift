@@ -44,6 +44,45 @@ struct TrainingCard: Identifiable, Equatable, Sendable {
     let consecutiveSuccesses: Int
     let masteryState: MasteryState
     let lastResult: TrainingOutcome?
+    let easeFactor: Double
+    let lapseCount: Int
+    let intervalDays: Double
+
+    init(
+        id: Int64,
+        gameId: Int64,
+        sourcePly: Int,
+        preMoveFEN: String,
+        sideToMove: ChessCore.PieceColor,
+        rankedLines: [RankedLine],
+        classification: MoveClassification,
+        themes: [String],
+        explanation: String?,
+        dueAt: Date,
+        consecutiveSuccesses: Int,
+        masteryState: MasteryState,
+        lastResult: TrainingOutcome?,
+        easeFactor: Double = 2.5,
+        lapseCount: Int = 0,
+        intervalDays: Double = 0.0
+    ) {
+        self.id = id
+        self.gameId = gameId
+        self.sourcePly = sourcePly
+        self.preMoveFEN = preMoveFEN
+        self.sideToMove = sideToMove
+        self.rankedLines = rankedLines
+        self.classification = classification
+        self.themes = themes
+        self.explanation = explanation
+        self.dueAt = dueAt
+        self.consecutiveSuccesses = consecutiveSuccesses
+        self.masteryState = masteryState
+        self.lastResult = lastResult
+        self.easeFactor = easeFactor
+        self.lapseCount = lapseCount
+        self.intervalDays = intervalDays
+    }
 
     var bestMoveUCI: String? {
         rankedLines.sorted { $0.rank < $1.rank }.compactMap(\.principalVariationUCI.first).first
@@ -88,6 +127,9 @@ extension TrainingCard {
         self.consecutiveSuccesses = record.consecutiveSuccesses
         self.masteryState = masteryState
         self.lastResult = record.lastResult.flatMap(TrainingOutcome.init(rawValue:))
+        self.easeFactor = record.easeFactor
+        self.lapseCount = record.lapseCount
+        self.intervalDays = record.intervalDays
     }
 }
 
@@ -475,31 +517,48 @@ struct DeterministicReviewScheduler: ReviewScheduling {
     func next(card: TrainingCardRecord, outcome: TrainingOutcome, now: Date) -> TrainingCardRecord {
         var updated = card
         updated.lastResult = outcome.rawValue
-        if outcome == .strong {
-            updated.consecutiveSuccesses += 1
-        } else {
-            updated.consecutiveSuccesses = 0
-        }
 
         switch outcome {
-        case .incorrect, .inaccurate:
-            updated.masteryState = MasteryState.learning.rawValue
-            updated.dueAt = now
-        case .playable:
-            updated.masteryState = MasteryState.learning.rawValue
-            updated.dueAt = Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now
         case .strong:
-            if updated.consecutiveSuccesses >= 3 {
-                updated.masteryState = MasteryState.mastered.rawValue
-                updated.dueAt = Calendar.current.date(byAdding: .day, value: 14, to: now) ?? now
+            updated.consecutiveSuccesses += 1
+            updated.easeFactor = max(1.3, card.easeFactor + 0.15)
+            updated.lapseCount = card.lapseCount
+
+            let maxInterval = max(30.0, 180.0 / (1.0 + 0.25 * Double(updated.lapseCount)))
+            if updated.consecutiveSuccesses == 1 {
+                updated.masteryState = MasteryState.review.rawValue
+                updated.intervalDays = card.lapseCount > 0 ? 1.0 : 3.0
             } else if updated.consecutiveSuccesses == 2 {
                 updated.masteryState = MasteryState.review.rawValue
-                updated.dueAt = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
+                updated.intervalDays = card.lapseCount > 0 ? 3.0 : 7.0
             } else {
-                updated.masteryState = MasteryState.review.rawValue
-                updated.dueAt = Calendar.current.date(byAdding: .day, value: 3, to: now) ?? now
+                updated.masteryState = MasteryState.mastered.rawValue
+                let previousInterval: Double
+                if card.intervalDays > 0 {
+                    previousInterval = card.intervalDays
+                } else {
+                    previousInterval = card.consecutiveSuccesses >= 2 ? 7.0 : 3.0
+                }
+                let calculatedInterval = round(previousInterval * updated.easeFactor)
+                updated.intervalDays = min(maxInterval, max(previousInterval + 1.0, calculatedInterval))
             }
+
+        case .playable:
+            updated.consecutiveSuccesses = 0
+            updated.masteryState = MasteryState.learning.rawValue
+            updated.easeFactor = card.easeFactor
+            updated.lapseCount = card.lapseCount
+            updated.intervalDays = 1.0
+
+        case .inaccurate, .incorrect:
+            updated.consecutiveSuccesses = 0
+            updated.masteryState = MasteryState.learning.rawValue
+            updated.lapseCount = card.lapseCount + 1
+            updated.easeFactor = max(1.3, card.easeFactor - 0.2)
+            updated.intervalDays = 1.0
         }
+
+        updated.dueAt = Calendar.current.date(byAdding: .day, value: max(1, Int(updated.intervalDays)), to: now) ?? now
         return updated
     }
 }

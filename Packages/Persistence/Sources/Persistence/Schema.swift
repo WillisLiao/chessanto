@@ -179,6 +179,14 @@ enum Schema {
             }
         }
 
+        migrator.registerMigration("v12_spacedRepetition") { db in
+            try db.alter(table: "trainingCard") { t in
+                t.add(column: "easeFactor", .double).notNull().defaults(to: 2.5)
+                t.add(column: "lapseCount", .integer).notNull().defaults(to: 0)
+                t.add(column: "intervalDays", .double).notNull().defaults(to: 0.0)
+            }
+        }
+
         return migrator
     }
 }

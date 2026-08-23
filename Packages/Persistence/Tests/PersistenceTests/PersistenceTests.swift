@@ -854,7 +854,7 @@ struct PersistenceTests {
         #expect(result.1?.hintCount == 1)
         #expect(result.2.contains("trainingCard_dueAt_updatedAt"))
         #expect(result.2.contains("trainingAttempt_cardId_attemptedAt"))
-        #expect(result.3.last == "v11_playerIdentity")
+        #expect(result.3.last == "v12_spacedRepetition")
         #expect(result.4.isEmpty)
     }
 
@@ -954,7 +954,7 @@ struct PersistenceTests {
         }
 
         #expect(profile?.moveNotationStyle == "standard")
-        #expect(migrations.last == "v11_playerIdentity")
+        #expect(migrations.last == "v12_spacedRepetition")
     }
 
     @Test func v10MigrationTurnsBoardSoundsOnForExistingProfiles() throws {
@@ -985,5 +985,78 @@ struct PersistenceTests {
         #expect(profile?.boardSoundsEnabled == true)
         #expect(profile?.chessComUsername == "learner")
         #expect(profile?.moveNotationStyle == "standard")
+    }
+
+    @Test func v12MigrationPreservesExistingCardsAndAddsSpacedRepetitionDefaults() throws {
+        let queue = try DatabaseQueue()
+        try Schema.migrator().migrate(queue, upTo: "v11_playerIdentity")
+        let timestamp = Date(timeIntervalSince1970: 40_000)
+
+        try queue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO game (
+                        id, source, pgn, white, black, importedAt
+                    ) VALUES (
+                        81, 'pgnImport', '1. e4 e5', 'Learner', 'Opponent', ?
+                    )
+                    """,
+                arguments: [timestamp]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO trainingCard (
+                        id, gameId, sourcePly, preMoveFEN, sideToMove,
+                        bestMoveUCI, rankedLinesJSON, classification,
+                        themesJSON, explanation, dueAt,
+                        consecutiveSuccesses, masteryState, lastResult,
+                        createdAt, updatedAt
+                    ) VALUES (
+                        82, 81, 1, ?, 'white',
+                        'e2e4', ?, 'mistake',
+                        '["Opening"]', 'Claim the center.', ?,
+                        2, 'review', 'strong',
+                        ?, ?
+                    )
+                    """,
+                arguments: [
+                    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    """
+                    [{"rank":1,"scoreCentipawns":20,"mateIn":null,"principalVariationUCI":["e2e4"],"depth":16}]
+                    """,
+                    timestamp,
+                    timestamp,
+                    timestamp
+                ]
+            )
+        }
+
+        try Schema.migrator().migrate(queue)
+
+        let result = try queue.read { db in
+            let card = try TrainingCardRecord.fetchOne(db, key: 82)
+            let columns = try db.columns(in: "trainingCard").map(\.name)
+            let migrations = try String.fetchAll(
+                db,
+                sql: "SELECT identifier FROM grdb_migrations ORDER BY rowid"
+            )
+            let foreignKeyViolations = try Row.fetchAll(
+                db,
+                sql: "PRAGMA foreign_key_check"
+            )
+            return (card, columns, migrations, foreignKeyViolations)
+        }
+
+        #expect(result.0?.gameId == 81)
+        #expect(result.0?.consecutiveSuccesses == 2)
+        #expect(result.0?.masteryState == "review")
+        #expect(result.0?.easeFactor == 2.5)
+        #expect(result.0?.lapseCount == 0)
+        #expect(result.0?.intervalDays == 0.0)
+        #expect(result.1.contains("easeFactor"))
+        #expect(result.1.contains("lapseCount"))
+        #expect(result.1.contains("intervalDays"))
+        #expect(result.2.last == "v12_spacedRepetition")
+        #expect(result.3.isEmpty)
     }
 }

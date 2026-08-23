@@ -76,6 +76,9 @@ public struct TrainingCardRecord: Codable, Identifiable, FetchableRecord, Mutabl
     public var consecutiveSuccesses: Int
     public var masteryState: String
     public var lastResult: String?
+    public var easeFactor: Double
+    public var lapseCount: Int
+    public var intervalDays: Double
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -94,6 +97,9 @@ public struct TrainingCardRecord: Codable, Identifiable, FetchableRecord, Mutabl
         consecutiveSuccesses: Int = 0,
         masteryState: String = "new",
         lastResult: String? = nil,
+        easeFactor: Double = 2.5,
+        lapseCount: Int = 0,
+        intervalDays: Double = 0.0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -111,6 +117,9 @@ public struct TrainingCardRecord: Codable, Identifiable, FetchableRecord, Mutabl
         self.consecutiveSuccesses = consecutiveSuccesses
         self.masteryState = masteryState
         self.lastResult = lastResult
+        self.easeFactor = easeFactor
+        self.lapseCount = lapseCount
+        self.intervalDays = intervalDays
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -171,6 +180,10 @@ public struct TrainingCardRecord: Codable, Identifiable, FetchableRecord, Mutabl
         guard validMasteryStates.contains(masteryState),
             lastResult == nil || validResults.contains(lastResult!)
         else {
+            throw TrainingCardReconciliationError.invalidProgressState
+        }
+
+        guard easeFactor >= 1.3, lapseCount >= 0, intervalDays >= 0 else {
             throw TrainingCardReconciliationError.invalidProgressState
         }
     }
