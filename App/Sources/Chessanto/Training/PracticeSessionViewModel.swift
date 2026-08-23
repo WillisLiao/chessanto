@@ -364,7 +364,7 @@ final class PracticeSessionViewModel: ObservableObject {
         state = .evaluating
         promptError = nil
 
-        if hasMultipleLearnerPlies(in: currentExchange) {
+        if usesExactStoredPVGrading(in: currentExchange) {
             await submitExact(
                 card: card,
                 cardID: cardID,
@@ -690,8 +690,8 @@ final class PracticeSessionViewModel: ObservableObject {
         return (prefix.count + 1) / 2
     }
 
-    private func hasMultipleLearnerPlies(in exchange: PracticeExchange) -> Bool {
-        learnerCount(in: exchange.legalPVPrefix) > 1
+    private func usesExactStoredPVGrading(in exchange: PracticeExchange) -> Bool {
+        exchange.legalPVPrefix.count > 1
     }
 
     private func replayOne(_ uci: String, from fen: String?) -> ReplayedMove? {

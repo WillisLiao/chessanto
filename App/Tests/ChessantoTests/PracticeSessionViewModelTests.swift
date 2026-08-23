@@ -431,6 +431,68 @@ struct PracticeSessionViewModelTests {
     }
 
     @Test
+    func twoPlyPVUsesExactStoredMoveAndRepliesWithoutEvaluator() async throws {
+        let store = try GameStore()
+        let scheduler = RecordingReviewScheduler()
+        let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
+        let card = try await store.upsertTrainingCard(TrainingCardRecord(
+            gameId: game.id!,
+            sourcePly: 1,
+            preMoveFEN: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            sideToMove: "white",
+            bestMoveUCI: "e2e4",
+            rankedLinesJSON: """
+            [{"rank":1,"scoreCentipawns":40,"principalVariationUCI":["e2e4","e7e5"],"depth":12}]
+            """,
+            classification: "mistake",
+            explanation: "The center needed attention."
+        ))
+        let viewModel = PracticeSessionViewModel(
+            store: store,
+            loadCards: { [card] },
+            evaluator: DefaultTrainingMoveEvaluator { _ in
+                Issue.record("A two-ply PV must use exact stored-line grading")
+                return .centipawns(0)
+            },
+            scheduler: scheduler,
+            replyDelay: { }
+        )
+
+        await viewModel.load()
+        await viewModel.submit(attemptedUCI: "d2d4")
+
+        guard case .feedback(let wrongFeedback) = viewModel.state else {
+            Issue.record("Expected the non-PV legal alternative to be rejected")
+            return
+        }
+        #expect(wrongFeedback.outcome == .incorrect)
+        #expect(wrongFeedback.attemptedMoveSAN == "d4")
+        #expect(wrongFeedback.bestMoveSAN == "e4")
+        #expect(scheduler.outcomes == [.incorrect])
+        #expect(try await store.trainingAttempts(cardId: card.id!).count == 1)
+
+        viewModel.tryAgain()
+        await viewModel.submit(attemptedUCI: "e2e4")
+        #expect(viewModel.state == .replying("e5"))
+        #expect(viewModel.exchange?.appliedUCI == ["e2e4"])
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        #expect(viewModel.state == .feedback(TrainingEvaluation(
+            outcome: .strong,
+            attemptedUCI: "e2e4",
+            lossCentipawns: 0,
+            bestMoveUCI: "e2e4",
+            bestMoveSAN: "e4",
+            attemptedMoveSAN: "e4",
+            explanation: "The center needed attention."
+        )))
+        #expect(viewModel.exchange?.appliedUCI == ["e2e4", "e7e5"])
+        #expect(viewModel.exchange?.stage == .completed(.lineExhausted))
+        #expect(scheduler.outcomes == [.incorrect, .strong])
+        #expect(try await store.trainingAttempts(cardId: card.id!).map(\.outcome) == ["incorrect", "strong"])
+    }
+
+    @Test
     func feedbackWithoutAPlayableRankedLineDoesNotCreateAPreview() async throws {
         let store = try GameStore()
         let game = try store.save(GameRecord(source: .pgnImport, pgn: "1. e4 e5", white: "Alice", black: "Bob"))
