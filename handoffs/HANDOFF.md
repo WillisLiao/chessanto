@@ -5,6 +5,7 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
+P4.2 fork detection is now implemented on the dedicated fork-detector-p4.2 branch; its primitive and detector commits are pushed there for integration.
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.5 (multi-ply practice cards), P4.8 (what the LLM Coach is for).
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
@@ -15,6 +16,14 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 
 ## Current state (2026-08-24)
+
+- **P4.2 fork detection is implemented on the dedicated branch.**
+  `ChessGame.attackedEnemySquares(from:in:)` delegates to ChessKit legal moves, filters occupied enemy destinations, is independent of FEN side to move, and returns deterministic square and piece-kind pairs without hand-written attack geometry.
+  `ForkFact` and `ForkTarget` are audited through `KeyMoment`, `ReportBuilder`, `FactAuditor`, `KeyMomentSelector`, and a fixed `ReportText` sentence.
+  The detector requires two valuable non-king targets or a king plus one valuable non-king target, excludes pawns, replays the post-move rank-1 line through an opponent response, the same forking piece capturing an original target, and one opponent reply, and requires at least one pawn-equivalent settled material gain.
+  Mate facts take precedence, incomplete or ambiguous replays return nil, target ordering is descending value then square, and all 55 real-fixture plies were scanned with zero fires.
+  ChessCore has 34 tests and AnalysisKit has 138 tests across 6 suites after this work.
+  The primitive is committed as `0da2ec7` and the detector/report integration as `1c40699` on `fork-detector-p4.2`.
 
 - **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**
   Full narrative in `devlogs/2026-08-24-spaced-repetition.md`.
