@@ -483,40 +483,30 @@ public enum CoachVerifier {
     /// Returns true for every non-empty response that is not explicitly proven
     /// to be safe without a current-turn evaluate call.
     public static func requiresEvaluateCall(in text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        return !isPureToolFreeResponse(in: trimmed)
+        let normalized = normalizedResponse(in: text)
+        guard !normalized.isEmpty else { return false }
+        return !isPureToolFreeResponse(normalized)
     }
 
-    private static func isPureToolFreeResponse(in text: String) -> Bool {
-        if isPureClarifyingQuestion(in: text) {
-            return true
-        }
-
-        let normalized = text
+    private static func normalizedResponse(in text: String) -> String {
+        text
             .lowercased()
             .filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
+    }
+
+    private static func isPureToolFreeResponse(_ normalized: String) -> Bool {
         let safeResponses: Set<String> = [
             "hello", "hi", "hey", "thanks", "thank you",
             "ok", "okay", "got it", "okay got it", "understood", "sounds good",
             "yes", "no",
+            "are you asking whether white is winning",
+            "what specifically would you like to know about this position",
+            "are you asking about the opening or the middlegame plan",
+            "what do you mean",
+            "can you clarify your question",
         ]
         return safeResponses.contains(normalized)
-    }
-
-    private static func isPureClarifyingQuestion(in text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasSuffix("?") else { return false }
-        let lowercased = trimmed.lowercased()
-        let openings = [
-            "are you asking", "what specifically", "what do you mean",
-            "which aspect", "would you like", "do you mean",
-            "can you clarify", "could you clarify", "is your question",
-        ]
-        guard openings.contains(where: lowercased.hasPrefix) else { return false }
-        let body = trimmed.dropLast()
-        return !body.contains(where: { ".!?\n".contains($0) })
     }
 }

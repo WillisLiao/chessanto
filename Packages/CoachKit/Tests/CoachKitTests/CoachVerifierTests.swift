@@ -330,6 +330,38 @@ struct CoachVerifierTests {
         }
     }
 
+    @Test func exactClarifyingWhitelistNormalizesCaseSpacingAndPunctuation() {
+        for response in [
+            "  are YOU asking whether white is winning?! ",
+            "What   do you mean???",
+            "CAN YOU CLARIFY YOUR QUESTION.",
+            "what specifically would you like to know about this position?",
+        ] {
+            #expect(!CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func clarifyingAdviceVariantsRequireEvaluate() {
+        for response in [
+            "Are you asking whether White is winning, and I recommend e4?",
+            "What specifically would you like to know about this position, and you should play e4?",
+            "Can you clarify, I recommend e4?",
+            "Are you asking whether White is winning and I recommend e4?",
+        ] {
+            #expect(CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
+    @Test func closeClarifyingVariantsOutsideWhitelistRequireEvaluate() {
+        for response in [
+            "Are you asking whether White is losing?",
+            "What do you mean about the position?",
+            "Can you clarify what White should play?",
+        ] {
+            #expect(CoachVerifier.requiresEvaluateCall(in: response))
+        }
+    }
+
     @Test func pureClarifyingQuestionIsSafeWithoutEvaluate() {
         #expect(!CoachVerifier.requiresEvaluateCall(in: "Are you asking whether White is winning?"))
     }
