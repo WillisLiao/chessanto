@@ -5,8 +5,8 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
-P4.6 (real spaced repetition) is now implemented; see below.
+Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: rest of P4.2 (forks/pins, discovered attacks, tempo-wasting moves), P4.5 (multi-ply practice cards), P4.8 (what the LLM Coach is for).
+P4.3 (takeaways that actually say something) and P4.6 (real spaced repetition) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
 Priority 5's small UI details batch is now implemented; see below.
@@ -26,6 +26,13 @@ Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4
   `lapseCount` dampens maximum interval ceilings for leeches via `max(30.0, 180.0 / (1.0 + 0.25 * Double(lapseCount)))`.
   `.playable` answers reset consecutive successes to 0 and set 1-day interval without changing `easeFactor` or `lapseCount`.
   Packages/Persistence: 44 tests across 2 suites (was 43). App suite: 178 tests across 34 suites (was 174).
+
+- **Takeaways now produce concrete, verified insights (P4.3).**
+  Full narrative in `devlogs/2026-08-24-takeaways.md`.
+  `ReportBuilder.buildTakeaways` extended with two new rules: recurring ignored threats (2+ occurrences per player, naming the count and move numbers, backed by `IgnoredThreatFact`) and a general error-frequency summary (naming total errors, move counts, and error breakdown across inaccuracies, mistakes, blunders, and missed wins from `whiteClassificationCounts`/`blackClassificationCounts`).
+  Takeaways are prioritized deterministically: decisive tactical moments (missed/allowed forced mates) > recurring tactical blindspots (punishments, ignored threats) > opening deviations leading to disadvantage > general error frequencies > clean-game/no-pattern fallback.
+  The real Carlsen fixture report now surfaces concrete error-frequency takeaways for both players (`artin10862 made 2 errors across 24 scored moves (1 inaccuracy, 1 blunder).`, `MagnusCarlsen made 1 error across 26 scored moves (1 inaccuracy).`) instead of the empty fallback.
+  Packages/AnalysisKit: 126 tests across 6 suites (was 123). App suite: 174 tests across 34 suites at the time this branch was written (both branches ran in parallel from the same starting point; see the combined counts after this merge below).
 
 - **Native QA of the four unverified board behaviors: drag and drop confirmed live.**
   Full narrative in `devlogs/2026-08-24-board-qa.md`.
