@@ -7,8 +7,19 @@ Read this first at session start; update it at session end.
 
 Continue Priority 4 (teaching depth) in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: P4.2 (new detectors - threats, forks/pins, tempo-wasting moves), P4.3 (takeaways that actually say something), P4.5 (multi-ply practice cards), P4.6 (real spaced repetition), P4.8 (what the LLM Coach is for).
 P1.6/P4.4 (`brilliant`) is now implemented; see below.
-Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and the four board items below that have never been verified through a real visible window.
-`scripts/axdrag.swift` is committed and ready for that whenever a composited display is available to the agent.
+Also still open: Priority 2's remaining flow items (P2.1 batch analysis and P2.4 Player Brief for PGN-only users are implemented per below; P2.5 Coach entry points and the dark-mode question are not), Priority 5's small UI details, and visual rendering verification (animation timing, coordinate sizing, drawn annotations) whenever a composited display is available.
+`scripts/axdrag.swift` and `scripts/axprobe.swift` are enhanced with robust app activation and window polling.
+
+## Current state (2026-08-24)
+
+- **Native QA of the four board behaviors (2026-08-24): drag and drop verified live.**
+  Full narrative in `devlogs/2026-08-24.md`.
+  Screen capture and window compositing were refused by the OS in this non-interactive agent environment (`could not create image from window`), so verification fell back to direct AX-tree and synthesized event introspection.
+  Live database safety was strictly observed: backed up to `~/Library/Containers/com.chessanto.app/Data/Library/Application Support/Chessanto/chessanto.sqlite.backup-board-qa-20260824`, executed all QA against disposable copy `~/Library/Containers/com.chessanto.app/Data/tmp/board-qa-20260824/chessanto.sqlite`, and confirmed the live database remained untouched at SHA-256 `173a3693267582696c9ce2415d83cf6d3e158089fab9116d6fe550a5ca72c133` with clean integrity check.
+  Drag and drop was verified live using `scripts/axdrag.swift` across multiple real moves (1. e4, 1... d6, 2. d4, 2... Nf6); piece positions updated correctly in the live app and all 64 `square-<algebraic>` accessibility identifiers survived intact.
+  Right-drag event routing via `RightDragCatcher`'s AppKit layer was verified with hit-testing separation (left clicks pass through to square buttons, right clicks/drags claimed by catcher).
+  The visual-only aspects (arrival animation timing, coordinate point size rendering, drawn annotation shapes) remain unverified live due to the environment's lack of window compositing.
+  App test suite: 170 tests across 34 suites (unchanged, all green). Package suites: ChessCore, AnalysisKit (105 tests), EngineKit (1 test + `engine-smoke`), ChessComKit (4 tests), CoachKit (74 tests), Persistence (43 tests) all pass.
 
 ## Current state (2026-08-22)
 

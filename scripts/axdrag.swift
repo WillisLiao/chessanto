@@ -24,6 +24,8 @@ guard let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.
     FileHandle.standardError.write("app not running\n".data(using: .utf8)!)
     exit(1)
 }
+_ = runningApp.activate()
+Thread.sleep(forTimeInterval: 0.2)
 let app = AXUIElementCreateApplication(runningApp.processIdentifier)
 
 func children(_ e: AXUIElement) -> [AXUIElement] {
@@ -57,12 +59,37 @@ func find(_ e: AXUIElement, _ match: String) -> AXUIElement? {
     return nil
 }
 
-guard let fromElement = find(app, fromMatch), let fromPoint = centre(fromElement) else {
-    FileHandle.standardError.write("from element not found\n".data(using: .utf8)!)
+var windows: [AXUIElement] = []
+for _ in 0..<10 {
+    var value: CFTypeRef?
+    if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+        let list = value as? [AXUIElement], !list.isEmpty
+    {
+        windows = list
+        break
+    }
+    Thread.sleep(forTimeInterval: 0.2)
+}
+guard !windows.isEmpty else {
+    FileHandle.standardError.write("app pid \(runningApp.processIdentifier) has zero windows\n".data(using: .utf8)!)
+    exit(2)
+}
+
+func findInWindows(_ match: String) -> AXUIElement? {
+    for window in windows {
+        if let found = find(window, match) {
+            return found
+        }
+    }
+    return nil
+}
+
+guard let fromElement = findInWindows(fromMatch), let fromPoint = centre(fromElement) else {
+    FileHandle.standardError.write("from element '\(fromMatch)' not found\n".data(using: .utf8)!)
     exit(1)
 }
-guard let toElement = find(app, toMatch), let toPoint = centre(toElement) else {
-    FileHandle.standardError.write("to element not found\n".data(using: .utf8)!)
+guard let toElement = findInWindows(toMatch), let toPoint = centre(toElement) else {
+    FileHandle.standardError.write("to element '\(toMatch)' not found\n".data(using: .utf8)!)
     exit(1)
 }
 

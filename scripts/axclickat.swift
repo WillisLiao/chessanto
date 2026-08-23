@@ -21,9 +21,12 @@ let role = CommandLine.arguments.count >= 4 ? CommandLine.arguments[3] : (kAXTex
 
 func findPID(_ target: String) -> pid_t? {
     if let pid = pid_t(target) { return pid }
-    return NSWorkspace.shared.runningApplications
-        .first { $0.localizedName == target }?
-        .processIdentifier
+    if let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == target }) {
+        _ = app.activate()
+        Thread.sleep(forTimeInterval: 0.2)
+        return app.processIdentifier
+    }
+    return nil
 }
 
 func attribute(_ element: AXUIElement, _ name: String) -> String? {
