@@ -16,6 +16,7 @@ The typed fact records the ply, attacker kind and square, pinned-piece kind and 
 The primitive removes each candidate blocker from a hypothetical FEN and asks ChessKit's legal-move generator which opposing slider can reach the king.
 The original legal-move set must contain a capture of the candidate, which prevents a skewer or an unrelated already-checking slider from being reported as a pin.
 No rook, bishop, or queen ray geometry is hand-written.
+The six-field guard also rejects unknown, duplicate, or out-of-order castling rights and en-passant fields outside the a3-h3 and a6-h6 ranks before ChessKit parsing.
 
 The detector validates the persisted transition through the repository's replay and FEN continuity checks.
 It accepts only the documented transient en-passant normalization and the narrow real en-passant halfmove correction.

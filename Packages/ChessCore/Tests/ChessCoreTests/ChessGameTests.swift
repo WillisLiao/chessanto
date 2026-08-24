@@ -352,6 +352,20 @@ private let startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 
     #expect(ChessGame.absolutePins(in: zeroFullmove).isEmpty)
 }
 
+@Test func absolutePinsRejectsMalformedCastlingAndEnPassantFields() {
+    let malformedFields = [
+        "k3r3/8/8/8/8/8/4N3/4K3 w X - 0 1",
+        "k3r3/8/8/8/8/8/4N3/4K3 w KK - 0 1",
+        "k3r3/8/8/8/8/8/4N3/4K3 w QK - 0 1",
+        "k3r3/8/8/8/8/8/4N3/4K3 w - z9 0 1",
+        "k3r3/8/8/8/8/8/4N3/4K3 w - e4 0 1",
+    ]
+
+    for fen in malformedFields {
+        #expect(ChessGame.absolutePins(in: fen).isEmpty)
+    }
+}
+
 @Test func absolutePinsDetectsPromotionAttackerPosition() {
     let postPromotion = "4R3/8/8/8/4n3/8/8/K3k3 b - - 0 1"
     #expect(ChessGame.absolutePins(in: postPromotion) == [AbsolutePin(

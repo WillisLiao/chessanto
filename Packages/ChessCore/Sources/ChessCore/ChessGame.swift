@@ -384,7 +384,37 @@ extension ChessGame {
 
     private static func strictFENFields(_ fen: String) -> [String]? {
         let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
-        return fields.count == 6 ? fields : nil
+        guard fields.count == 6, validFENMetadata(fields) else { return nil }
+        return fields
+    }
+
+    private static func validFENMetadata(_ fields: [String]) -> Bool {
+        fields.count >= 4
+            && validCastlingRights(fields[2])
+            && validEnPassantField(fields[3])
+    }
+
+    private static func validCastlingRights(_ field: String) -> Bool {
+        guard field != "-", !field.isEmpty else { return field == "-" }
+        let order = Array("KQkq")
+        var previous = -1
+        for character in field {
+            guard let index = order.firstIndex(of: character), index > previous else { return false }
+            previous = index
+        }
+        return true
+    }
+
+    private static func validEnPassantField(_ field: String) -> Bool {
+        if field == "-" { return true }
+        let characters = Array(field)
+        guard characters.count == 2,
+            "abcdefgh".contains(characters[0]),
+            characters[1] == "3" || characters[1] == "6"
+        else {
+            return false
+        }
+        return true
     }
 
     private static func strictPieceBoard(_ boardField: String) -> StrictPieceBoard? {
@@ -601,7 +631,9 @@ extension ChessGame {
     /// callers that must distinguish "invalid" from "valid" (the coach's
     /// engine-tool argument validation) need this check first.
     public static func isValidFEN(_ fen: String) -> Bool {
-        Position(fen: fen) != nil
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard validFENMetadata(fields) else { return false }
+        return Position(fen: fen) != nil
     }
 
     /// The first 4 space-separated fields of `fen` (board, side-to-move,

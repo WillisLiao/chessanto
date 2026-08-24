@@ -240,6 +240,22 @@ private func pinFact(
     #expect(ThemeDetector.pin(input: illegalUCI, ply: 1) == nil)
 }
 
+@Test func pinFactRejectsMalformedCastlingAndEnPassantFields() {
+    let postFEN = "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    let malformedPreFENs = [
+        "k7/3r4/8/8/8/8/4N3/4K3 b X - 0 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b KK - 0 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b QK - 0 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b - z9 0 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b - e4 0 1",
+    ]
+
+    for preFEN in malformedPreFENs {
+        let input = pinInput(preFEN: preFEN, uci: "d7e7", postFEN: postFEN)
+        #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+    }
+}
+
 @Test func pinFactRejectsAmbiguousMultipleNewRelations() {
     let input = pinInput(
         preFEN: "r3k3/8/2p1n3/8/Q7/8/R7/K7 w - - 0 1",

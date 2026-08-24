@@ -7,7 +7,7 @@ Read this first at session start; update it at session end.
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
 `ChessGame.absolutePins(in:)` uses ChessKit-backed hypothetical blocker removal and returns deterministic typed relations for both colors.
-`ThemeDetector.pin(input:ply:)` requires strict replay and compares attacker, pinned-piece, and king identities across the move, including promotion, captures, en-passant, and castling bookkeeping.
+`ThemeDetector.pin(input:ply:)` requires strict FEN metadata and replay, then compares attacker, pinned-piece, and king identities across the move, including promotion, captures, en-passant, and castling bookkeeping.
 Audited `PinFact` values attach only to already-selected key moments, render as a neutral verified-alignment sentence, and propagate through the backward-compatible Coach payload and restricted prompt wording.
 The real 56-position fixture scan has three hand-reviewed fires at plies 25, 29, and 31, with no fires on the existing selected moments, so golden report and Coach resources remain unchanged.
 ChessCore, AnalysisKit, and CoachKit focused and full package tests pass.
