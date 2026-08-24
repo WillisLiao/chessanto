@@ -23,6 +23,13 @@ Dark mode support (default stays light) is implemented.
 
 The Chessanto roadmap is feature-complete.
 
+## Current state (2026-08-24) - PGN parser hardening
+
+Fixed real end-user PGN load failure (`invalidMove("Rb5")` and `ChessKit.PGNParser.Error error 2`) caused by upstream `chesskit-swift` `SANParser` regex dropping disambiguation on piece captures such as `30. Rfxe1`.
+Preserved `Game(pgn:)` as the primary parser and added a targeted `PGNCompatibility` fallback that resolves affected disambiguated piece captures via `Board.move(pieceAt:to:)`, requiring exactly one legal source candidate after disambiguation.
+Regression tests verify ordinary upstream parsing, compact PGN forms (`1.e4 e5`), attached move numbers, comments, NAGs, variations, castling, promotion, and en passant across 47 `ChessCore` tests, all package tests, and root app tests with `** TEST SUCCEEDED **` and `** BUILD SUCCEEDED **` in Release mode.
+Live database SHA-256 remains intact and unchanged (`3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`).
+
 ## Current integration validation (2026-08-24)
 
 The isolated fork, move-quality, multi-ply practice, and Coach-purpose branches are combined on `codex/roadmap-completion` without merging into `main`.
