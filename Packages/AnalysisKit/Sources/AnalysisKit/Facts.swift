@@ -149,6 +149,42 @@ public struct OpeningFact: Sendable, Equatable, Codable {
     public let deviationPly: Int?
 }
 
+/// Fires for structural characteristics of a played mainline move (captures,
+/// checks, piece development, castling timing, early queen movement).
+public struct MoveQualityFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let movedPieceKind: PieceKind
+    public let isCapture: Bool
+    public let capturedPieceKind: PieceKind?
+    public let isCheck: Bool
+    public let isCheckmate: Bool
+    public let isRedevelopedPiece: Bool
+    public let isMovedTwiceBeforeCastling: Bool
+    public let isEarlyQueenMove: Bool
+
+    public init(
+        ply: Int,
+        movedPieceKind: PieceKind,
+        isCapture: Bool,
+        capturedPieceKind: PieceKind? = nil,
+        isCheck: Bool,
+        isCheckmate: Bool,
+        isRedevelopedPiece: Bool = false,
+        isMovedTwiceBeforeCastling: Bool = false,
+        isEarlyQueenMove: Bool = false
+    ) {
+        self.ply = ply
+        self.movedPieceKind = movedPieceKind
+        self.isCapture = isCapture
+        self.capturedPieceKind = capturedPieceKind
+        self.isCheck = isCheck
+        self.isCheckmate = isCheckmate
+        self.isRedevelopedPiece = isRedevelopedPiece
+        self.isMovedTwiceBeforeCastling = isMovedTwiceBeforeCastling
+        self.isEarlyQueenMove = isEarlyQueenMove
+    }
+}
+
 /// All facts attached to one selected key moment.
 public struct KeyMoment: Sendable, Equatable, Codable {
     public let ply: Int
@@ -159,6 +195,7 @@ public struct KeyMoment: Sendable, Equatable, Codable {
     public let fork: ForkFact?
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
+    public let moveQuality: MoveQualityFact?
 
     public init(
         ply: Int,
@@ -168,7 +205,8 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         ignoredThreat: IgnoredThreatFact? = nil,
         fork: ForkFact? = nil,
         missedMate: MissedMateFact? = nil,
-        allowedMate: AllowedMateFact? = nil
+        allowedMate: AllowedMateFact? = nil,
+        moveQuality: MoveQualityFact? = nil
     ) {
         self.ply = ply
         self.evalSwing = evalSwing
@@ -178,5 +216,6 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         self.fork = fork
         self.missedMate = missedMate
         self.allowedMate = allowedMate
+        self.moveQuality = moveQuality
     }
 }

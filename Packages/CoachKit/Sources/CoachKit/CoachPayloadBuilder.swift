@@ -22,21 +22,59 @@ public struct CoachFactsPayload: Codable, Sendable {
     public let betterMove: BetterMoveFact?
     public let punishment: PunishmentFact?
     public let ignoredThreat: IgnoredThreatFact?
+    public let fork: ForkFact?
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
+    public let moveQuality: MoveQualityFact?
 
     public init(
         betterMove: BetterMoveFact?,
         punishment: PunishmentFact?,
         ignoredThreat: IgnoredThreatFact? = nil,
+        fork: ForkFact? = nil,
         missedMate: MissedMateFact?,
-        allowedMate: AllowedMateFact?
+        allowedMate: AllowedMateFact?,
+        moveQuality: MoveQualityFact? = nil
     ) {
         self.betterMove = betterMove
         self.punishment = punishment
         self.ignoredThreat = ignoredThreat
+        self.fork = fork
         self.missedMate = missedMate
         self.allowedMate = allowedMate
+        self.moveQuality = moveQuality
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case betterMove
+        case punishment
+        case ignoredThreat
+        case fork
+        case missedMate
+        case allowedMate
+        case moveQuality
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        betterMove = try container.decodeIfPresent(BetterMoveFact.self, forKey: .betterMove)
+        punishment = try container.decodeIfPresent(PunishmentFact.self, forKey: .punishment)
+        ignoredThreat = try container.decodeIfPresent(IgnoredThreatFact.self, forKey: .ignoredThreat)
+        fork = try container.decodeIfPresent(ForkFact.self, forKey: .fork)
+        missedMate = try container.decodeIfPresent(MissedMateFact.self, forKey: .missedMate)
+        allowedMate = try container.decodeIfPresent(AllowedMateFact.self, forKey: .allowedMate)
+        moveQuality = try container.decodeIfPresent(MoveQualityFact.self, forKey: .moveQuality)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(betterMove, forKey: .betterMove)
+        try container.encodeIfPresent(punishment, forKey: .punishment)
+        try container.encodeIfPresent(ignoredThreat, forKey: .ignoredThreat)
+        try container.encodeIfPresent(fork, forKey: .fork)
+        try container.encodeIfPresent(missedMate, forKey: .missedMate)
+        try container.encodeIfPresent(allowedMate, forKey: .allowedMate)
+        try container.encodeIfPresent(moveQuality, forKey: .moveQuality)
     }
 }
 
@@ -222,8 +260,10 @@ public enum CoachPayloadBuilder {
                 betterMove: moment.betterMove,
                 punishment: moment.punishment,
                 ignoredThreat: moment.ignoredThreat,
+                fork: moment.fork,
                 missedMate: moment.missedMate,
-                allowedMate: moment.allowedMate
+                allowedMate: moment.allowedMate,
+                moveQuality: moment.moveQuality
             )
         )
     }

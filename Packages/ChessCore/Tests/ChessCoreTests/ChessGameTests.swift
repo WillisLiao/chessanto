@@ -232,7 +232,7 @@ private let startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 
 }
 
 @Test func moveDetailReadsMainlineMove() throws {
-    var game = try ChessGame(pgn: samplePGN)
+    let game = try ChessGame(pgn: samplePGN)
     let indices = game.mainlineIndices
     let detail = game.moveDetail(at: indices[0])
     #expect(detail?.san == "e4")

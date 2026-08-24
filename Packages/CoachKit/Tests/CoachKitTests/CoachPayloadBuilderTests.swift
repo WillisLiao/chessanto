@@ -87,6 +87,62 @@ struct CoachPayloadBuilderTests {
         #expect(CoachPrompt.systemPrompt(register: .intermediate).contains("ignoredThreat"))
     }
 
+    @Test func momentPayloadCarriesForkIntoFactsAndPrompt() throws {
+        let input = try loadFixtureInput()
+        let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        #expect(report != nil)
+        guard let report, let moment = report.keyMoments.first else { return }
+
+        let wonTarget = ForkTarget(square: "f6", kind: .bishop)
+        let fork = ForkFact(
+            ply: moment.ply,
+            forkingPieceKind: .knight,
+            destinationSquare: "d5",
+            targets: [ForkTarget(square: "b6", kind: .rook), wonTarget],
+            wonTarget: wonTarget,
+            netMaterialGain: 3
+        )
+        let momentWithFork = KeyMoment(
+            ply: moment.ply,
+            evalSwing: moment.evalSwing,
+            betterMove: moment.betterMove,
+            punishment: moment.punishment,
+            ignoredThreat: moment.ignoredThreat,
+            fork: fork,
+            missedMate: moment.missedMate,
+            allowedMate: moment.allowedMate,
+            moveQuality: moment.moveQuality
+        )
+
+        let payload = CoachPayloadBuilder.momentPayload(momentWithFork, input: input)
+        #expect(payload.facts.fork == fork)
+        let prompt = try CoachPrompt.momentUserMessage(payload: payload)
+        #expect(prompt.contains("\"fork\""))
+        #expect(CoachPrompt.systemPrompt(register: .intermediate).contains("verified targets and material won"))
+    }
+
+    @Test func momentPayloadAndStructuredPromptExposeMoveQualityFacts() throws {
+        let input = try loadFixtureInput()
+        let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        #expect(report != nil)
+        guard let report, let moment = report.keyMoments.first else { return }
+        let payload = CoachPayloadBuilder.momentPayload(moment, input: input)
+        let encoded = String(data: try JSONEncoder().encode(payload), encoding: .utf8)!
+        #expect(encoded.contains("\"moveQuality\""))
+        let prompt = try CoachPrompt.momentUserMessage(payload: payload)
+        #expect(prompt.contains("\"moveQuality\""))
+        #expect(prompt.contains("describe them as neutral observations"))
+        #expect(prompt.contains("Do not claim they caused the evaluation change"))
+    }
+
+    @Test func legacyCoachFactsPayloadHasAReservedMoveQualityField() throws {
+        let legacy = "{\"betterMove\":null,\"punishment\":null,\"missedMate\":null,\"allowedMate\":null}"
+        let payload = try JSONDecoder().decode(CoachFactsPayload.self, from: Data(legacy.utf8))
+        #expect(payload.ignoredThreat == nil)
+        #expect(payload.fork == nil)
+        #expect(payload.moveQuality == nil)
+    }
+
     // MARK: - Rating register selection
 
     @Test func fixedRatingBandsResolveDirectly() {

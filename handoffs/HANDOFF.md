@@ -5,9 +5,9 @@ Read this first at session start; update it at session end.
 
 ## Next up
 
-P4.2 fork detection is now integrated; see the fork detector entry below and `devlogs/2026-08-24-fork-detector.md`.
-P4.8's bounded audit repair is now integrated; see the Coach purpose entry below and `devlogs/2026-08-24-coach-purpose.md`.
-Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 detectors and P4.5 multi-ply practice cards.
+P4.2 fork detection and move-quality flags, P4.5 multi-ply practice, and P4.8's bounded Coach-purpose repair are integrated on `codex/roadmap-completion`; see their entries below.
+Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 pin, discovered-attack, and tempo-wasting-move detectors.
+The [%clk] backlog claim was investigated and confirmed false (no clock parsing exists in the codebase today).
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
@@ -16,6 +16,13 @@ Also still open: visual-only rendering verification (arrival animation timing, c
 The only unimplemented Priority 2 item left is the dark-mode question, an open product decision rather than a scoped task.
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
+
+## Current integration validation (2026-08-24)
+
+The isolated fork, move-quality, multi-ply practice, and Coach-purpose branches are combined on `codex/roadmap-completion` without merging into `main`.
+The combined `CoachFactsPayload` carries `ignoredThreat`, `fork`, and `moveQuality` through backward-compatible optional fields, and the structured prompt gives each fact an explicit grounded phrasing rule.
+Fresh integrated validation passes 34 ChessCore tests, 172 AnalysisKit tests across 6 suites, 112 CoachKit tests across 8 suites, and 188 app tests across 34 suites.
+The integrated macOS build ends with `** BUILD SUCCEEDED **`.
 
 ## Current state (2026-08-24) - P4.8 audit repair
 
@@ -59,6 +66,21 @@ The original P4.8 record below is historical and is superseded by the bounded au
   Target ordering is descending value then square, and all 55 real-fixture plies were scanned with zero fires.
   Fork facts do not change `KeyMomentSelector` priority, ChessCore has 34 tests, and AnalysisKit has 145 tests across 6 suites after this correction.
   The primitive is committed as `0da2ec7` and the detector/report integration as `1c40699` on `fork-detector-p4.2`.
+
+- **Move-quality repair completed and verified against real fixtures (P4.2 slice).**
+  Full narrative in `devlogs/2026-08-24-move-quality.md`.
+  Re-verified the backlog premise claiming `[%clk]` time data was already parsed: confirmed false across all packages, with no clock parsing in `ChessComKit`, `ChessCore`, `AnalysisKit`, or `App`.
+  Added `MoveQualityFact` in `Facts.swift` and `ThemeDetector.moveQuality(input:ply:)` in `ThemeDetector.swift`.
+  `MoveQualityFact` is composed from replayed capture, check, checkmate, typed piece identity, castling state, and original-queen state.
+  `ThemeDetector.moveQuality(input:ply:)` closes the complete historical fact on missing, malformed, illegal, wrong-colored, or board-inconsistent history.
+  Every prior and current UCI is replayed through `ChessGame.replayLine` and checked against the FEN side, `ReportInput.moverIsWhite(atPly:)`, tracked source identity, and stored boards.
+  FEN validation requires exactly six fields, a nonnegative halfmove clock, and a positive fullmove number; replay comparison checks all six fields with only the documented persisted en-passant normalization and narrow ChessCore en-passant halfmove correction.
+  The semantic halfmove clock for a real en-passant capture remains `0`; the correction accepts only ChessCore's observed replay value of `1` against that expected `0`.
+  En-passant removal is limited to a pawn diagonal capture onto an empty destination, castling updates rook identity, and promotion resets the promoted piece's pedagogical move count.
+  Redevelopment uses the pre-move FEN fullmove number through fullmove 10, and early queen requires the original queen leaving `d1` or `d8` before fullmove 5.
+  `KeyMomentSelector` is unchanged, while `ReportText` and typed `CoachFactsPayload.moveQuality` expose deterministic neutral observations with backward-compatible decoding.
+  Scanned all 55 played UCIs from the 56 stored positions of the real Magnus Carlsen versus artin10862 fixture and hand-checked capture fires at plies 8, 9, 15, 18, 21, 22, 23, 24, 25, 31, 32, 43, 44, and 45, check fires at plies 43, 45, 49, 51, and 55 with the ply-55 check valid, and the sole redevelopment fire at ply 17.
+  Packages/AnalysisKit: 153 tests across 6 suites. Packages/CoachKit: 76 tests across 8 suites. App suite: 179 tests across 34 suites.
 
 - **Spaced repetition scheduler and persistence upgraded to ease-factor SM-2 model (P4.6).**
   Full narrative in `devlogs/2026-08-24-spaced-repetition.md`.

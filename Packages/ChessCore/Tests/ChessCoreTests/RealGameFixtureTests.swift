@@ -63,8 +63,7 @@ private let realChessComPGN = """
     }
     #expect(fensVisited.count == 5)
     // After 1. d4, a white pawn should be on d4.
-    #expect(fensVisited.first?.contains("3P4") == true || fensVisited.first != nil)
-    print(fensVisited)
+    #expect(fensVisited.first?.contains("3P4") == true)
 }
 
 @Test func uciMoveMatchesExpectedNotationIncludingCastling() throws {

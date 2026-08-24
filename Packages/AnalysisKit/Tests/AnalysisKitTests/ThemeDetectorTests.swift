@@ -638,3 +638,397 @@ private func forkInput(
     #expect(ThemeDetector.allowedMate(input: input, ply: 1) != nil)
     #expect(ThemeDetector.fork(input: input, ply: 1) == nil)
 }
+
+// MARK: - MoveQualityFact
+
+@Test func moveQualityFactFiresOnCaptureAndCheck() {
+    // 1. e4 e5 2. Bc4 Nc6 3. Bxf7+
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2", lines: [], playedUCI: "f1c4"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3", lines: [], playedUCI: "b8c6"),
+        PlyRecord(fen: "r1bqkbnr/pppp1Bpp/2n5/4p3/4P3/8/PPPP1PPP/RNBQK1NR b KQkq - 0 3", lines: [], playedUCI: "c4f7"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+    let fact = ThemeDetector.moveQuality(input: input, ply: 5)
+    #expect(fact != nil)
+    #expect(fact?.movedPieceKind == .bishop)
+    #expect(fact?.isCapture == true)
+    #expect(fact?.capturedPieceKind == .pawn)
+    #expect(fact?.isCheck == true)
+    #expect(fact?.isCheckmate == false)
+}
+
+@Test func moveQualityFactFiresOnCheckmate() {
+    // Fool's Mate: 1. f3 e5 2. g4 Qh4#
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "f2f3"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2", lines: [], playedUCI: "g2g4"),
+        PlyRecord(fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3", lines: [], playedUCI: "d8h4"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "0-1", chessComUsername: nil)
+    let fact = ThemeDetector.moveQuality(input: input, ply: 4)
+    #expect(fact != nil)
+    #expect(fact?.movedPieceKind == .queen)
+    #expect(fact?.isCheck == true)
+    #expect(fact?.isCheckmate == true)
+    #expect(fact?.isEarlyQueenMove == true)
+}
+
+@Test func moveQualityFactDetectsPieceRedevelopedInOpening() {
+    // 1. e4 e5 2. Nf3 Nc6 3. Ng5 (White moves knight twice before castling)
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", lines: [], playedUCI: "g1f3"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3", lines: [], playedUCI: "b8c6"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p1N1/4P3/8/PPPP1PPP/RNBQKB1R b KQkq - 3 3", lines: [], playedUCI: "f3g5"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+
+    // Move 2. Nf3 (ply 3): First knight move - not redeveloped, not moved twice before castling
+    let ply3Fact = ThemeDetector.moveQuality(input: input, ply: 3)
+    #expect(ply3Fact?.movedPieceKind == .knight)
+    #expect(ply3Fact?.isRedevelopedPiece == false)
+    #expect(ply3Fact?.isMovedTwiceBeforeCastling == false)
+
+    // Move 3. Ng5 (ply 5): Second knight move while uncastled - redeveloped and moved twice before castling
+    let ply5Fact = ThemeDetector.moveQuality(input: input, ply: 5)
+    #expect(ply5Fact?.movedPieceKind == .knight)
+    #expect(ply5Fact?.isRedevelopedPiece == true)
+    #expect(ply5Fact?.isMovedTwiceBeforeCastling == true)
+}
+
+@Test func moveQualityFactDoesNotFlagRedevelopmentAfterCastlingAsBeforeCastling() {
+    // 1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6 5. Ng5
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", lines: [], playedUCI: "g1f3"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3", lines: [], playedUCI: "b8c6"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3", lines: [], playedUCI: "f1c4"),
+        PlyRecord(fen: "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4", lines: [], playedUCI: "f8c5"),
+        PlyRecord(fen: "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4", lines: [], playedUCI: "e1g1"),
+        PlyRecord(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 w kq - 6 5", lines: [], playedUCI: "g8f6"),
+        PlyRecord(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p1N1/2B1P3/8/PPPP1PPP/RNBQ1RK1 b kq - 7 5", lines: [], playedUCI: "f3g5"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+
+    // Move 5. Ng5 (ply 9): White already castled on move 4 (ply 7).
+    let ply9Fact = ThemeDetector.moveQuality(input: input, ply: 9)
+    #expect(ply9Fact?.movedPieceKind == .knight)
+    #expect(ply9Fact?.isRedevelopedPiece == true)
+    #expect(ply9Fact?.isMovedTwiceBeforeCastling == false) // White already castled!
+}
+
+@Test func moveQualityFactDetectsEarlyQueenMoveBeforeMoveFive() {
+    // 1. e4 e5 2. Qh5 Nc6 3. Qf3 Nf6
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2", lines: [], playedUCI: "d1h5"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR w KQkq - 2 3", lines: [], playedUCI: "b8c6"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5Q2/PPPP1PPP/RNB1KBNR b KQkq - 3 3", lines: [], playedUCI: "h5f3"),
+        PlyRecord(fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/5Q2/PPPP1PPP/RNB1KBNR w KQkq - 4 4", lines: [], playedUCI: "g8f6"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+
+    // Move 2. Qh5 (ply 3): Queen first leaves starting square on move 2 (move 2 < 5)
+    let ply3Fact = ThemeDetector.moveQuality(input: input, ply: 3)
+    #expect(ply3Fact?.movedPieceKind == .queen)
+    #expect(ply3Fact?.isEarlyQueenMove == true)
+    #expect(ply3Fact?.isRedevelopedPiece == false)
+
+    // Move 3. Qf3 (ply 5): Queen moves a second time on move 3 -> not first departure, but redeveloped
+    let ply5Fact = ThemeDetector.moveQuality(input: input, ply: 5)
+    #expect(ply5Fact?.movedPieceKind == .queen)
+    #expect(ply5Fact?.isEarlyQueenMove == false)
+    #expect(ply5Fact?.isRedevelopedPiece == true)
+    #expect(ply5Fact?.isMovedTwiceBeforeCastling == true)
+}
+
+@Test func moveQualityFactDoesNotFlagLateQueenMoveOrUnmovedQueen() {
+    // 15 plies, Queen first moves at move 8 (ply 15: 8. Qd2)
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", lines: [], playedUCI: "g1f3"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3", lines: [], playedUCI: "b8c6"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3", lines: [], playedUCI: "f1c4"),
+        PlyRecord(fen: "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4", lines: [], playedUCI: "f8c5"),
+        PlyRecord(fen: "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R b KQkq - 0 4", lines: [], playedUCI: "d2d3"),
+        PlyRecord(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 1 5", lines: [], playedUCI: "g8f6"),
+        PlyRecord(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 2 5", lines: [], playedUCI: "b1c3"),
+        PlyRecord(fen: "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQ - 3 6", lines: [], playedUCI: "e8g8"),
+        PlyRecord(fen: "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 b - - 4 6", lines: [], playedUCI: "e1g1"),
+        PlyRecord(fen: "r1bq1rk1/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 7", lines: [], playedUCI: "d7d6"),
+        PlyRecord(fen: "r1bq1rk1/ppp2ppp/2np1n2/2b1p3/2B1P1P1/2NP1N2/PPP2P1P/R1BQ1RK1 b - - 0 7", lines: [], playedUCI: "g2g4"),
+        PlyRecord(fen: "r1bq1rk1/ppp2pp1/2np1n1p/2b1p3/2B1P1P1/2NP1N2/PPP2P1P/R1BQ1RK1 w - - 0 8", lines: [], playedUCI: "h7h6"),
+        PlyRecord(fen: "r1bq1rk1/ppp2pp1/2np1n1p/2b1p3/2B1P1P1/2NP1N2/PPPB1P1P/R2Q1RK1 b - - 1 8", lines: [], playedUCI: "c1d2"), // 8. Bd2
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+
+    // Check queen at all plies 1...15 -> never moved, isEarlyQueenMove is always false
+    for p in 1...15 {
+        let fact = ThemeDetector.moveQuality(input: input, ply: p)
+        #expect(fact?.isEarlyQueenMove == false)
+    }
+}
+
+@Test func moveQualityFactDoesNotFlagPawnMovesAsPieceRedevelopment() {
+    // 1. e3 e5 2. e4
+    let plies = [
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e3"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/8/4P3/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2", lines: [], playedUCI: "e3e4"),
+    ]
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil)
+    let fact = ThemeDetector.moveQuality(input: input, ply: 3)
+    #expect(fact != nil)
+    #expect(fact?.movedPieceKind == .pawn)
+    #expect(fact?.isRedevelopedPiece == false)
+    #expect(fact?.isMovedTwiceBeforeCastling == false)
+}
+
+@Test func moveQualityFactRejectsTheVerifiedQh5CastlingRookPath() {
+    // 1. e4 Ke7 2. Qh5 Kd7 3. O-O Kc7 4. Rfe1.
+    // Qh5 is a diagonal non-pawn move to an empty square. It must not be
+    // mistaken for en passant and delete the rook that later castles to f1.
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/8/8/8/8/4P3/3QK2R w K - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "4k3/8/8/8/4P3/8/8/3QK2R b K - 0 1", lines: [], playedUCI: "e2e4"),
+            PlyRecord(fen: "8/4k3/8/8/4P3/8/8/3QK2R w K - 1 2", lines: [], playedUCI: "e8e7"),
+            PlyRecord(fen: "8/4k3/8/7Q/4P3/8/8/4K2R b K - 2 2", lines: [], playedUCI: "d1h5"),
+            PlyRecord(fen: "8/3k4/8/7Q/4P3/8/8/4K2R w K - 3 3", lines: [], playedUCI: "e7d7"),
+            PlyRecord(fen: "8/3k4/8/7Q/4P3/8/8/5RK1 b - - 4 3", lines: [], playedUCI: "e1g1"),
+            PlyRecord(fen: "8/2k5/8/7Q/4P3/8/8/5RK1 w - - 5 4", lines: [], playedUCI: "d7c7"),
+            PlyRecord(fen: "8/2k5/8/7Q/4P3/8/8/4R1K1 b - - 6 4", lines: [], playedUCI: "f1e1"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    let fact = ThemeDetector.moveQuality(input: input, ply: 7)
+    #expect(fact != nil)
+    #expect(fact?.movedPieceKind == .rook)
+    #expect(fact?.isRedevelopedPiece == true)
+    #expect(fact?.isMovedTwiceBeforeCastling == false)
+}
+
+@Test func moveQualityFactTracksRealEnPassantWithoutDeletingAnUnrelatedPiece() {
+    // A real en-passant capture: White's e5 pawn captures Black's d5 pawn on
+    // d6, then the same physical pawn moves again.
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2", lines: [], playedUCI: nil),
+            PlyRecord(fen: "4k3/8/3P4/8/8/8/8/4K3 b - - 0 2", lines: [], playedUCI: "e5d6"),
+            PlyRecord(fen: "5k2/8/3P4/8/8/8/8/4K3 w - - 1 3", lines: [], playedUCI: "e8f8"),
+            PlyRecord(fen: "5k2/3P4/8/8/8/8/8/4K3 b - - 0 3", lines: [], playedUCI: "d6d7"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    let capture = ThemeDetector.moveQuality(input: input, ply: 1)
+    #expect(capture?.isCapture == true)
+    #expect(capture?.capturedPieceKind == .pawn)
+    let followUp = ThemeDetector.moveQuality(input: input, ply: 3)
+    #expect(followUp?.movedPieceKind == .pawn)
+    #expect(followUp?.isRedevelopedPiece == false)
+}
+
+@Test func moveQualityFactTracksCastlingRookIdentityBeforeAndAfterCastling() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 1", lines: [], playedUCI: "e1g1"),
+            PlyRecord(fen: "r6r/3k4/8/8/8/8/8/R4RK1 w - - 2 2", lines: [], playedUCI: "e8d7"),
+            PlyRecord(fen: "r6r/3k4/8/8/8/8/8/R3R1K1 b - - 3 2", lines: [], playedUCI: "f1e1"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    let castling = ThemeDetector.moveQuality(input: input, ply: 1)
+    #expect(castling?.movedPieceKind == .king)
+    #expect(castling?.isRedevelopedPiece == false)
+    let rookMove = ThemeDetector.moveQuality(input: input, ply: 3)
+    #expect(rookMove?.movedPieceKind == .rook)
+    #expect(rookMove?.isRedevelopedPiece == true)
+    #expect(rookMove?.isMovedTwiceBeforeCastling == false)
+}
+
+@Test func moveQualityFactRejectsWrongColoredCurrentMove() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
+}
+
+@Test func moveQualityFactRejectsWrongColoredPriorMove() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2", lines: [], playedUCI: "e2e4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
+@Test func moveQualityFactRejectsMalformedPriorMove() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "not-a-move"),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
+@Test func moveQualityFactRejectsMissingPriorMove() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
+@Test func moveQualityFactRejectsBoardDiscrepancy() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
+}
+
+@Test func moveQualityFactRejectsMalformedCurrentHalfmoveClock() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - malformed 1", lines: [], playedUCI: "e2e4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
+}
+
+@Test func moveQualityFactRejectsAnExtraCurrentFENField() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1 extra", lines: [], playedUCI: "e2e4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1) == nil)
+}
+
+@Test func moveQualityFactRejectsDiscontinuousPriorHalfmoveClock() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 9 1", lines: [], playedUCI: "e2e4"),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
+@Test func moveQualityFactRejectsDiscontinuousPriorFullmoveNumber() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 7", lines: [], playedUCI: "e2e4"),
+            PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 8", lines: [], playedUCI: "e7e5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2) == nil)
+}
+
+@Test func moveQualityFactResetsDevelopmentCountAfterPromotion() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "8/4P3/k7/8/8/8/8/4K3 w - - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "4Q3/8/k7/8/8/8/8/4K3 b - - 0 1", lines: [], playedUCI: "e7e8q"),
+            PlyRecord(fen: "4Q3/8/1k6/8/8/8/8/4K3 w - - 1 2", lines: [], playedUCI: "a6b6"),
+            PlyRecord(fen: "8/4Q3/1k6/8/8/8/8/4K3 b - - 2 2", lines: [], playedUCI: "e8e7"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    let promotion = ThemeDetector.moveQuality(input: input, ply: 1)
+    #expect(promotion?.movedPieceKind == .pawn)
+    let promotedPieceMove = ThemeDetector.moveQuality(input: input, ply: 3)
+    #expect(promotedPieceMove?.movedPieceKind == .queen)
+    #expect(promotedPieceMove?.isRedevelopedPiece == false)
+}
+
+@Test func moveQualityFactUsesTheStartingFENQueenIdentity() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "4k3/8/8/7Q/8/8/8/4K3 b - - 1 1", lines: [], playedUCI: "e2h5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1)?.isEarlyQueenMove == false)
+}
+
+@Test func moveQualityFactDoesNotFlagAQueenDepartureAfterReturningHome() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/8/8/8/8/8/3QK3 w - - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "4k3/8/8/7Q/8/8/8/4K3 b - - 1 1", lines: [], playedUCI: "d1h5"),
+            PlyRecord(fen: "3k4/8/8/7Q/8/8/8/4K3 w - - 2 2", lines: [], playedUCI: "e8d8"),
+            PlyRecord(fen: "3k4/8/8/8/8/8/8/3QK3 b - - 3 2", lines: [], playedUCI: "h5d1"),
+            PlyRecord(fen: "4k3/8/8/8/8/8/8/3QK3 w - - 4 3", lines: [], playedUCI: "d8e8"),
+            PlyRecord(fen: "4k3/8/8/8/Q7/8/8/4K3 b - - 5 3", lines: [], playedUCI: "d1a4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1)?.isEarlyQueenMove == true)
+    #expect(ThemeDetector.moveQuality(input: input, ply: 5)?.isEarlyQueenMove == false)
+}
+
+@Test func moveQualityFactUsesPreMoveFENFullmoveForMoveFiveBoundary() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "4k3/8/8/8/8/8/8/3QK3 w - - 0 5", lines: [], playedUCI: nil),
+            PlyRecord(fen: "4k3/8/8/7Q/8/8/8/4K3 b - - 1 5", lines: [], playedUCI: "d1h5"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 1)?.isEarlyQueenMove == false)
+}
+
+@Test func moveQualityFactFlagsAnEarlyBlackQueenMove() {
+    let input = ReportInput(
+        plies: [
+            PlyRecord(fen: "3qk3/8/8/8/8/8/4P3/4K3 w - - 0 1", lines: [], playedUCI: nil),
+            PlyRecord(fen: "3qk3/8/8/8/8/4P3/8/4K3 b - - 0 1", lines: [], playedUCI: "e2e3"),
+            PlyRecord(fen: "4k3/8/8/8/7q/4P3/8/4K3 w - - 1 2", lines: [], playedUCI: "d8h4"),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+    #expect(ThemeDetector.moveQuality(input: input, ply: 2)?.isEarlyQueenMove == true)
+}

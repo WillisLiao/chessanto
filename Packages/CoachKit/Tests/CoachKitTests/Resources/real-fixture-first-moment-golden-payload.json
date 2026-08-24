@@ -14,6 +14,17 @@
       "ply" : 18,
       "preMoveScoreCentipawns" : 47
     },
+    "moveQuality" : {
+      "capturedPieceKind" : "pawn",
+      "isCapture" : true,
+      "isCheck" : false,
+      "isCheckmate" : false,
+      "isEarlyQueenMove" : false,
+      "isMovedTwiceBeforeCastling" : false,
+      "isRedevelopedPiece" : false,
+      "movedPieceKind" : "pawn",
+      "ply" : 18
+    },
     "punishment" : {
       "capturedPieceKind" : "bishop",
       "capturedSquare" : "c5",

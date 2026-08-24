@@ -3,7 +3,7 @@ import Testing
 
 struct AnalysisKitTests {
     @Test func placeholder() {
-        #expect(true)
+        #expect(Bool(true))
     }
 }
 

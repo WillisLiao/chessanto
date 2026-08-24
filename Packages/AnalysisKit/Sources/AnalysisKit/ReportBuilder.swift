@@ -60,7 +60,8 @@ public enum ReportBuilder {
                 ignoredThreat: ThemeDetector.ignoredThreat(input: input, ply: p),
                 fork: ThemeDetector.fork(input: input, ply: p),
                 missedMate: ThemeDetector.missedMate(input: input, ply: p),
-                allowedMate: ThemeDetector.allowedMate(input: input, ply: p)
+                allowedMate: ThemeDetector.allowedMate(input: input, ply: p),
+                moveQuality: ThemeDetector.moveQuality(input: input, ply: p)
             )
             if let audited = FactAuditor.audit(candidate, input: input) {
                 keyMoments.append(audited)
