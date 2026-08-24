@@ -1,6 +1,7 @@
-# Next session - v1 hardening and learning-loop refinement
+# V1 Hardening and Learning Loop Refinement [Completed Historical Record]
 
-Use GPT-5.5 at medium reasoning for this task.
+Historical note: V1 hardening and learning loop refinement passes were completed in production.
+This document is preserved as the original planning record.
 
 ## Prompt to paste into the next Codex task
 

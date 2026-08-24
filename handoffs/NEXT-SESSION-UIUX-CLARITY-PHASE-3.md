@@ -2,9 +2,8 @@
 
 This document began as a scoping stub for library management, Player Brief, and chess.com identity confirmation.
 The phase 3 implementation session re-verified those inputs, locked the decisions below, executed the test-first build sequence, and completed the native acceptance scenarios on 2026-07-19.
-
-Phase 2 and phase 3 are now implemented, tested, committed, and pushed.
-Nothing in this document authorizes or claims the playable-line-preview or Coach-density work specified in `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md`.
+Phase 3 was completed on 2026-07-19, and Phase 2 was subsequently completed as recorded in `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md`.
+Both phases are tested, committed, and integrated into production.
 
 ## Product direction
 
@@ -434,8 +433,7 @@ The final safety check detected that only v6 had been applied to the live databa
 All checked user-data counts matched the pre-session backup.
 The live file was restored from the mandatory backup and its md5 returned to `1d218f0371a61f85bc682cc43acb9af5`.
 
-## Still open
+## Historical status note
 
-UI/UX clarity phase 2 remains unimplemented.
-The separate V1 hardening phase 3 backlog remains unstarted.
+UI/UX clarity phase 2 was subsequently completed (see `handoffs/NEXT-SESSION-UIUX-CLARITY-PHASE-2.md`).
 No richer tactical-versus-positional insight should be claimed until the analysis fact model can support it.

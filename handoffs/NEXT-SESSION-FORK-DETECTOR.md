@@ -1,7 +1,7 @@
-# Next session - fork detection (P4.2, scoped to one motif)
+# Fork Detection [Completed Historical Record]
 
-Bootstrap document for unstarted work.
-Written 2026-08-24, running in parallel with three other sessions (move-quality flags, multi-ply practice cards, LLM Coach purpose - separate worktrees/branches, do not read or wait on any of them, your work is independent).
+Historical note: Fork detection was implemented and integrated on 2026-08-24 (see `devlogs/2026-08-24-fork-detector.md` and `handoffs/HANDOFF.md`).
+This document is preserved as the original session plan.
 
 You are working in a dedicated git worktree on branch `fork-detector-p4.2`, checked out from `main`. Commit and push this branch when you are done; do not merge to `main` yourself; do not touch the primary checkout at `/Users/willis/Documents/chessanto` or any other worktree directory.
 

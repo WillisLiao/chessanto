@@ -1,7 +1,8 @@
-# Next session - native QA of the four unverified board items
+# Native QA of board items [Completed Historical Record]
 
-Bootstrap document for unstarted work.
-Written 2026-08-24, running in parallel with `handoffs/NEXT-SESSION-THREAT-DETECTOR.md` (a separate session, separate git worktree/branch - do not read or wait on it, your work is independent).
+Historical note: Native QA was completed on 2026-08-24 (see `devlogs/2026-08-24-board-qa.md` and `handoffs/HANDOFF.md`).
+Drag and drop was verified live via AX automation; visual-only capture remains unverified.
+This document is preserved as the original session plan.
 
 You are working in a dedicated git worktree on branch `board-qa-verification`, checked out from `main` at commit `b5a00b4`. This is a real, separate checkout - commit and push this branch when you are done, do not attempt to merge to `main` yourself, and do not touch the primary checkout at `/Users/willis/Documents/chessanto` (a different session may be using it).
 

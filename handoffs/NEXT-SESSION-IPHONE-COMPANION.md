@@ -1,8 +1,7 @@
-# Chessanto iPhone companion handoff
+# Chessanto iPhone Companion [Completed Historical Record]
 
-## Start here
-
-This handoff is for a fresh Codex session implementing Chessanto's approved iPhone-first companion.
+Historical note: The iPhone companion implementation was completed in production on 2026-07-19 (see `handoffs/IPHONE-COMPANION-EXECUTION.md`).
+This document is preserved as the original handoff record.
 
 Read this file completely before changing code.
 

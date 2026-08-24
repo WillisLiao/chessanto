@@ -1,9 +1,7 @@
-# Next session: UI/UX redesign - execution plan
+# UI/UX Redesign - Execution Plan [Completed Historical Record]
 
-This is an execution plan for a Sonnet session, produced by the planning/audit session on 2026-07-18.
-It follows this project's `NEXT-SESSION-M*.md` convention: verified facts up front, fixed design decisions, then numbered steps each with a verification gate.
-Every screen and state was screenshotted live in a Release-adjacent Debug build before anything here was written (see "How this was audited").
-v1 (M1-M8) is functionally complete per `PLAN.md`; nothing here changes behavior or data - this is a visual and information-architecture pass only.
+Historical note: The UI/UX redesign execution pass was completed in production on 2026-07-18.
+This document is preserved as the original execution record.
 
 ## The one-line goal
 

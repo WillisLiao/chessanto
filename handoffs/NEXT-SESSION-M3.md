@@ -1,8 +1,7 @@
-# Next session: M3 - Exploration Mode (variation play, tree, lines-panel adoption)
+# Milestone M3 - Exploration Mode [Completed Historical Record]
 
-This is a bootstrap, not a fully de-risked execution plan like M2's -
-read it, then re-derive the details from the current code and `PLAN.md`
-rather than treating every line here as fixed.
+Historical note: Milestone M3 was completed and verified in production.
+This document is preserved as the original execution record.
 
 ## Where things stand
 

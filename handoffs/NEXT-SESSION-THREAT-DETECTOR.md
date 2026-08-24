@@ -1,7 +1,7 @@
-# Next session - the ignored-threat detector (P4.2, scoped to one detector)
+# Ignored Threat Detector [Completed Historical Record]
 
-Bootstrap document for unstarted work.
-Written 2026-08-24, continuing the production-grade push recorded in `devlogs/2026-08-21.md` and `devlogs/2026-08-22.md`.
+Historical note: The ignored threat detector was implemented and verified on 2026-08-24 (see `devlogs/2026-08-24.md` and `handoffs/HANDOFF.md`).
+This document is preserved as the original session plan.
 
 ## Read first, in this order
 

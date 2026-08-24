@@ -1,7 +1,7 @@
-# Next session - Coach entry points clarity (P2.5)
+# Coach Entry Points Clarity (P2.5) [Completed Historical Record]
 
-Bootstrap document for unstarted work.
-Written 2026-08-24, running in parallel with `handoffs/NEXT-SESSION-TAKEAWAYS.md` and `handoffs/NEXT-SESSION-SPACED-REPETITION.md` (separate sessions, separate git worktrees/branches - do not read or wait on either, your work is independent).
+Historical note: Coach entry points clarity was completed on 2026-08-24 (see `devlogs/2026-08-24-coach-entry-points.md` and `handoffs/HANDOFF.md`).
+This document is preserved as the original session plan.
 
 You are working in a dedicated git worktree on branch `coach-entry-points-p2.5`, checked out from `main`. This is a real, separate checkout - commit and push this branch when you are done, do not attempt to merge to `main` yourself, and do not touch the primary checkout at `/Users/willis/Documents/chessanto` (other sessions may be using it).
 

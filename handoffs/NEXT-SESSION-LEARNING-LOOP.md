@@ -1,6 +1,7 @@
-# Next session - Active Learning Loop
+# Active Learning Loop [Completed Historical Record]
 
-Use GPT 5.5 at medium reasoning for this task.
+Historical note: The Active Learning Loop (training cards, deterministic review scheduler, SM-2 upgrades, multi-ply practice) is implemented in production.
+This document is preserved as the original planning record.
 
 ## Prompt to paste into the next Codex task
 

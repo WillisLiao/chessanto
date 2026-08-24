@@ -1,8 +1,7 @@
-# Next session - UI/UX clarity phase 1: inline practice, plain language, and real hit targets
+# UI/UX Clarity Phase 1 [Completed Historical Record]
 
-This is a self-contained execution plan for one Claude Sonnet medium session.
-Every diagnosis below was reproduced live in the Release app against a disposable database copy during the Opus planning session on 2026-07-19.
-Where the planning session's own bootstrap made a claim that live testing contradicted, this document records the correction rather than the claim.
+Historical note: UI/UX clarity phase 1 was completed in production on 2026-07-19.
+This document is preserved as the original execution record.
 
 ## Starting point
 

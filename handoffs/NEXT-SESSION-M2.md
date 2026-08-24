@@ -1,9 +1,7 @@
-# Next session: M2 - engine integration and move classification
+# Milestone M2 - Engine Integration and Move Classification [Completed Historical Record]
 
-This is a self-contained execution plan for a fresh session with no prior context.
-It was prepared by a session that read all the relevant source (including the chesskit-engine internals) and did a real, live Stockfish run in this repo, so the facts below are verified, not guessed.
-Follow it step by step; the design decisions are already made, do not re-derive or re-litigate them.
-Read `PLAN.md`'s "Analysis pipeline" section and M2 milestone for product context, but where this file is more specific, this file wins.
+Historical note: Milestone M2 was completed and verified in production.
+This document is preserved as the original execution record.
 
 ## Where things stand
 

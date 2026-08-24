@@ -6,8 +6,8 @@ Read this first at session start; update it at session end.
 ## Next up
 
 P4.2 fork detection and move-quality flags, P4.5 multi-ply practice, and P4.8's bounded Coach-purpose repair are integrated on `codex/roadmap-completion`; see their entries below.
-Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 pin, discovered-attack, and tempo-wasting-move detectors.
-The [%clk] backlog claim was investigated and confirmed false (no clock parsing exists in the codebase today).
+Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 detectors (pins, skewers, discovered attacks, back-rank weaknesses, and trapped pieces).
+Move-quality flags (captures, checks, checkmates, piece identity, castling, original queen, redevelopment) are implemented, while [%clk] clock parsing was investigated and confirmed absent from the codebase.
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.
 P1.6/P4.4 (`brilliant`) is implemented; see below.
@@ -21,7 +21,7 @@ Open product decision: whether to disable the Coach below 8B models (see P4.8 be
 
 The isolated fork, move-quality, multi-ply practice, and Coach-purpose branches are combined on `codex/roadmap-completion` without merging into `main`.
 The combined `CoachFactsPayload` carries `ignoredThreat`, `fork`, and `moveQuality` through backward-compatible optional fields, and the structured prompt gives each fact an explicit grounded phrasing rule.
-Fresh integrated validation passes 34 ChessCore tests, 172 AnalysisKit tests across 6 suites, 112 CoachKit tests across 8 suites, and 188 app tests across 34 suites.
+Fresh integrated validation passes 34 ChessCore tests, 172 AnalysisKit tests across 6 suites, 112 CoachKit tests across 8 suites, 44 Persistence tests across 2 suites, 4 ChessComKit tests across 1 suite, 32 CompanionKit tests across 11 suites, 1 EngineKit test, and 188 app tests across 34 suites.
 The integrated macOS build ends with `** BUILD SUCCEEDED **`.
 
 ## Current state (2026-08-24) - P4.8 audit repair
