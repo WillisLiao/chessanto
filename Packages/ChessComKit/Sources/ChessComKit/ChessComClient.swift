@@ -99,7 +99,7 @@ public struct ChessComAccount: Sendable, Equatable {
     }
 }
 
-public struct ChessComGame: Decodable, Sendable, Identifiable {
+public struct ChessComGame: Codable, Sendable, Identifiable {
     public let url: String
     public let pgn: String
     public let timeControl: String
@@ -119,7 +119,9 @@ public struct ChessComGame: Decodable, Sendable, Identifiable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         url = try container.decode(String.self, forKey: .url)
-        pgn = try container.decode(String.self, forKey: .pgn)
+        // Variant games (bughouse and friends) ship without a PGN. One such
+        // game must not poison decoding of the entire monthly archive.
+        pgn = try container.decodeIfPresent(String.self, forKey: .pgn) ?? ""
         timeControl = try container.decode(String.self, forKey: .timeControl)
         rated = try container.decode(Bool.self, forKey: .rated)
         white = try container.decode(ChessComPlayer.self, forKey: .white)
@@ -127,9 +129,20 @@ public struct ChessComGame: Decodable, Sendable, Identifiable {
         let endTimeInterval = try container.decode(TimeInterval.self, forKey: .endTime)
         endTime = Date(timeIntervalSince1970: endTimeInterval)
     }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(url, forKey: .url)
+        try container.encode(pgn, forKey: .pgn)
+        try container.encode(timeControl, forKey: .timeControl)
+        try container.encode(rated, forKey: .rated)
+        try container.encode(white, forKey: .white)
+        try container.encode(black, forKey: .black)
+        try container.encode(endTime.timeIntervalSince1970, forKey: .endTime)
+    }
 }
 
-public struct ChessComPlayer: Decodable, Sendable {
+public struct ChessComPlayer: Codable, Sendable {
     public let username: String
     public let rating: Int
     public let result: String

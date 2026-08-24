@@ -10,8 +10,7 @@ let package = Package(
     dependencies: [
         .package(path: "../ChessCore"),
         .package(path: "../EngineKit"),
-        .package(path: "../Persistence"),
-        .package(path: "../ChessComKit")
+        .package(path: "../Persistence")
     ],
     targets: [
         .target(
@@ -25,10 +24,6 @@ let package = Package(
         // launch measured several seconds; the precomputed index makes
         // OpeningBook.loadFromBundle() a plain dictionary decode instead.
         .executableTarget(name: "eco-indexer", dependencies: ["AnalysisKit"]),
-        .executableTarget(
-            name: "hikaru-qa",
-            dependencies: ["AnalysisKit", "ChessComKit", "ChessCore", "Persistence"]
-        ),
         .testTarget(
             name: "AnalysisKitTests",
             dependencies: ["AnalysisKit"],

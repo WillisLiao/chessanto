@@ -37,6 +37,43 @@ struct ChessComKitTests {
         #expect(game.endTime.timeIntervalSince1970 > 1_700_000_000)
     }
 
+    @Test func missingPGNDoesNotPoisonArchiveDecoding() throws {
+        // Hikaru's 2016/09 archive ships bughouse games with no "pgn" key at
+        // all. Decoding must tolerate them (pgn defaults to "") instead of
+        // failing the whole month, which used to surface as
+        // "chess.com returned data Chessanto didn't understand".
+        let json = Data(
+            """
+            {
+              "games": [
+                {
+                  "url": "https://www.chess.com/game/live/1736849522",
+                  "time_control": "180",
+                  "end_time": 1474380175,
+                  "rated": true,
+                  "rules": "bughouse",
+                  "white": {"rating": 1604, "result": "checkmated", "username": "qwe359"},
+                  "black": {"rating": 2916, "result": "win", "username": "Hikaru"}
+                },
+                {
+                  "url": "https://www.chess.com/game/live/170971127078",
+                  "time_control": "180",
+                  "end_time": 1474380176,
+                  "rated": true,
+                  "pgn": "[Event \\"Live Chess\\"]\\n[Result \\"1-0\\"]\\n\\n1. e4 e5 1-0",
+                  "white": {"rating": 1604, "result": "win", "username": "Hikaru"},
+                  "black": {"rating": 1601, "result": "checkmated", "username": "someone"}
+                }
+              ]
+            }
+            """.utf8
+        )
+        let games = try JSONDecoder().decode(GamesResponse.self, from: json).games
+        #expect(games.count == 2)
+        #expect(games[0].pgn.isEmpty)
+        #expect(games[1].pgn.contains("[Event \"Live Chess\""))
+    }
+
     @Test func accountIdentityCombinesCanonicalProfileAndCurrentRatings() throws {
         let profileData = Data(
             """

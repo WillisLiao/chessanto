@@ -3,6 +3,23 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - QA Hikaru games (harness done, scan pending)
+
+On `qa/hikaru-games`: the Hikaru QA harness is complete and verified, but the
+full-archive scan itself has not run yet.
+Follow `handoffs/NEXT-SESSION-QA-HIKARU-FINISH.md` to run it and finish the session.
+All 152 monthly archives of chess.com user `hikaru` are cached locally as JSON
+(70,182 games); `HikaruQAScanTests` drives them through the real app path
+(`GameReplayViewModel` -> `ReportBuilding.buildInput`/`buildReport`) with no network.
+The prior instance's redundant package-executable scanner was checkpointed
+(`93bc961`) then deleted in favor of the app-path test, matching the Carlsen precedent.
+One real bug found and fixed with a regression test: chess.com ships bughouse games
+with no `pgn` key, which used to poison decoding of an entire monthly archive on the
+real fetch path; `ChessComGame` now decodes missing PGN as empty and ChessComKit has 5 tests.
+Package suites pass: ChessCore 57, ChessComKit 5, AnalysisKit 195.
+Note this branch does NOT contain the Carlsen branch's three unmerged ChessCore PGN fixes;
+if the scan surfaces those failure shapes, port the identical fix rather than re-deriving it.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
