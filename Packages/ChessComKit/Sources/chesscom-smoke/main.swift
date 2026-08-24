@@ -48,11 +48,6 @@ Task {
                     let filePath = (outDir as NSString).appendingPathComponent(filename)
                     let encoder = JSONEncoder()
                     encoder.dateEncodingStrategy = .secondsSince1970
-                    // Save the raw or decoded games list
-                    struct ArchiveDump: Encodable {
-                        let url: String
-                        let games: [ChessComGame]
-                    }
                     let data = try encoder.encode(games)
                     try data.write(to: URL(fileURLWithPath: filePath))
                 }

@@ -9,10 +9,13 @@ import Testing
 @MainActor
 struct CarlsenQAScanTests {
     @Test func scanAllCarlsenArchives() throws {
-        let archivesDir = "/Users/willis/.gemini/antigravity-cli/brain/ed28d818-b105-4ad9-9eaf-a0314594e75b/scratch/carlsen_archives"
+        // Overridable so the scan can run from any machine; falls back to the
+        // directory used when the archives were first fetched.
+        let archivesDir = ProcessInfo.processInfo.environment["CARLSEN_QA_ARCHIVES_DIR"]
+            ?? "/Users/willis/.gemini/antigravity-cli/brain/ed28d818-b105-4ad9-9eaf-a0314594e75b/scratch/carlsen_archives"
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: archivesDir) else {
-            print("Archives directory not found at \(archivesDir)")
+            print("Archives directory not found at \(archivesDir); set CARLSEN_QA_ARCHIVES_DIR to run the full scan. Skipping.")
             return
         }
 
@@ -27,8 +30,9 @@ struct CarlsenQAScanTests {
         var pgnParseFailures: [(file: String, url: String, error: String, pgn: String)] = []
         var fenMismatches: [(file: String, url: String, expected: String, actual: String, pgn: String)] = []
         var reportBuildingFailures: [(file: String, url: String, reason: String, pgn: String)] = []
-        var emptyMoments: [(file: String, url: String, pgn: String)] = []
+        var zeroKeyMomentReports: [(file: String, url: String, pgn: String)] = []
         var otherIssues: [(file: String, url: String, issue: String, pgn: String)] = []
+        var skippedVariants: [(file: String, url: String, variant: String)] = []
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
@@ -49,6 +53,14 @@ struct CarlsenQAScanTests {
             for game in games {
                 totalGames += 1
                 let pgn = game.pgn
+
+                // Variant games (Chess960, three-check, odds) are explicitly
+                // out of product scope per PLAN.md and degrade via the normal
+                // load-error alert. Count them, do not assert on them.
+                if let variant = extractTag(name: "Variant", from: pgn), variant != "Standard" {
+                    skippedVariants.append((file: file, url: game.url, variant: variant))
+                    continue
+                }
 
                 // 1. Replay and load through GameReplayViewModel
                 let resultStr = game.white.result == "win" ? "1-0" : (game.black.result == "win" ? "0-1" : "1/2-1/2")
@@ -83,10 +95,10 @@ struct CarlsenQAScanTests {
                     ))
                 }
 
-                // Check FEN validity at every ply
+                // Check FEN validity at every ply (a full FEN has six fields)
                 for (plyIdx, fen) in viewModel.fens.enumerated() {
                     let parts = fen.split(separator: " ")
-                    if parts.count < 4 {
+                    if parts.count != 6 {
                         otherIssues.append((
                             file: file,
                             url: game.url,
@@ -171,6 +183,10 @@ struct CarlsenQAScanTests {
                             pgn: pgn
                         ))
                     }
+
+                    if report.keyMoments.isEmpty {
+                        zeroKeyMomentReports.append((file: file, url: game.url, pgn: pgn))
+                    }
                 }
             }
         }
@@ -178,10 +194,12 @@ struct CarlsenQAScanTests {
         print("==================================================")
         print("CARLSEN QA SCAN SUMMARY")
         print("Total games scanned: \(totalGames)")
+        print("Skipped variant games (out of product scope): \(skippedVariants.count)")
         print("Total plies replayed: \(totalPlies)")
         print("PGN parse failures: \(pgnParseFailures.count)")
         print("FEN mismatches: \(fenMismatches.count)")
         print("Report building failures: \(reportBuildingFailures.count)")
+        print("Zero key moment reports (logged, not asserted): \(zeroKeyMomentReports.count)")
         print("Other issues: \(otherIssues.count)")
         print("==================================================")
 
@@ -217,6 +235,13 @@ struct CarlsenQAScanTests {
             print("--- OTHER ISSUES (\(otherIssues.count)) ---")
             for (i, issue) in otherIssues.prefix(10).enumerated() {
                 print("[\(i + 1)] File: \(issue.file) | URL: \(issue.url) | Issue: \(issue.issue)")
+            }
+        }
+
+        if !zeroKeyMomentReports.isEmpty {
+            print("--- ZERO KEY MOMENT REPORTS (\(zeroKeyMomentReports.count), first 10) ---")
+            for (i, report) in zeroKeyMomentReports.prefix(10).enumerated() {
+                print("[\(i + 1)] File: \(report.file) | URL: \(report.url)")
             }
         }
 
