@@ -18,6 +18,13 @@ final class GameLibrary: ObservableObject {
     @Published private(set) var hasCompletedOnboarding: Bool
     @Published private(set) var analyzedGameIDs: Set<Int64> = []
     @Published private(set) var openingByGameID: [Int64: String] = [:]
+    /// ECO code ("B01") per game, alongside `openingByGameID`'s name - the
+    /// opening filter groups by family letter and search matches the code.
+    @Published private(set) var openingECOByGameID: [Int64: String] = [:]
+    /// The user's own accuracy in each analyzed game they played, computed
+    /// once per reload off the main thread from the stored analysis rows -
+    /// never re-derived on every filter change.
+    @Published private(set) var accuracyByGameID: [Int64: Double] = [:]
 
     let store: GameStore
     private var enrichmentTask: Task<Void, Never>?
@@ -160,14 +167,24 @@ final class GameLibrary: ObservableObject {
         }
         let store = self.store
         let currentGames = games
+        let username = chessComUsername
+        let userProfile = (try? store.userProfile())
         enrichmentTask = Task { [weak self] in
             let ids = (try? await store.analyzedGameIDs()) ?? []
             guard !Task.isCancelled else { return }
 
             let parsingTask = Task.detached(priority: .utility) {
-                Self.openings(for: currentGames, analyzedGameIDs: ids)
+                let openings = Self.openingEnrichment(for: currentGames)
+                let accuracies = await Self.userAccuracies(
+                    games: currentGames,
+                    analyzedGameIDs: ids,
+                    store: store,
+                    username: username,
+                    userProfile: userProfile
+                )
+                return (openings.names, openings.ecos, accuracies)
             }
-            let openings = await withTaskCancellationHandler {
+            let (names, ecos, accuracies) = await withTaskCancellationHandler {
                 await parsingTask.value
             } onCancel: {
                 parsingTask.cancel()
@@ -175,23 +192,62 @@ final class GameLibrary: ObservableObject {
 
             guard let self, !Task.isCancelled, generation == self.reloadGeneration else { return }
             self.analyzedGameIDs = ids
-            self.openingByGameID = openings
+            self.openingByGameID = names
+            self.openingECOByGameID = ecos
+            self.accuracyByGameID = accuracies
         }
     }
 
-    /// Opening names for the sidebar's "analyzed" rows - pure move replay
+    /// Opening names and ECO codes for the whole register - pure move replay
     /// against the opening book, no analysis rows needed (M8's `OpeningBook`
-    /// only needs FENs), so this stays cheap even for a full library.
-    nonisolated private static func openings(for games: [GameRecord], analyzedGameIDs: Set<Int64>) -> [Int64: String] {
-        var result: [Int64: String] = [:]
+    /// only needs FENs), so this stays cheap even for a full library. The
+    /// sidebar rows, free-text search, and the opening filter all read this.
+    nonisolated private static func openingEnrichment(for games: [GameRecord]) -> (
+        names: [Int64: String], ecos: [Int64: String]
+    ) {
+        var names: [Int64: String] = [:]
+        var ecos: [Int64: String] = [:]
         for game in games {
             guard !Task.isCancelled else { break }
-            guard let id = game.id, analyzedGameIDs.contains(id) else { continue }
-            guard let chessGame = try? ChessGame(pgn: game.pgn) else { continue }
+            guard let id = game.id,
+                let chessGame = try? ChessGame(pgn: game.pgn)
+            else { continue }
             let moveIndices = [chessGame.startIndex] + chessGame.mainlineIndices
             let fens = moveIndices.map { chessGame.fen(at: $0) ?? "" }
             guard let match = OpeningBook.shared.lookup(fens: fens) else { continue }
-            result[id] = match.name
+            names[id] = match.name
+            ecos[id] = match.eco
+        }
+        return (names, ecos)
+    }
+
+    /// The user-side accuracy for every analyzed game they played, following
+    /// `DashboardView.computeDashboard`'s precedent of building the shared
+    /// report per analyzed game off the main actor. Cancelled reloads stop
+    /// early; a partially filled dictionary is still valid (a missing entry
+    /// just reads as "not yet known").
+    nonisolated private static func userAccuracies(
+        games: [GameRecord],
+        analyzedGameIDs: Set<Int64>,
+        store: GameStore,
+        username: String,
+        userProfile: UserProfileRecord?
+    ) async -> [Int64: Double] {
+        var result: [Int64: Double] = [:]
+        for game in games {
+            guard !Task.isCancelled else { break }
+            guard let id = game.id, analyzedGameIDs.contains(id) else { continue }
+            let isWhite = game.white.caseInsensitiveCompare(username) == .orderedSame
+            let isBlack = game.black.caseInsensitiveCompare(username) == .orderedSame
+            guard isWhite || isBlack else { continue }
+            guard let analysisRows = try? await store.analysis(gameId: id), !analysisRows.isEmpty else { continue }
+            guard let report = ReportBuilding.buildReport(
+                record: game,
+                analysisRows: analysisRows,
+                chessComUsername: username,
+                userProfile: userProfile
+            ) else { continue }
+            result[id] = isWhite ? report.whiteAccuracy : report.blackAccuracy
         }
         return result
     }

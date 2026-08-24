@@ -3,6 +3,19 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state - Library search and filter
+
+Implemented on `feature/library-search-filter` (worktree
+`../chessanto-library-search-filter`), not merged to main.
+Full narrative and verification in `devlogs/2026-08-24-library-search-filter.md`.
+The sidebar now has native `.searchable` search over opponent names and opening name/ECO, plus a Filter popover with opponent, result (user perspective), opening family, time control category, accuracy band, and date range - all composed with AND semantics through one pure value type (`LibraryFilter`) in `App/Sources/Chessanto/Library/LibraryFilter.swift`.
+GameLibrary's background enrichment now derives openings for ALL games (names + new ECO codes) and user-side accuracy per analyzed game via `ReportBuilding.buildReport`; nothing is recomputed on filter changes and no schema changes were made.
+Measured: filter reduce costs 4.5ms per pass over 2500 games (Debug), so no debounce; whole-register enrichment runs detached at 44-53s Debug for 2526 games with the UI responsive throughout.
+Verified live against a 2526-game QA-seeded real-archive library with exact sqlite cross-checks for every dimension, AND-composition, empty state, reset/clear, and a real chess.com fetch-sheet import that was immediately searchable ("faustino" -> "23 of 2,527", exact SQL match).
+Final suites: app 221 tests across 37 suites `** TEST SUCCEEDED **`, Persistence 44 tests across 2 suites passed, macOS build `** BUILD SUCCEEDED **`.
+Live database untouched (SHA-256 identical before/after).
+Not done: light/dark screenshots (screen capture refused by OS) and a human smoke click of the From/To date pickers, whose synthetic-input automation was blocked by native DatePicker AX limits.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
