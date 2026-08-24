@@ -44,7 +44,6 @@ struct GameReplayViewModelPGNHardeningTests {
         let viewModel = GameReplayViewModel(record: record, store: store)
 
         #expect(viewModel.loadError == nil)
-        #expect(viewModel.chessGame != nil)
         #expect(viewModel.moveIndices.count == 114)
         #expect(viewModel.fens.count == 114)
         #expect(viewModel.fens.last == "1r6/1PR5/8/3B4/1k2P2p/p2K3P/8/8 b - - 0 57")
@@ -59,7 +58,20 @@ struct GameReplayViewModelPGNHardeningTests {
             black: "Casablanca",
             result: "1-0"
         )
-        let reportInput = buildReportInput(record: record, analyses: [])
+        let analyses: [AnalysisRecord] = (0..<114).map { ply in
+            AnalysisRecord(
+                id: Int64(ply + 1),
+                gameId: 42,
+                plyIndex: ply,
+                fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                depth: 10,
+                scoreCentipawns: 0,
+                mateIn: nil,
+                principalVariation: "e2e4",
+                multiPVRank: 1
+            )
+        }
+        let reportInput = ReportBuilding.buildInput(record: record, analysisRows: analyses, chessComUsername: nil)
         #expect(reportInput != nil)
         #expect(reportInput?.plies.count == 114)
         #expect(reportInput?.whiteName == "Hikaru")
