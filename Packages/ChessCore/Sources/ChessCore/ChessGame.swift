@@ -15,10 +15,11 @@ public struct ChessGame {
     }
 
     public init(pgn: String) throws {
-        if let game = try? Game(pgn: pgn) {
+        let normalized = PGNCompatibility.normalize(pgn: pgn)
+        if let game = try? Game(pgn: normalized) {
             self.game = game
         } else {
-            self.game = try PGNCompatibility.parse(pgn: pgn)
+            self.game = try PGNCompatibility.parse(pgn: normalized)
         }
     }
 
@@ -864,26 +865,38 @@ extension ChessGame {
             .contains { board.legalMoves(forPieceAt: $0.square).contains(target) }
     }
 
+    /// The clock time in seconds for the move at `index`, parsed from
+    /// `[%clk ...]` comments if present, or `nil`.
+    public func clockSeconds(at index: MoveIndex) -> Int? {
+        guard let comment = game.moves[index.raw]?.comment else { return nil }
+        return Self.parseClockAnnotation(comment)
+    }
+
     /// Parses `[%clk 1:23:45]` clock annotations from PGN comments and
     /// returns the clock time in seconds for each move. Returns nil for
     /// comments without a clock annotation.
-    /// Format: `[%clk HH:MM:SS]` or `[%clk MM:SS]`.
+    /// Format: `[%clk HH:MM:SS]`, `[%clk MM:SS]`, or fractional/decimal seconds.
     public static func parseClockAnnotation(_ comment: String) -> Int? {
         // Find [%clk ...] in the comment
         guard let clkRange = comment.range(of: "\\[%clk\\s+([^\\]]+)\\]", options: .regularExpression) else {
             return nil
         }
         let clkContent = String(comment[clkRange])
-        // Extract the time string
-        guard let timeRange = clkContent.range(of: "\\d{1,2}:\\d{2}(?::\\d{2})?", options: .regularExpression) else {
+        // Extract the time string: HH:MM:SS, H:MM:SS, MM:SS, M:SS, or seconds
+        guard let timeRange = clkContent.range(of: "\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?|\\d+(?:\\.\\d+)?", options: .regularExpression) else {
             return nil
         }
         let timeStr = String(clkContent[timeRange])
-        let parts = timeStr.split(separator: ":").compactMap { Int($0) }
-        switch parts.count {
-        case 2: return parts[0] * 60 + parts[1]
-        case 3: return parts[0] * 3600 + parts[1] * 60 + parts[2]
-        default: return nil
+        if timeStr.contains(":") {
+            let parts = timeStr.split(separator: ":").compactMap { Double($0) }
+            switch parts.count {
+            case 2: return Int(parts[0] * 60 + parts[1])
+            case 3: return Int(parts[0] * 3600 + parts[1] * 60 + parts[2])
+            default: return nil
+            }
+        } else if let seconds = Double(timeStr) {
+            return Int(seconds)
         }
+        return nil
     }
 }

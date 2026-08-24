@@ -17,10 +17,54 @@ enum PGNCompatibility {
         case unpairedVariationDelimiter
     }
 
+    /// Normalizes PGN input text by standardizing line endings, stripping BOM,
+    /// removing PGN % escape lines, stripping movetext semicolon comments, and
+    /// standardizing 0-0 / 0-0-0 castling to O-O / O-O-O.
+    public static func normalize(pgn: String) -> String {
+        let text = pgn.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\u{FEFF}"))
+
+        let lines = text.components(separatedBy: "\n")
+        var normalizedLines: [String] = []
+        var inMoveText = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                if inMoveText || !normalizedLines.isEmpty {
+                    inMoveText = true
+                    normalizedLines.append("")
+                }
+                continue
+            }
+            if trimmed.hasPrefix("%") {
+                continue
+            }
+            if !inMoveText && trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+                normalizedLines.append(trimmed)
+            } else {
+                inMoveText = true
+                let withoutSemi: String
+                if let semiIdx = line.firstIndex(of: ";") {
+                    withoutSemi = String(line[..<semiIdx])
+                } else {
+                    withoutSemi = line
+                }
+                let normalizedMoveLine = withoutSemi
+                    .replacingOccurrences(of: "0-0-0", with: "O-O-O")
+                    .replacingOccurrences(of: "0-0", with: "O-O")
+                normalizedLines.append(normalizedMoveLine)
+            }
+        }
+
+        return normalizedLines.joined(separator: "\n")
+    }
+
     public static func parse(pgn: String) throws -> Game {
-        let lines = pgn.components(separatedBy: .newlines)
+        let normalized = normalize(pgn: pgn)
+        let lines = normalized.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.hasPrefix("%") }
 
         var tagLines: [String] = []
         var moveTextLines: [String] = []
@@ -48,7 +92,7 @@ enum PGNCompatibility {
     }
 
     private static func startingPosition(from tags: Game.Tags) throws -> Position {
-        if tags.setUp == "1" {
+        if tags.setUp == "1" || (!tags.fen.isEmpty && tags.setUp != "0") {
             guard let position = Position(fen: tags.fen) else {
                 throw Error.invalidSetUpOrFEN
             }
@@ -182,14 +226,14 @@ enum PGNCompatibility {
     }
 
     private static func convertTokens(from raw: String) -> [Token] {
-        let text = raw.trimmingCharacters(in: .whitespaces)
+        var text = raw.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return [] }
 
         if isGameResult(text) {
             return [.result(text)]
         }
 
-        // Handle attached move numbers like "1.e4", "1...e5", "57.Rxc7"
+        // Handle attached move numbers like "1.e4", "1...e5", "57.Rxc7", "1.0-0"
         if let match = firstMatchGroups(in: text, pattern: #"^(\d+\.{1,3})(.*)$"#), match.count == 2 {
             let numberPart = match[0]
             let remainder = match[1]
@@ -200,12 +244,25 @@ enum PGNCompatibility {
             }
         }
 
+        // Ignore standalone en passant annotations e.g. "e.p.", "ep"
+        let lower = text.lowercased()
+        if lower == "e.p." || lower == "ep" {
+            return []
+        }
+
+        // Strip ep suffix e.g. "exd6ep" -> "exd6"
+        if lower.hasSuffix("e.p.") && text.count > 4 {
+            text = String(text.dropLast(4))
+        } else if lower.hasSuffix("ep") && text.count > 3 {
+            text = String(text.dropLast(2))
+        }
+
         if text.hasPrefix("$") || text.hasPrefix("!") || text.hasPrefix("?") || text == "□" {
             return [.annotation(text)]
         }
 
-        // Check for attached annotation suffixes like "Nf3!", "Nc6?", "Bb5!?"
-        let suffixes = ["!!", "??", "!?", "?!", "!", "?", "□"]
+        // Check for attached annotation suffixes like "Nf3!", "Nc6?", "Bb5!?", "Nf3+-", "Qd4="
+        let suffixes = ["!!", "??", "!?", "?!", "!", "?", "□", "+-", "-+", "=+", "+/=", "+/-", "-+/=", "~=", "⩲", "⩱", "±", "∓", "⨁", "∞", "="]
         for suffix in suffixes {
             if text.hasSuffix(suffix) && text.count > suffix.count {
                 let sanPart = String(text.dropLast(suffix.count))
@@ -302,7 +359,30 @@ enum PGNCompatibility {
     }
 
     public static func parseSAN(_ san: String, in position: Position) -> Move? {
-        let clean = san.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "#", with: "")
+        var normalizedSAN = san
+            .replacingOccurrences(of: "0-0-0", with: "O-O-O")
+            .replacingOccurrences(of: "0-0", with: "O-O")
+            .replacingOccurrences(of: "++", with: "+")
+            .replacingOccurrences(of: "(Q)", with: "=Q")
+            .replacingOccurrences(of: "(R)", with: "=R")
+            .replacingOccurrences(of: "(B)", with: "=B")
+            .replacingOccurrences(of: "(N)", with: "=N")
+            .replacingOccurrences(of: "/Q", with: "=Q")
+            .replacingOccurrences(of: "/R", with: "=R")
+            .replacingOccurrences(of: "/B", with: "=B")
+            .replacingOccurrences(of: "/N", with: "=N")
+
+        // Handle promotion without equals e.g. "e8Q", "exd8N"
+        if let groups = firstMatchGroups(in: normalizedSAN, pattern: #"^[a-h](?:x[a-h])?[18]([QRBNqrbn])(?:\+|#)?$"#),
+           let pieceChar = groups.first {
+            if !normalizedSAN.contains("=") {
+                if let pieceRange = normalizedSAN.range(of: pieceChar, options: .backwards) {
+                    normalizedSAN.replaceSubrange(pieceRange, with: "=\(pieceChar.uppercased())")
+                }
+            }
+        }
+
+        let clean = normalizedSAN.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "#", with: "")
 
         // Resolve disambiguated piece-capture tokens that upstream SANParser drops:
         if let firstChar = clean.first, let pieceKind = Piece.Kind(rawValue: String(firstChar)) {
@@ -355,8 +435,8 @@ enum PGNCompatibility {
             }
         }
 
-        // For all other tokens, delegate to upstream SANParser
-        return SANParser.parse(move: san, in: position)
+        // For all other tokens, delegate to upstream SANParser with normalized SAN
+        return SANParser.parse(move: normalizedSAN, in: position)
     }
 
     private static func extractTargetSquare(from cleanSAN: String) -> Square? {
