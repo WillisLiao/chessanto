@@ -17,6 +17,15 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
 
+## Current state (2026-08-24) - Rating register propagation
+
+The resolved AnalysisKit RatingRegister is now propagated across every production report-building path rather than silently defaulting non-replay surfaces to .advanced.
+`ReportBuilding.swift` provides a unified shared seam with `ReportBuilding.userRating(in:username:)`, `ReportBuilding.resolveRegister(userProfile:ratingBand:userRating:record:username:)`, and `ReportBuilding.buildReport(record:analysisRows:chessComUsername:userProfile:register:)`.
+`GameReplayViewModel`, `DashboardView` (both `computeDashboard` and `backfillTrainingCards`), `PlayerBriefView.buildSnapshot`, and `MacGameAnalysisBackend` all resolve their `RatingRegister` through this shared seam.
+`MacCompletedAnalysis` in `GameAnalysisApplicationService.swift` carries the resolved register through to `PortableReportAssembler.assemble(..., register:)` and `PortableAnalysisReport`.
+Callers and tests that genuinely omit profile and rating context preserve backward compatibility through the `.advanced` register fallback.
+The changes are covered by 10 new unit and boundary propagation tests in `RatingRegisterPropagationTests.swift`, bringing the app suite to 198 tests across 35 suites.
+
 ## Current integration validation (2026-08-24)
 
 The isolated fork, move-quality, multi-ply practice, and Coach-purpose branches are combined on `codex/roadmap-completion` without merging into `main`.

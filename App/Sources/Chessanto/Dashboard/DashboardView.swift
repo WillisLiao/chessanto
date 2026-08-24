@@ -17,19 +17,19 @@ struct DashboardView: View {
     /// sheet.
     let onOpenPractice: (_ gameID: Int64, _ loadCards: @escaping () async throws -> [TrainingCardRecord]) -> Void
 
-    private struct AccuracyPoint: Identifiable {
+    struct AccuracyPoint: Identifiable {
         let id: Int64
         let date: Date
         let accuracy: Double
     }
 
-    private struct ThemeCount: Identifiable {
+    struct ThemeCount: Identifiable {
         let id: String
         let label: String
         let count: Int
     }
 
-    private struct MoveClassificationCount: Identifiable {
+    struct MoveClassificationCount: Identifiable {
         let classification: MoveClassification
         let count: Int
         var id: MoveClassification { classification }
@@ -319,7 +319,7 @@ struct DashboardView: View {
         isLoading = false
     }
 
-    private struct DashboardData {
+    struct DashboardData {
         let points: [AccuracyPoint]
         let themeCounts: [ThemeCount]
         let classificationCounts: [MoveClassificationCount]
@@ -327,11 +327,12 @@ struct DashboardView: View {
         let userMatchedGameCount: Int
     }
 
-    private static func backfillTrainingCards(
+    static func backfillTrainingCards(
         games: [GameRecord],
         username: String,
         store: GameStore
     ) async throws {
+        let userProfile = try? store.userProfile()
         for game in games {
             try Task.checkCancellation()
             guard let gameId = game.id else { continue }
@@ -341,15 +342,18 @@ struct DashboardView: View {
                 || game.black.caseInsensitiveCompare(username) == .orderedSame
             guard !usernameIsConfigured || userMatchesGame else { continue }
             let analysisRows = try await store.analysis(gameId: gameId)
+            let effectiveUsername = username.isEmpty ? nil : username
             guard !analysisRows.isEmpty,
                 let input = ReportBuilding.buildInput(
                     record: game,
                     analysisRows: analysisRows,
-                    chessComUsername: username.isEmpty ? nil : username
+                    chessComUsername: effectiveUsername
                 ),
-                let report = ReportBuilder.build(
-                    input: input,
-                    openingBook: OpeningBook.shared
+                let report = ReportBuilding.buildReport(
+                    record: game,
+                    analysisRows: analysisRows,
+                    chessComUsername: effectiveUsername,
+                    userProfile: userProfile
                 )
             else {
                 continue
@@ -368,7 +372,7 @@ struct DashboardView: View {
     /// `GameReplayViewModel.buildReport()` uses), then aggregate the side
     /// that matches `username` (case-insensitive, same rule as
     /// `GameReplayViewModel.userRatingInThisGame`).
-    private static func computeDashboard(games: [GameRecord], username: String, store: GameStore) async -> DashboardData {
+    static func computeDashboard(games: [GameRecord], username: String, store: GameStore) async -> DashboardData {
         var points: [AccuracyPoint] = []
         var punishmentCount = 0
         var missedMateCount = 0
@@ -376,6 +380,7 @@ struct DashboardView: View {
         var classificationTotals: [MoveClassification: Int] = [:]
         var analyzedGameCount = 0
         var userMatchedGameCount = 0
+        let userProfile = try? store.userProfile()
 
         for game in games {
             guard !Task.isCancelled else { break }
@@ -390,7 +395,8 @@ struct DashboardView: View {
             guard let report = ReportBuilding.buildReport(
                 record: game,
                 analysisRows: analysisRows,
-                chessComUsername: username
+                chessComUsername: username,
+                userProfile: userProfile
             ) else {
                 continue
             }

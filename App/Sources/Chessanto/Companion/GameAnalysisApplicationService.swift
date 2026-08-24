@@ -1,3 +1,4 @@
+import AnalysisKit
 import CoachKit
 import CompanionDomain
 import Foundation
@@ -7,7 +8,22 @@ struct MacCompletedAnalysis: Sendable {
     let record: GameRecord
     let analysisRows: [AnalysisRecord]
     let chessComUsername: String?
+    let register: RatingRegister
     let narrationsByPly: [Int: CoachNarration]
+
+    init(
+        record: GameRecord,
+        analysisRows: [AnalysisRecord],
+        chessComUsername: String?,
+        register: RatingRegister = .advanced,
+        narrationsByPly: [Int: CoachNarration]
+    ) {
+        self.record = record
+        self.analysisRows = analysisRows
+        self.chessComUsername = chessComUsername
+        self.register = register
+        self.narrationsByPly = narrationsByPly
+    }
 }
 
 protocol MacGameAnalysisBacking: Sendable {
@@ -117,6 +133,7 @@ final class GameAnalysisApplicationService: GameAnalysisApplication, @unchecked 
                         quality: request.quality,
                         analysisRows: result.analysisRows,
                         chessComUsername: result.chessComUsername,
+                        register: result.register,
                         narrationsByPly: result.narrationsByPly,
                         generatedAt: now()
                     ) else {
