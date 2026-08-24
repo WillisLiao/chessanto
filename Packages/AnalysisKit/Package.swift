@@ -24,6 +24,14 @@ let package = Package(
         // launch measured several seconds; the precomputed index makes
         // OpeningBook.loadFromBundle() a plain dictionary decode instead.
         .executableTarget(name: "eco-indexer", dependencies: ["AnalysisKit"]),
+        .executableTarget(
+            name: "carlsen-qa",
+            dependencies: [
+                "AnalysisKit",
+                .product(name: "ChessCore", package: "ChessCore"),
+                .product(name: "Persistence", package: "Persistence")
+            ]
+        ),
         .testTarget(
             name: "AnalysisKitTests",
             dependencies: ["AnalysisKit"],
