@@ -3,6 +3,29 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - QA Hikaru games (scan run, Carlsen PGN fixes ported)
+
+On `qa/hikaru-games`: the full-archive scan has now run end to end over all
+152 cached archives (70,182 games, 5,510,993 plies replayed) in about 73 minutes.
+First results: 4,503 PGN parse failures (all `PGNCompatibility.Error error 0`)
+and 523 FEN mismatches against chess.com's `CurrentPosition` tag.
+Root cause of both categories is the already-diagnosed upstream `chesskit-swift`
+defect that this branch forked without: the SAN parser silently drops the
+disambiguator on piece captures (`Nexd5` moves the wrong knight) and mishandles
+rank/square disambiguation and castling-with-check suffixes.
+Per the plan recorded below and in the devlog, the identical fix from
+`qa/carlsen-games` was ported verbatim: `PGNCompatibility.requiresFallback`,
+the rewritten `parseSAN` disambiguation/en-passant/suffix handling in
+`ChessGame.init(pgn:)` routing, plus its 7 regression tests.
+Validated against real failing data: all 7 sampled parse-failure games now parse,
+and all 5 sampled FEN-mismatch games now TAG-MATCH after the port.
+A full post-port suite re-run for the final summary block is queued;
+ChessCore passes 64 tests with the port applied.
+The scan test currently auto-runs whenever the cached archives exist on disk,
+which adds roughly 73 minutes to every full app-suite run; gating it behind an
+explicit environment variable at integration time is recommended so the main
+verification bar stays runnable.
+
 ## Current state (2026-08-25) - QA Hikaru games (harness done, scan pending)
 
 On `qa/hikaru-games`: the Hikaru QA harness is complete and verified, but the
