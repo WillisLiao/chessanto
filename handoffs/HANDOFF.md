@@ -17,6 +17,13 @@ The only unimplemented Priority 2 item left is the dark-mode question, an open p
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
 Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
 
+## Current state (2026-08-24) - PGN parser hardening
+
+Fixed real end-user PGN load failure (`invalidMove("Rb5")` and `ChessKit.PGNParser.Error error 2`) caused by upstream `chesskit-swift` `SANParser` regex dropping disambiguation on piece captures such as `30. Rfxe1`.
+Added a self-contained `PGNCompatibility` parser in `ChessCore` that correctly parses disambiguated captures, movetext tokens, comments, NAGs, annotations, variations, castling, and custom starting positions without mutating canonical SAN or accepting illegal chess.
+Verified with minimal regression fixture and full 57-move real fixture `Hikaru vs Casablanca` across 44 `ChessCore` tests, all package tests, and root app tests with `** TEST SUCCEEDED **` and `** BUILD SUCCEEDED **`.
+Live database SHA-256 remains intact and unchanged (`3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`).
+
 ## Current integration validation (2026-08-24)
 
 The isolated fork, move-quality, multi-ply practice, and Coach-purpose branches are combined on `codex/roadmap-completion` without merging into `main`.

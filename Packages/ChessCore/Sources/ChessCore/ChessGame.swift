@@ -15,7 +15,7 @@ public struct ChessGame {
     }
 
     public init(pgn: String) throws {
-        self.game = try Game(pgn: pgn)
+        self.game = try PGNCompatibility.parse(pgn: pgn)
     }
 
     public var pgnString: String {
