@@ -37,9 +37,10 @@ struct FailureReport {
 @main
 struct QACaruanaRunner {
     static func main() async {
-        let scratchDir = CommandLine.arguments.count > 1
-            ? CommandLine.arguments[1]
-            : "/Users/willis/.gemini/antigravity-cli/brain/1f1424b9-e0b1-4afe-9dce-954ac04122f7/scratch/caruana_games"
+        guard let scratchDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : nil else {
+            print("Usage: qa-caruana-runner <directory of archive-*.json files>")
+            exit(1)
+        }
 
         let fileManager = FileManager.default
         guard let files = try? fileManager.contentsOfDirectory(atPath: scratchDir) else {
@@ -57,7 +58,8 @@ struct QACaruanaRunner {
         var fenMismatches: [FailureReport] = []
         var replayFailures: [FailureReport] = []
         var reportBuildingFailures: [FailureReport] = []
-        var detectorFailures: [FailureReport] = []
+        var zeroKeyMomentGames = 0
+        var totalKeyMoments = 0
 
         let openingBook = OpeningBook.shared
 
@@ -218,6 +220,11 @@ struct QACaruanaRunner {
                 // Build reports with all 3 registers
                 for register in [RatingRegister.advanced, RatingRegister.intermediate, RatingRegister.beginner] {
                     if let report = ReportBuilder.build(input: reportInput, openingBook: openingBook, register: register) {
+                        totalKeyMoments += report.keyMoments.count
+                        if report.keyMoments.isEmpty {
+                            zeroKeyMomentGames += 1
+                            print("Zero key moments: \(game.url) (register \(register), \(moveIndices.count) plies)")
+                        }
                         if report.whiteAccuracy.isNaN || report.whiteAccuracy.isInfinite || report.blackAccuracy.isNaN || report.blackAccuracy.isInfinite {
                             reportBuildingFailures.append(FailureReport(
                                 url: game.url,
@@ -266,7 +273,8 @@ struct QACaruanaRunner {
         print("FEN mismatches: \(fenMismatches.count)")
         print("Replay failures: \(replayFailures.count)")
         print("Report building failures: \(reportBuildingFailures.count)")
-        print("Theme detector failures: \(detectorFailures.count)")
+        print("Reports with zero key moments: \(zeroKeyMomentGames)")
+        print("Total key moments built: \(totalKeyMoments)")
         print("=======================================================\n")
 
         if !pgnParseFailures.isEmpty {
@@ -302,6 +310,9 @@ struct QACaruanaRunner {
                 print("[\(idx + 1)] URL: \(failure.url)")
                 print("Message: \(failure.message)")
             }
+        }
+        if zeroKeyMomentGames == 0 {
+            print("(No zero-key-moment reports)")
         }
     }
 }
