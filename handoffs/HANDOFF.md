@@ -3,6 +3,15 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Performance hardening pass started
+
+The performance/scalability hardening session from `handoffs/NEXT-SESSION-PERFORMANCE-HARDENING.md` has begun on the dedicated worktree `/Users/willis/Documents/chessanto-perf-hardening` (branch `perf/hardening-pass`, clean at `0267e6b`).
+No code changes have landed yet.
+This first session verified all prior setup, launched the background Stockfish analyzer against a dedicated fixture copy (`/var/folders/94/2p2pbcss4pddjvbrslnjbtyc0000gp/T/opencode/chessanto-perf/chessanto-analyzer.sqlite`, 40 games, fast preset, log at `analyzer-run.log` next to it), and completed the code-reading pass that maps every fix seam for the launch-path work (metadata-only sidebar fetch, cached openings enrichment, batch reload suppression, dashboard N+1).
+The full record including the seam map is in `devlogs/2026-08-25-performance-hardening.md`.
+Resume via `handoffs/NEXT-SESSION-PERFORMANCE-HARDENING-RESUME.md`, which now carries a progress addendum.
+The live database was not touched and its SHA-256 still matches the recorded value.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.

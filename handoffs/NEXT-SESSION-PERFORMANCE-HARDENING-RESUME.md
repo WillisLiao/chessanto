@@ -9,6 +9,30 @@ measurement against a large real library.
 The verification bar and devlog/handoff/commit rules are all specified in
 that file - follow them exactly.
 
+## Progress addendum - first session (2026-08-25)
+
+State was re-verified and is exactly as described below: worktree clean on
+`perf/hardening-pass` @ `0267e6b`, tooling built, both fixture copies pristine, live database
+SHA-256 still `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`.
+
+Step (a) was started: the analyzer is running (was pid 4500) against a NEW dedicated copy,
+`/var/folders/94/2p2pbcss4pddjvbrslnjbtyc0000gp/T/opencode/chessanto-perf/chessanto-analyzer.sqlite`,
+target 40 games, fast preset.
+Log: `/var/folders/94/2p2pbcss4pddjvbrslnjbtyc0000gp/T/opencode/chessanto-perf/analyzer-run.log`.
+It is idempotent, so if it died just rerun the same command on that copy to resume; check progress
+with `SELECT COUNT(DISTINCT gameId) FROM analysis` before launching anything.
+
+Step (b)'s code reading is done - do not repeat it.
+The complete seam map (which consumers actually need PGN text, where the metadata-only struct has
+to live given `GameRecord.pgn` is non-optional, the openings cache-by-gameId rationale, the exact
+batch-reload suppression point at `ContentView.swift:555-568`, and the three copies of the
+dashboard N+1) is in `devlogs/2026-08-25-performance-hardening.md`.
+Read that devlog, then go straight to implementing fixes with bench measurements.
+
+Nothing was implemented or measured beyond this; no commits were made anywhere this session.
+Keep handoff/doc edits in the main checkout until step (g), then mirror the final versions into the
+worktree commit as the steps below specify.
+
 ## State already in place (reuse it, do not redo)
 
 1. Worktree: `/Users/willis/Documents/chessanto-perf-hardening` on branch
