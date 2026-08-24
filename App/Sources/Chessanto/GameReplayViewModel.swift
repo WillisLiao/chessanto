@@ -350,7 +350,7 @@ final class GameReplayViewModel: ObservableObject {
         let analysisRows = cachedAllRanksByPly.values.flatMap { $0 }
         let profile = try? store.userProfile()
         let username = profile?.chessComUsername
-        let register = RatingRegister.resolve(ratingBand: profile?.ratingBand ?? "adaptive", userRating: userRatingInThisGame)
+        let register = ReportBuilding.resolveRegister(userProfile: profile, record: record, username: username)
         reportInput = ReportBuilding.buildInput(record: record, analysisRows: analysisRows, chessComUsername: username)
         report = reportInput.flatMap { ReportBuilder.build(input: $0, openingBook: OpeningBook.shared, register: register) }
         if let report, let reportInput, let gameId {
@@ -443,9 +443,7 @@ final class GameReplayViewModel: ObservableObject {
     /// register), matched by `chessComUsername` against white/black.
     var userRatingInThisGame: Int? {
         guard let username = userProfile()?.chessComUsername, !username.isEmpty else { return nil }
-        if record.white.caseInsensitiveCompare(username) == .orderedSame { return record.whiteRating }
-        if record.black.caseInsensitiveCompare(username) == .orderedSame { return record.blackRating }
-        return nil
+        return ReportBuilding.userRating(in: record, username: username)
     }
 
     /// Whether the game's last mainline move is checkmate, and if so, who

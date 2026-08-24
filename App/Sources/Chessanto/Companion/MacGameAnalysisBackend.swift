@@ -94,6 +94,11 @@ final class MacGameAnalysisBackend: MacGameAnalysisBacking {
         let analysisRows = try await store.analysis(gameId: localGameID)
         let userProfile = try store.userProfile()
         let chessComUsername = userProfile.chessComUsername
+        let register = ReportBuilding.resolveRegister(
+            userProfile: userProfile,
+            record: record,
+            username: chessComUsername
+        )
         var narrationsByPly: [Int: CoachNarration] = [:]
         if
             let input = ReportBuilding.buildInput(
@@ -103,16 +108,17 @@ final class MacGameAnalysisBackend: MacGameAnalysisBacking {
             ),
             let report = ReportBuilder.build(
                 input: input,
-                openingBook: OpeningBook.shared
+                openingBook: OpeningBook.shared,
+                register: register
             )
         {
             narrationsByPly = await coach.portableNarrations(
                 report: report,
                 input: input,
                 userProfile: userProfile,
-                userRating: rating(
-                    for: record,
-                    chessComUsername: chessComUsername
+                userRating: ReportBuilding.userRating(
+                    in: record,
+                    username: chessComUsername
                 ),
                 executor: engine
             )
@@ -122,24 +128,9 @@ final class MacGameAnalysisBackend: MacGameAnalysisBacking {
             record: record,
             analysisRows: analysisRows,
             chessComUsername: chessComUsername,
+            register: register,
             narrationsByPly: narrationsByPly
         )
-    }
-
-    private func rating(
-        for record: GameRecord,
-        chessComUsername: String?
-    ) -> Int? {
-        guard let username = chessComUsername, !username.isEmpty else {
-            return nil
-        }
-        if record.white.caseInsensitiveCompare(username) == .orderedSame {
-            return record.whiteRating
-        }
-        if record.black.caseInsensitiveCompare(username) == .orderedSame {
-            return record.blackRating
-        }
-        return nil
     }
 }
 

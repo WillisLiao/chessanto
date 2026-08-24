@@ -15,6 +15,7 @@ enum PortableReportAssembler {
         quality: CompanionAnalysisQuality,
         analysisRows: [AnalysisRecord],
         chessComUsername: String?,
+        register: RatingRegister = .advanced,
         narrationsByPly: [Int: CoachNarration],
         generatedAt: Date = Date()
     ) -> PortableAnalysisReport? {
@@ -29,7 +30,11 @@ enum PortableReportAssembler {
             return nil
         }
 
-        guard let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared) else {
+        guard let report = ReportBuilder.build(
+            input: input,
+            openingBook: OpeningBook.shared,
+            register: register
+        ) else {
             return nil
         }
         let indices = [game.startIndex] + game.mainlineIndices

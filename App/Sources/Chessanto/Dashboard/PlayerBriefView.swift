@@ -555,11 +555,12 @@ struct PlayerBriefView: View {
         isLoading = false
     }
 
-    nonisolated private static func buildSnapshot(
+    nonisolated static func buildSnapshot(
         games: [GameRecord],
         username: String,
         store: GameStore
     ) async throws -> PlayerBriefSnapshot {
+        let userProfile = try? store.userProfile()
         var analyzedGames: [AnalyzedPlayerGame] = []
         for game in games {
             try Task.checkCancellation()
@@ -575,9 +576,11 @@ struct PlayerBriefView: View {
                     analysisRows: rows,
                     chessComUsername: username
                 ),
-                let report = ReportBuilder.build(
-                    input: input,
-                    openingBook: OpeningBook.shared
+                let report = ReportBuilding.buildReport(
+                    record: game,
+                    analysisRows: rows,
+                    chessComUsername: username,
+                    userProfile: userProfile
                 )
             else {
                 continue
