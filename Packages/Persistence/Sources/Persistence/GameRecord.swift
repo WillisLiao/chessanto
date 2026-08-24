@@ -4,6 +4,7 @@ import GRDB
 public enum GameSource: String, Codable, Sendable {
     case chessCom
     case pgnImport
+    case vsEngine
 }
 
 public struct GameRecord: Codable, Identifiable, FetchableRecord, MutablePersistableRecord, Sendable {

@@ -195,8 +195,8 @@ public final class EngineService: ObservableObject {
         switch update {
         case .info(let info):
             session.record(info)
-        case .bestMove(let gen, _):
-            session.complete(generation: gen)
+        case .bestMove(let gen, let move):
+            session.complete(generation: gen, bestMove: move)
         }
     }
 
@@ -616,11 +616,106 @@ public final class EngineService: ObservableObject {
         }
         return score
     }
+
+    // MARK: - Live game opponent move generation
+
+    /// Generates an engine opponent reply for `fen` at the given `strength`.
+    /// Sets Stockfish UCI `Skill Level` (0-20), runs a depth-bounded search
+    /// with movetime ceiling, returns the engine's terminating best move in
+    /// UCI format, and restores full `Skill Level` (20) upon completion.
+    public func generateOpponentMove(
+        in fen: String,
+        strength: EngineStrength
+    ) async throws -> String {
+        guard isStarted else {
+            throw EngineSearchError.engineUnavailable("engine is not running")
+        }
+        guard ChessGame.isValidFEN(fen) else {
+            throw EngineToolArgumentError("'\(fen)' is not a valid FEN")
+        }
+        guard !isAnalyzing else {
+            throw EngineToolArgumentError("a batch analysis is already running")
+        }
+
+        return try await runOnFIFOTail {
+            try await self.runOpponentMoveSearch(fen: fen, strength: strength)
+        }
+    }
+
+    private func runOpponentMoveSearch(
+        fen: String,
+        strength: EngineStrength
+    ) async throws -> String {
+        stopLive()
+        defer {
+            resumeLiveIfPending()
+        }
+
+        await engine.setOption(name: "Skill Level", value: "\(strength.skillLevel)")
+        defer {
+            let engineRef = engine
+            Task {
+                await engineRef.setOption(name: "Skill Level", value: "20")
+            }
+        }
+
+        let generation = await engine.setPosition(fen: fen)
+        let session = BoundedSearchSession(generation: generation)
+        activeSearch = session
+        let engineRef = engine
+
+        let ceilingTask: Task<Void, Never>?
+        if strength.depth > 0 {
+            await engine.go(depth: strength.depth)
+            ceilingTask = Task {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(strength.movetimeCeilingMilliseconds) * 1_000_000
+                )
+                guard !Task.isCancelled else { return }
+                await engineRef.stop()
+            }
+        } else {
+            await engine.go(movetimeMilliseconds: strength.movetimeCeilingMilliseconds)
+            ceilingTask = nil
+        }
+
+        let deadlineMilliseconds =
+            strength.movetimeCeilingMilliseconds * Self.deadlineMultiplier
+            + Self.deadlineFloorMilliseconds
+        let deadlineTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(deadlineMilliseconds) * 1_000_000)
+            session.fail(.timedOut(milliseconds: deadlineMilliseconds))
+        }
+
+        do {
+            let move = try await withTaskCancellationHandler {
+                try await session.bestMove()
+            } onCancel: {
+                Task { @MainActor in session.fail(.cancelled) }
+            }
+            ceilingTask?.cancel()
+            deadlineTask.cancel()
+            clearActiveSearch(session)
+            return move
+        } catch {
+            ceilingTask?.cancel()
+            deadlineTask.cancel()
+            clearActiveSearch(session)
+            Task { await engineRef.stop() }
+            throw error
+        }
+    }
 }
 
 extension EngineService: EngineToolExecutor {
     public func evaluate(fen: String, movesUCI: [String]) async throws -> EngineToolResult {
         try await coachEvaluate(fen: fen, movesUCI: movesUCI)
+    }
+}
+
+extension EngineService: EngineOpponent {
+    public func generateMove(in fen: String, strength: EngineStrength) async throws -> String {
+        try await generateOpponentMove(in: fen, strength: strength)
     }
 }
 
