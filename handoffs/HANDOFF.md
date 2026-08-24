@@ -3,6 +3,15 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Coach real-model verification
+
+The full Verified Coach stack is now verified live against a real running Ollama instance with a real 8B model (`llama3.1:8b`) and in-process Stockfish.
+Direct server execution enables full Metal GPU acceleration on Apple Silicon (33/33 layers offloaded, prompt processing 80+ tokens/sec, fast inference).
+`CoachModelCatalog.meetsModelFloor` accurately gates sub-8B models (`qwen3:0.6b`, `hermes3:3b`, `qwen2.5-coder:7b`, `llava:7b`, `qwen3:4b`, `llama3.2:3b` -> false) while passing 8B+ models (`llama3.1:8b`, `qwen3:8b`, `qwen2.5:14b`, `qwen3:32b`, `qwen2.5:32b` -> true).
+Moment narration with `llama3.1:8b` successfully calls the `evaluate` tool, generates grounded coaching prose citing verified moves and eval tags, and passes `CoachVerifier` with 0 violations, 0 fallbacks, and 0 leaks on independent re-verification.
+Multi-turn position chat via `CoachChat` with `llama3.1:8b` verifies legal move proposals, short-circuits illegal proposals via the precheck template without LLM calls, and satisfies the current-turn evaluate requirement on open-ended questions with 0 violations and 0 leaks.
+Packages/CoachKit passes 114 tests across 8 suites, and `coach-grounding` runs live with zero unverified renders across narrations and chat turns.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
