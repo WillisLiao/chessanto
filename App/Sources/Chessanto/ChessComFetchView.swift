@@ -178,8 +178,8 @@ struct ChessComFetchView: View {
 
         do {
             let fetched = try await client.recentGames(username: trimmed)
-            games = fetched
-            let urls = Set(fetched.map(\.url))
+            games = fetched.filter { $0.pgn != nil }
+            let urls = Set(games.map(\.url))
             alreadyImportedURLs = library.alreadyImported(sourceURLs: urls)
             selection = []
             didFetch = true
@@ -192,7 +192,8 @@ struct ChessComFetchView: View {
     private func importSelected() {
         let urls = Set(games.filter { selection.contains($0.url) }.map(\.url))
         for game in games where selection.contains(game.url) {
-            library.importPGN(game.pgn, source: .chessCom, sourceURL: game.url)
+            guard let pgn = game.pgn else { continue }
+            library.importPGN(pgn, source: .chessCom, sourceURL: game.url)
         }
         if analyzeAfterImport {
             // Match on sourceURL rather than trusting import order: the

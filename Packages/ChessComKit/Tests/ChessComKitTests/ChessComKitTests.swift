@@ -24,7 +24,7 @@ struct ChessComKitTests {
         #expect(game.id == game.url)
         #expect(game.timeControl == "180")
         #expect(game.rated == true || game.rated == false)
-        #expect(game.pgn.contains("[Event \"Live Chess\""))
+        #expect(game.pgn?.contains("[Event \"Live Chess\"") == true)
         #expect(game.white.username.isEmpty == false)
         #expect(game.black.username.isEmpty == false)
         #expect(game.white.rating > 0)

@@ -101,7 +101,8 @@ public struct ChessComAccount: Sendable, Equatable {
 
 public struct ChessComGame: Decodable, Sendable, Identifiable {
     public let url: String
-    public let pgn: String
+    public let pgn: String?
+    public let rules: String?
     public let timeControl: String
     public let endTime: Date
     public let rated: Bool
@@ -111,7 +112,7 @@ public struct ChessComGame: Decodable, Sendable, Identifiable {
     public var id: String { url }
 
     private enum CodingKeys: String, CodingKey {
-        case url, pgn, rated, white, black
+        case url, pgn, rules, rated, white, black
         case timeControl = "time_control"
         case endTime = "end_time"
     }
@@ -119,7 +120,8 @@ public struct ChessComGame: Decodable, Sendable, Identifiable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         url = try container.decode(String.self, forKey: .url)
-        pgn = try container.decode(String.self, forKey: .pgn)
+        pgn = try container.decodeIfPresent(String.self, forKey: .pgn)
+        rules = try container.decodeIfPresent(String.self, forKey: .rules)
         timeControl = try container.decode(String.self, forKey: .timeControl)
         rated = try container.decode(Bool.self, forKey: .rated)
         white = try container.decode(ChessComPlayer.self, forKey: .white)
