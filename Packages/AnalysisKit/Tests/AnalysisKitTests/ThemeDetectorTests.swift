@@ -466,21 +466,28 @@ private let allowedMatePostFEN = "4r1k1/8/8/8/8/8/5PPP/6K1 b - - 0 1"
 }
 
 @Test func moveQualityFactFiresOnCheckmate() {
-    // Fool's Mate: 1. f3 e5 2. g4 Qh4#
+    // Scholar's Mate: 1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#
     let plies = [
         PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", lines: [], playedUCI: nil),
-        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "f2f3"),
-        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
-        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2", lines: [], playedUCI: "g2g4"),
-        PlyRecord(fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3", lines: [], playedUCI: "d8h4"),
+        PlyRecord(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1", lines: [], playedUCI: "e2e4"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", lines: [], playedUCI: "e7e5"),
+        PlyRecord(fen: "rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2", lines: [], playedUCI: "f1c4"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3", lines: [], playedUCI: "b8c6"),
+        PlyRecord(fen: "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3", lines: [], playedUCI: "d1h5"),
+        PlyRecord(fen: "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4", lines: [], playedUCI: "g8f6"),
+        PlyRecord(fen: "r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4", lines: [], playedUCI: "h5f7"),
     ]
-    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "0-1", chessComUsername: nil)
-    let fact = ThemeDetector.moveQuality(input: input, ply: 4)
+    let input = ReportInput(plies: plies, whiteName: "White", blackName: "Black", result: "1-0", chessComUsername: nil)
+    let fact = ThemeDetector.moveQuality(input: input, ply: 7)
     #expect(fact != nil)
     #expect(fact?.movedPieceKind == .queen)
+    #expect(fact?.isCapture == true)
+    #expect(fact?.capturedPieceKind == .pawn)
     #expect(fact?.isCheck == true)
     #expect(fact?.isCheckmate == true)
-    #expect(fact?.isEarlyQueenMove == true)
+    #expect(fact?.isRedevelopedPiece == true)
+    #expect(fact?.isMovedTwiceBeforeCastling == true)
+    #expect(fact?.isEarlyQueenMove == false)
 }
 
 @Test func moveQualityFactDetectsPieceRedevelopedInOpening() {
