@@ -121,6 +121,42 @@ struct CoachPayloadBuilderTests {
         #expect(CoachPrompt.systemPrompt(register: .intermediate).contains("verified targets and material won"))
     }
 
+    @Test func momentPayloadCarriesPinIntoFactsAndPrompt() throws {
+        let input = try loadFixtureInput()
+        let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+        #expect(report != nil)
+        guard let report, let moment = report.keyMoments.first else { return }
+
+        let pin = PinFact(
+            ply: moment.ply,
+            pinningPieceKind: .rook,
+            pinningSquare: "e7",
+            pinnedPieceKind: .knight,
+            pinnedSquare: "e2",
+            kingSquare: "e1"
+        )
+        let momentWithPin = KeyMoment(
+            ply: moment.ply,
+            evalSwing: moment.evalSwing,
+            betterMove: moment.betterMove,
+            punishment: moment.punishment,
+            ignoredThreat: moment.ignoredThreat,
+            fork: moment.fork,
+            missedMate: moment.missedMate,
+            allowedMate: moment.allowedMate,
+            moveQuality: moment.moveQuality,
+            pin: pin
+        )
+
+        let payload = CoachPayloadBuilder.momentPayload(momentWithPin, input: input)
+        #expect(payload.facts.pin == pin)
+        let encoded = String(data: try JSONEncoder().encode(payload), encoding: .utf8)!
+        #expect(encoded.contains("\"pin\""))
+        let prompt = try CoachPrompt.momentUserMessage(payload: payload)
+        #expect(prompt.contains("\"pin\""))
+        #expect(CoachPrompt.systemPrompt(register: .intermediate).contains("verified alignment"))
+    }
+
     @Test func momentPayloadAndStructuredPromptExposeMoveQualityFacts() throws {
         let input = try loadFixtureInput()
         let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
@@ -135,12 +171,60 @@ struct CoachPayloadBuilderTests {
         #expect(prompt.contains("Do not claim they caused the evaluation change"))
     }
 
+    @Test func pinPromptRestrictsClaimsToVerifiedAlignment() throws {
+        let system = CoachPrompt.systemPrompt(register: .intermediate)
+        #expect(system.contains("verified alignment"))
+        #expect(system.contains("material gain"))
+        #expect(system.contains("evaluation impact"))
+        #expect(system.contains("immobility"))
+        #expect(system.contains("causality"))
+
+        let payload = CoachFactsPayload(
+            betterMove: nil,
+            punishment: nil,
+            ignoredThreat: nil,
+            fork: nil,
+            missedMate: nil,
+            allowedMate: nil,
+            moveQuality: nil,
+            pin: PinFact(
+                ply: 1,
+                pinningPieceKind: .rook,
+                pinningSquare: "e7",
+                pinnedPieceKind: .knight,
+                pinnedSquare: "e2",
+                kingSquare: "e1"
+            )
+        )
+        let moment = CoachMomentPayload(
+            moveNumberLabel: "1...",
+            moverName: "Black",
+            moverIsWhite: false,
+            playedSAN: "Re7",
+            playedUCI: "d7e7",
+            classification: .blunder,
+            moverWinProbabilityBeforePercent: 50,
+            moverWinProbabilityAfterPercent: 20,
+            preMoveFEN: "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1",
+            postMoveFEN: "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2",
+            preMoveLines: [],
+            facts: payload
+        )
+        let instruction = try CoachPrompt.momentUserMessage(payload: moment)
+        #expect(instruction.contains("verified alignment"))
+        #expect(instruction.contains("material gain"))
+        #expect(instruction.contains("evaluation impact"))
+        #expect(instruction.contains("immobility"))
+        #expect(instruction.contains("causality"))
+    }
+
     @Test func legacyCoachFactsPayloadHasAReservedMoveQualityField() throws {
         let legacy = "{\"betterMove\":null,\"punishment\":null,\"missedMate\":null,\"allowedMate\":null}"
         let payload = try JSONDecoder().decode(CoachFactsPayload.self, from: Data(legacy.utf8))
         #expect(payload.ignoredThreat == nil)
         #expect(payload.fork == nil)
         #expect(payload.moveQuality == nil)
+        #expect(payload.pin == nil)
     }
 
     // MARK: - Rating register selection

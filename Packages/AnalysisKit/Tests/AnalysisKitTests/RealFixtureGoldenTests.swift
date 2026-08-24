@@ -84,6 +84,9 @@ private enum TestFixtureError: Error {
         if let moveQuality = moment.moveQuality {
             #expect(FactAuditor.verify(moveQuality, input: input))
         }
+        if let pin = moment.pin {
+            #expect(FactAuditor.verify(pin, input: input))
+        }
     }
 }
 
@@ -178,4 +181,26 @@ private enum TestFixtureError: Error {
     #expect(ply43.capturedPieceKind == .rook)
     #expect(ply43.isCheck == true)
     #expect(ply43.isCheckmate == false)
+}
+
+@Test func realFixtureGamePinsScannedAcrossAllPlies() throws {
+    let input = try loadFixtureInput()
+    var fires: [(ply: Int, fact: PinFact)] = []
+    for p in 1..<input.plies.count {
+        if let fact = ThemeDetector.pin(input: input, ply: p) {
+            fires.append((ply: p, fact: fact))
+        }
+    }
+    #expect(fires.map(\.ply) == [25, 29, 31])
+    #expect(fires.map(\.fact) == [
+        PinFact(ply: 25, pinningPieceKind: .queen, pinningSquare: "d5", pinnedPieceKind: .pawn, pinnedSquare: "f7", kingSquare: "g8"),
+        PinFact(ply: 29, pinningPieceKind: .bishop, pinningSquare: "c4", pinnedPieceKind: .pawn, pinnedSquare: "f7", kingSquare: "g8"),
+        PinFact(ply: 31, pinningPieceKind: .bishop, pinningSquare: "e6", pinnedPieceKind: .pawn, pinnedSquare: "f7", kingSquare: "g8"),
+    ])
+    for fire in fires {
+        #expect(FactAuditor.verify(fire.fact, input: input))
+    }
+
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.shared)
+    #expect(report?.keyMoments.allSatisfy { $0.pin == nil } == true)
 }

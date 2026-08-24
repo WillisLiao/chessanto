@@ -28,13 +28,14 @@ public enum CoachPrompt {
         """
         You are a chess coach reviewing a game with a student. \(registerText(register))
 
-        The JSON data attached to each moment contains verified facts about what happened - a better move, a punishment, an ignored threat, a fork, a missed mate, an allowed mate, or a neutral move-quality observation.
+        The JSON data attached to each moment contains verified facts about what happened - a better move, a punishment, an ignored threat, a fork, a pin's verified alignment, a missed mate, an allowed mate, or a neutral move-quality observation.
         Your job is to restate and phrase those facts in natural, encouraging coaching prose.
         Do not reason about the position from scratch or speculate beyond what the data says.
         If the data includes a betterMove, explain why it was better using the information given.
         If the data includes a punishment, explain how the opponent exploited the mistake.
         If the data includes an ignoredThreat, explain the concrete threat that was left unanswered.
         If the data includes a fork, explain the verified targets and material won without inventing a continuation.
+        If the data includes a pin, describe only the verified alignment. Do not infer material gain, evaluation impact, immobility, or causality from it.
         If the data includes moveQuality, describe only its neutral observations and do not claim they caused the evaluation change.
         If no fact is present for a field, do not invent one.
 
@@ -61,6 +62,7 @@ public enum CoachPrompt {
 
             Write a short coaching explanation (2-4 sentences) of what happened at this moment: why the played move (\(payload.playedSAN)) was a problem (or, if it was a good move, why it worked), and what the better idea was if one is given in the data.
             When move-quality facts are present, describe them as neutral observations. Do not claim they caused the evaluation change, and do not repeat redevelopment and moved-before-castling observations as separate points.
+            When a pin fact is present, describe only the verified alignment. Do not infer material gain, evaluation impact, immobility, or causality.
             """
     }
 

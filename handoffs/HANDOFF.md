@@ -3,10 +3,19 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-24) - absolute-pin fact slice
+
+The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
+`ChessGame.absolutePins(in:)` uses ChessKit-backed hypothetical blocker removal and returns deterministic typed relations for both colors.
+`ThemeDetector.pin(input:ply:)` requires strict replay and compares attacker, pinned-piece, and king identities across the move, including promotion, captures, en-passant, and castling bookkeeping.
+Audited `PinFact` values attach only to already-selected key moments, render as a neutral verified-alignment sentence, and propagate through the backward-compatible Coach payload and restricted prompt wording.
+The real 56-position fixture scan has three hand-reviewed fires at plies 25, 29, and 31, with no fires on the existing selected moments, so golden report and Coach resources remain unchanged.
+ChessCore, AnalysisKit, and CoachKit focused and full package tests pass.
+
 ## Next up
 
 P4.2 fork detection and move-quality flags, P4.5 multi-ply practice, and P4.8's bounded Coach-purpose repair are integrated on `codex/roadmap-completion`; see their entries below.
-Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 pin, discovered-attack, and tempo-wasting-move detectors.
+Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 skewer, discovered-attack, back-rank-weakness, and trapped-piece detectors.
 The [%clk] backlog claim was investigated and confirmed false (no clock parsing exists in the codebase today).
 P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
 P4.2's ignored-threat detector is now implemented; see below.

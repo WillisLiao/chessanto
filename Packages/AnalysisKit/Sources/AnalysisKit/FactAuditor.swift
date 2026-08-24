@@ -62,6 +62,11 @@ public enum FactAuditor {
             && fact.netMaterialGain == expected.netMaterialGain
     }
 
+    public static func verify(_ fact: PinFact, input: ReportInput) -> Bool {
+        guard let expected = ThemeDetector.pin(input: input, ply: fact.ply) else { return false }
+        return fact == expected
+    }
+
     public static func verify(_ fact: MoveQualityFact, input: ReportInput) -> Bool {
         guard let expected = ThemeDetector.moveQuality(input: input, ply: fact.ply) else { return false }
         return fact == expected
@@ -96,7 +101,8 @@ public enum FactAuditor {
             fork: keep(moment.fork, verify: { verify($0, input: input) }, label: "ForkFact"),
             missedMate: keep(moment.missedMate, verify: { verify($0, input: input) }, label: "MissedMateFact"),
             allowedMate: keep(moment.allowedMate, verify: { verify($0, input: input) }, label: "AllowedMateFact"),
-            moveQuality: keep(moment.moveQuality, verify: { verify($0, input: input) }, label: "MoveQualityFact")
+            moveQuality: keep(moment.moveQuality, verify: { verify($0, input: input) }, label: "MoveQualityFact"),
+            pin: keep(moment.pin, verify: { verify($0, input: input) }, label: "PinFact")
         )
     }
 }

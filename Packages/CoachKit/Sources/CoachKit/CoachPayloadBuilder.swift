@@ -26,6 +26,7 @@ public struct CoachFactsPayload: Codable, Sendable {
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
     public let moveQuality: MoveQualityFact?
+    public let pin: PinFact?
 
     public init(
         betterMove: BetterMoveFact?,
@@ -34,7 +35,8 @@ public struct CoachFactsPayload: Codable, Sendable {
         fork: ForkFact? = nil,
         missedMate: MissedMateFact?,
         allowedMate: AllowedMateFact?,
-        moveQuality: MoveQualityFact? = nil
+        moveQuality: MoveQualityFact? = nil,
+        pin: PinFact? = nil
     ) {
         self.betterMove = betterMove
         self.punishment = punishment
@@ -43,6 +45,7 @@ public struct CoachFactsPayload: Codable, Sendable {
         self.missedMate = missedMate
         self.allowedMate = allowedMate
         self.moveQuality = moveQuality
+        self.pin = pin
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -53,6 +56,7 @@ public struct CoachFactsPayload: Codable, Sendable {
         case missedMate
         case allowedMate
         case moveQuality
+        case pin
     }
 
     public init(from decoder: Decoder) throws {
@@ -64,6 +68,7 @@ public struct CoachFactsPayload: Codable, Sendable {
         missedMate = try container.decodeIfPresent(MissedMateFact.self, forKey: .missedMate)
         allowedMate = try container.decodeIfPresent(AllowedMateFact.self, forKey: .allowedMate)
         moveQuality = try container.decodeIfPresent(MoveQualityFact.self, forKey: .moveQuality)
+        pin = try container.decodeIfPresent(PinFact.self, forKey: .pin)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -75,6 +80,7 @@ public struct CoachFactsPayload: Codable, Sendable {
         try container.encodeIfPresent(missedMate, forKey: .missedMate)
         try container.encodeIfPresent(allowedMate, forKey: .allowedMate)
         try container.encodeIfPresent(moveQuality, forKey: .moveQuality)
+        try container.encodeIfPresent(pin, forKey: .pin)
     }
 }
 
@@ -263,7 +269,8 @@ public enum CoachPayloadBuilder {
                 fork: moment.fork,
                 missedMate: moment.missedMate,
                 allowedMate: moment.allowedMate,
-                moveQuality: moment.moveQuality
+                moveQuality: moment.moveQuality,
+                pin: moment.pin
             )
         )
     }

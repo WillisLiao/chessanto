@@ -106,6 +106,9 @@ public enum ReportText {
         if let allowedMate = moment.allowedMate {
             text += " " + allowedMateSentence(allowedMate)
         }
+        if let pin = moment.pin {
+            text += " " + pinSentence(pin)
+        }
         if let moveQuality = moment.moveQuality, let sentence = moveQualitySentence(moveQuality) {
             text += " " + sentence
         }
@@ -224,6 +227,10 @@ public enum ReportText {
             text += " (\(line.joined(separator: " ")))"
         }
         return text + "."
+    }
+
+    private static func pinSentence(_ fact: PinFact) -> String {
+        "This move resulted in an absolute pin: the \(fact.pinningPieceKind.rawValue) on \(fact.pinningSquare) lined up the \(fact.pinnedPieceKind.rawValue) on \(fact.pinnedSquare) with its king on \(fact.kingSquare)."
     }
 
     private static func moveQualitySentence(_ fact: MoveQualityFact) -> String? {

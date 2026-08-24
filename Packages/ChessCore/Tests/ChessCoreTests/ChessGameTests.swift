@@ -239,3 +239,127 @@ private let startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 
     #expect(detail?.movedPieceKind == .pawn)
     #expect(detail?.movedPieceColor == .white)
 }
+
+// MARK: - Absolute pins
+
+@Test func absolutePinsFindsRookPinOnWhiteAndIsSideToMoveIndependent() {
+    let whiteToMove = "k3r3/8/8/8/8/8/4N3/4K3 w - - 0 1"
+    let blackToMove = "k3r3/8/8/8/8/8/4N3/4K3 b - - 0 1"
+    let expected = [AbsolutePin(
+        pinningPieceKind: .rook,
+        pinningSquare: "e8",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e2",
+        pinnedColor: .white,
+        kingSquare: "e1"
+    )]
+
+    #expect(ChessGame.absolutePins(in: whiteToMove) == expected)
+    #expect(ChessGame.absolutePins(in: blackToMove) == expected)
+}
+
+@Test func absolutePinsFindsBishopAndQueenPins() {
+    let bishop = "4k3/8/2n5/1B6/8/8/8/K7 b - - 0 1"
+    let queen = "4k3/4n3/8/8/4Q3/8/8/K7 b - - 0 1"
+
+    #expect(ChessGame.absolutePins(in: bishop) == [AbsolutePin(
+        pinningPieceKind: .bishop,
+        pinningSquare: "b5",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "c6",
+        pinnedColor: .black,
+        kingSquare: "e8"
+    )])
+    #expect(ChessGame.absolutePins(in: queen) == [AbsolutePin(
+        pinningPieceKind: .queen,
+        pinningSquare: "e4",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e7",
+        pinnedColor: .black,
+        kingSquare: "e8"
+    )])
+}
+
+@Test func absolutePinsFindsWhiteAttackerPinningBlackPiece() {
+    let fen = "4k3/4n3/8/8/8/8/8/4R1K1 w - - 0 1"
+    #expect(ChessGame.absolutePins(in: fen) == [AbsolutePin(
+        pinningPieceKind: .rook,
+        pinningSquare: "e1",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e7",
+        pinnedColor: .black,
+        kingSquare: "e8"
+    )])
+}
+
+@Test func absolutePinsExcludesSameColorBlockerAndSecondBlocker() {
+    let sameColorBlocker = "k3r3/1p6/4b3/8/8/8/4R3/4K3 b - - 0 1"
+    let secondBlocker = "k3r3/8/8/8/4n3/8/4R3/4K3 w - - 0 1"
+
+    #expect(ChessGame.absolutePins(in: sameColorBlocker).isEmpty)
+    #expect(ChessGame.absolutePins(in: secondBlocker).isEmpty)
+}
+
+@Test func absolutePinsExcludesRelativePinAndSkewer() {
+    let relativePin = "7k/4r3/4Q3/8/8/8/8/7K w - - 0 1"
+    let skewer = "4r3/4K3/8/8/4Q3/8/8/7k w - - 0 1"
+
+    #expect(ChessGame.absolutePins(in: relativePin).isEmpty)
+    #expect(ChessGame.absolutePins(in: skewer).isEmpty)
+}
+
+@Test func absolutePinsFindsBothRelationsInPinnedSquareThenAttackerOrder() {
+    let fen = "k3r3/8/8/8/8/8/4N3/r1B1K3 w - - 0 1"
+    let expected = [
+        AbsolutePin(
+            pinningPieceKind: .rook,
+            pinningSquare: "a1",
+            pinnedPieceKind: .bishop,
+            pinnedSquare: "c1",
+            pinnedColor: .white,
+            kingSquare: "e1"
+        ),
+        AbsolutePin(
+            pinningPieceKind: .rook,
+            pinningSquare: "e8",
+            pinnedPieceKind: .knight,
+            pinnedSquare: "e2",
+            pinnedColor: .white,
+            kingSquare: "e1"
+        ),
+    ]
+
+    #expect(ChessGame.absolutePins(in: fen) == expected)
+}
+
+@Test func absolutePinsRejectsMalformedRanksAndKingCounts() {
+    let malformedRank = "4K2/8/8/8/8/8/8/4k3 w - - 0 1"
+    let missingKing = "8/8/8/8/8/8/4N3/4K3 w - - 0 1"
+    let duplicateKing = "4k3/8/8/8/8/8/8/4K1K1 w - - 0 1"
+
+    #expect(ChessGame.absolutePins(in: malformedRank).isEmpty)
+    #expect(ChessGame.absolutePins(in: missingKing).isEmpty)
+    #expect(ChessGame.absolutePins(in: duplicateKing).isEmpty)
+}
+
+@Test func absolutePinsRequiresValidSideAndCounters() {
+    let invalidSide = "k3r3/8/8/8/8/8/4N3/4K3 x - - 0 1"
+    let negativeHalfmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - -1 1"
+    let zeroFullmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - 0 0"
+
+    #expect(ChessGame.absolutePins(in: invalidSide).isEmpty)
+    #expect(ChessGame.absolutePins(in: negativeHalfmove).isEmpty)
+    #expect(ChessGame.absolutePins(in: zeroFullmove).isEmpty)
+}
+
+@Test func absolutePinsDetectsPromotionAttackerPosition() {
+    let postPromotion = "4R3/8/8/8/4n3/8/8/K3k3 b - - 0 1"
+    #expect(ChessGame.absolutePins(in: postPromotion) == [AbsolutePin(
+        pinningPieceKind: .rook,
+        pinningSquare: "e8",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e4",
+        pinnedColor: .black,
+        kingSquare: "e1"
+    )])
+}

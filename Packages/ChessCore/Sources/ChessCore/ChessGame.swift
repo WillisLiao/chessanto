@@ -241,6 +241,41 @@ public enum PieceColor: String, CaseIterable, Sendable, Codable {
     }
 }
 
+/// One structural absolute pin in a single position.
+public struct AbsolutePin: Hashable, Sendable {
+    public let pinningPieceKind: PieceKind
+    public let pinningSquare: String
+    public let pinnedPieceKind: PieceKind
+    public let pinnedSquare: String
+    public let pinnedColor: PieceColor
+    public let kingSquare: String
+
+    public init(
+        pinningPieceKind: PieceKind,
+        pinningSquare: String,
+        pinnedPieceKind: PieceKind,
+        pinnedSquare: String,
+        pinnedColor: PieceColor,
+        kingSquare: String
+    ) {
+        self.pinningPieceKind = pinningPieceKind
+        self.pinningSquare = pinningSquare
+        self.pinnedPieceKind = pinnedPieceKind
+        self.pinnedSquare = pinnedSquare
+        self.pinnedColor = pinnedColor
+        self.kingSquare = kingSquare
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pinningPieceKind.rawValue)
+        hasher.combine(pinningSquare)
+        hasher.combine(pinnedPieceKind.rawValue)
+        hasher.combine(pinnedSquare)
+        hasher.combine(pinnedColor.rawValue)
+        hasher.combine(kingSquare)
+    }
+}
+
 extension Piece.Kind {
     fileprivate var asPieceKind: PieceKind {
         switch self {
@@ -281,6 +316,156 @@ extension Move {
 }
 
 extension ChessGame {
+    /// Inventories structural absolute pins in a single position.
+    ///
+    /// Each candidate non-king piece is removed from a copied ChessKit
+    /// position, then ChessKit's legal-move generator is asked which enemy
+    /// rook, bishop, or queen can reach that piece's king. This deliberately
+    /// keeps slider geometry and legality in ChessKit rather than duplicating
+    /// ray traversal here.
+    public static func absolutePins(in fen: String) -> [AbsolutePin] {
+        guard let fields = strictFENFields(fen),
+            fields[1] == "w" || fields[1] == "b",
+            let halfmoveClock = Int(fields[4]), halfmoveClock >= 0,
+            let fullmoveNumber = Int(fields[5]), fullmoveNumber > 0,
+            let position = Position(fen: fen),
+            let board = strictPieceBoard(fields[0]),
+            board.whiteKings == 1,
+            board.blackKings == 1
+        else {
+            return []
+        }
+
+        let kings = Dictionary(uniqueKeysWithValues: position.pieces.compactMap { piece -> (Piece.Color, Piece)? in
+            guard piece.kind == .king else { return nil }
+            return (piece.color, piece)
+        })
+        let originalBoard = Board(position: position)
+        let sliders: Set<Piece.Kind> = [.rook, .bishop, .queen]
+        var pins: [AbsolutePin] = []
+
+        for candidate in position.pieces where candidate.kind != .king {
+            guard let king = kings[candidate.color] else { return [] }
+            guard let hypotheticalBoard = boardFieldRemovingPiece(
+                from: fields[0], square: candidate.square.notation
+            ) else { return [] }
+            var hypotheticalFields = fields
+            hypotheticalFields[0] = hypotheticalBoard
+            guard let hypothetical = Position(fen: hypotheticalFields.joined(separator: " ")) else { return [] }
+            let board = Board(position: hypothetical)
+
+            for attacker in position.pieces where attacker.color != candidate.color && sliders.contains(attacker.kind) {
+                guard originalBoard.legalMoves(forPieceAt: attacker.square).contains(candidate.square) else { continue }
+                guard !originalBoard.legalMoves(forPieceAt: attacker.square).contains(king.square) else { continue }
+                guard board.legalMoves(forPieceAt: attacker.square).contains(king.square) else { continue }
+                pins.append(AbsolutePin(
+                    pinningPieceKind: attacker.kind.asPieceKind,
+                    pinningSquare: attacker.square.notation,
+                    pinnedPieceKind: candidate.kind.asPieceKind,
+                    pinnedSquare: candidate.square.notation,
+                    pinnedColor: candidate.color.asPieceColor,
+                    kingSquare: king.square.notation
+                ))
+            }
+        }
+
+        return pins.sorted {
+            if $0.pinnedSquare != $1.pinnedSquare {
+                return $0.pinnedSquare < $1.pinnedSquare
+            }
+            return $0.pinningSquare < $1.pinningSquare
+        }
+    }
+
+    private struct StrictPieceBoard {
+        let whiteKings: Int
+        let blackKings: Int
+    }
+
+    private static func strictFENFields(_ fen: String) -> [String]? {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        return fields.count == 6 ? fields : nil
+    }
+
+    private static func strictPieceBoard(_ boardField: String) -> StrictPieceBoard? {
+        let ranks = boardField.split(separator: "/", omittingEmptySubsequences: false)
+        guard ranks.count == 8 else { return nil }
+
+        var whiteKings = 0
+        var blackKings = 0
+        for rank in ranks {
+            var fileCount = 0
+            for character in rank {
+                if let emptySquares = character.wholeNumberValue,
+                    (1...8).contains(emptySquares)
+                {
+                    fileCount += emptySquares
+                    continue
+                }
+
+                guard "pnbrqkPNBRQK".contains(character) else { return nil }
+                if character == "K" { whiteKings += 1 }
+                if character == "k" { blackKings += 1 }
+                fileCount += 1
+            }
+            guard fileCount == 8 else { return nil }
+        }
+
+        return StrictPieceBoard(whiteKings: whiteKings, blackKings: blackKings)
+    }
+
+    private static func boardFieldRemovingPiece(from boardField: String, square: String) -> String? {
+        let ranks = boardField.split(separator: "/", omittingEmptySubsequences: false)
+        guard ranks.count == 8,
+            let file = "abcdefgh".firstIndex(of: square.first ?? "\0"),
+            let rank = square.last?.wholeNumberValue,
+            (1...8).contains(rank)
+        else { return nil }
+
+        var rows: [[Character?]] = []
+        for rankString in ranks {
+            var row: [Character?] = []
+            for character in rankString {
+                if let emptySquares = character.wholeNumberValue,
+                    (1...8).contains(emptySquares)
+                {
+                    row.append(contentsOf: Array(repeating: nil, count: emptySquares))
+                } else if "pnbrqkPNBRQK".contains(character) {
+                    row.append(character)
+                } else {
+                    return nil
+                }
+            }
+            guard row.count == 8 else { return nil }
+            rows.append(row)
+        }
+
+        let fileIndex = "abcdefgh".distance(from: "abcdefgh".startIndex, to: file)
+        let rowIndex = 8 - rank
+        guard rows[rowIndex][fileIndex] != nil else { return nil }
+        rows[rowIndex][fileIndex] = nil
+
+        return rows.map { row in
+            var result = ""
+            var emptySquares = 0
+            for square in row {
+                if let piece = square {
+                    if emptySquares > 0 {
+                        result += String(emptySquares)
+                        emptySquares = 0
+                    }
+                    result.append(piece)
+                } else {
+                    emptySquares += 1
+                }
+            }
+            if emptySquares > 0 {
+                result += String(emptySquares)
+            }
+            return result
+        }.joined(separator: "/")
+    }
+
     /// Enemy pieces currently reachable by the piece at `square` in `fen`.
     ///
     /// ChessKit's legal-move generator supplies the attack destinations, so

@@ -138,6 +138,35 @@ public struct ForkFact: Sendable, Equatable, Codable {
     }
 }
 
+/// A replay-verified absolute pin created by the played move.
+///
+/// This fact describes only the verified alignment. It makes no claim about
+/// mobility, material, evaluation, causality, or move classification.
+public struct PinFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let pinningPieceKind: PieceKind
+    public let pinningSquare: String
+    public let pinnedPieceKind: PieceKind
+    public let pinnedSquare: String
+    public let kingSquare: String
+
+    public init(
+        ply: Int,
+        pinningPieceKind: PieceKind,
+        pinningSquare: String,
+        pinnedPieceKind: PieceKind,
+        pinnedSquare: String,
+        kingSquare: String
+    ) {
+        self.ply = ply
+        self.pinningPieceKind = pinningPieceKind
+        self.pinningSquare = pinningSquare
+        self.pinnedPieceKind = pinnedPieceKind
+        self.pinnedSquare = pinnedSquare
+        self.kingSquare = kingSquare
+    }
+}
+
 /// The game's opening name/deviation point, from the bundled opening book.
 public struct OpeningFact: Sendable, Equatable, Codable {
     public let eco: String
@@ -196,6 +225,7 @@ public struct KeyMoment: Sendable, Equatable, Codable {
     public let missedMate: MissedMateFact?
     public let allowedMate: AllowedMateFact?
     public let moveQuality: MoveQualityFact?
+    public let pin: PinFact?
 
     public init(
         ply: Int,
@@ -206,7 +236,8 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         fork: ForkFact? = nil,
         missedMate: MissedMateFact? = nil,
         allowedMate: AllowedMateFact? = nil,
-        moveQuality: MoveQualityFact? = nil
+        moveQuality: MoveQualityFact? = nil,
+        pin: PinFact? = nil
     ) {
         self.ply = ply
         self.evalSwing = evalSwing
@@ -217,5 +248,6 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         self.missedMate = missedMate
         self.allowedMate = allowedMate
         self.moveQuality = moveQuality
+        self.pin = pin
     }
 }

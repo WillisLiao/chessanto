@@ -41,6 +41,26 @@ private func forkReportInput() -> ReportInput {
     )
 }
 
+private func pinReportInput() -> ReportInput {
+    let preFEN = "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1"
+    let postFEN = "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    return ReportInput(
+        plies: [
+            PlyRecord(
+                fen: preFEN,
+                lines: [RankedLine(rank: 1, scoreCentipawns: 0, mateIn: nil, principalVariationUCI: [], depth: 20)],
+                playedUCI: nil
+            ),
+            PlyRecord(
+                fen: postFEN,
+                lines: [RankedLine(rank: 1, scoreCentipawns: 1000, mateIn: nil, principalVariationUCI: [], depth: 20)],
+                playedUCI: "d7e7"
+            ),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+}
+
 @Test func reportBuilderCarriesForkThroughAuditIntoKeyMoment() {
     let input = forkReportInput()
     let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
@@ -53,6 +73,54 @@ private func forkReportInput() -> ReportInput {
     if let fork = moment.fork {
         #expect(FactAuditor.verify(fork, input: input))
     }
+}
+
+@Test func reportBuilderCarriesPinThroughAuditIntoKeyMoment() {
+    let input = pinReportInput()
+    let report = ReportBuilder.build(input: input, openingBook: OpeningBook.build(from: []))
+    #expect(report?.keyMoments.count == 1)
+    guard let moment = report?.keyMoments.first else { return }
+    let expected = PinFact(
+        ply: 1,
+        pinningPieceKind: .rook,
+        pinningSquare: "e7",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e2",
+        kingSquare: "e1"
+    )
+    #expect(moment.pin == expected)
+    #expect(FactAuditor.verify(expected, input: input))
+}
+
+@Test func factAuditorDropsAPinFactWithACorruptedField() {
+    let input = pinReportInput()
+    let real = ThemeDetector.pin(input: input, ply: 1)!
+    let corrupted = PinFact(
+        ply: real.ply,
+        pinningPieceKind: real.pinningPieceKind,
+        pinningSquare: real.pinningSquare,
+        pinnedPieceKind: real.pinnedPieceKind,
+        pinnedSquare: "e3",
+        kingSquare: real.kingSquare
+    )
+    #expect(!FactAuditor.verify(corrupted, input: input))
+}
+
+@Test func reportTextRendersAPinAsNeutralVerifiedAlignment() {
+    let report = ReportBuilder.build(input: pinReportInput(), openingBook: OpeningBook.build(from: []))!
+    let summary = ReportText.momentSummary(report.keyMoments[0], report: report)
+    #expect(summary.contains("This move resulted in an absolute pin: the rook on e7 lined up the knight on e2 with its king on e1."))
+    #expect(!summary.contains("because"))
+    #expect(!summary.contains("cannot move"))
+    #expect(!summary.contains("trapped"))
+    #expect(!summary.contains("material"))
+    #expect(!summary.contains("evaluation"))
+    #expect(!summary.contains("caused"))
+}
+
+@Test func pinFactsDoNotChangeKeyMomentSelectionPriority() {
+    let input = pinReportInput()
+    #expect(KeyMomentSelector.selectPlies(classifications: [.excellent], input: input, register: .beginner).isEmpty)
 }
 
 @Test func reportBuilderProducesTheExpectedKeyMomentWithAllFacts() {

@@ -253,6 +253,87 @@ public enum ThemeDetector {
         )
     }
 
+    /// Fires only when one and exactly one new absolute-pin relation is
+    /// created by a strictly replay-verified move.
+    ///
+    /// Relation identity is tracked by the physical attacker, pinned piece,
+    /// and king rather than by their squares or kinds. Promotions therefore
+    /// keep their identity, castling moves both identities, and captures
+    /// remove identities before the pre/post comparison.
+    public static func pin(input: ReportInput, ply p: Int) -> PinFact? {
+        guard p >= 1, p < input.plies.count else { return nil }
+        let preMove = input.plies[p - 1]
+        let postMove = input.plies[p]
+        guard validPinFEN(preMove.fen), validPinFEN(postMove.fen),
+            let playedUCI = postMove.playedUCI,
+            let expectedColor = sideToMove(in: preMove.fen),
+            let tracking = trackMainline(input: input, upToPly: p),
+            tracking.replayed.uci == playedUCI,
+            tracking.replayed.movedPieceColor == expectedColor,
+            input.moverIsWhite(atPly: p) == (expectedColor == .white)
+        else {
+            return nil
+        }
+
+        let preRelations = ChessGame.absolutePins(in: preMove.fen)
+        let postRelations = ChessGame.absolutePins(in: tracking.replayed.resultingFEN)
+        let preIdentities = Set(preRelations.compactMap {
+            pinRelationIdentity($0, board: tracking.boardBeforeCurrentMove)
+        })
+        let newRelations = postRelations.filter {
+            guard let identity = pinRelationIdentity($0, board: tracking.boardAfterCurrentMove) else {
+                return false
+            }
+            return !preIdentities.contains(identity)
+        }
+        guard newRelations.count == 1, let relation = newRelations.first else { return nil }
+
+        return PinFact(
+            ply: p,
+            pinningPieceKind: relation.pinningPieceKind,
+            pinningSquare: relation.pinningSquare,
+            pinnedPieceKind: relation.pinnedPieceKind,
+            pinnedSquare: relation.pinnedSquare,
+            kingSquare: relation.kingSquare
+        )
+    }
+
+    private static func validPinFEN(_ fen: String) -> Bool {
+        guard let fields = fenFields(fen),
+            fields[1] == "w" || fields[1] == "b",
+            ChessGame.isValidFEN(fen),
+            let pieces = parsePieceBoard(fen: fen)
+        else {
+            return false
+        }
+        let whiteKings = pieces.values.filter { $0.kind == .king && $0.color == .white }.count
+        let blackKings = pieces.values.filter { $0.kind == .king && $0.color == .black }.count
+        return whiteKings == 1 && blackKings == 1
+    }
+
+    private static func pinRelationIdentity(
+        _ relation: AbsolutePin,
+        board: [String: TrackedPiece]
+    ) -> PinRelationIdentity? {
+        guard let pinningPiece = board[relation.pinningSquare],
+            let pinnedPiece = board[relation.pinnedSquare],
+            let king = board[relation.kingSquare],
+            pinningPiece.kind == relation.pinningPieceKind,
+            pinningPiece.color == relation.pinnedColor.opposite,
+            pinnedPiece.kind == relation.pinnedPieceKind,
+            pinnedPiece.color == relation.pinnedColor,
+            king.kind == .king,
+            king.color == relation.pinnedColor
+        else {
+            return nil
+        }
+        return PinRelationIdentity(
+            pinningPieceID: pinningPiece.id,
+            pinnedPieceID: pinnedPiece.id,
+            kingID: king.id
+        )
+    }
+
     private static func forkPieceKind(played: ReplayedMove, playedUCI: String) -> PieceKind {
         guard played.movedPieceKind == .pawn, playedUCI.count == 5 else { return played.movedPieceKind }
         switch playedUCI.last {
@@ -507,13 +588,22 @@ public enum ThemeDetector {
         let fromSquare: String
         let preMoveFullmoveNumber: Int
         let replayed: ReplayedMove
+        let boardBeforeCurrentMove: [String: TrackedPiece]
+        let boardAfterCurrentMove: [String: TrackedPiece]
     }
 
     private struct TrackedPiece: Equatable {
+        let id: Int
         var kind: PieceKind
         let color: PieceColor
         var moveCount: Int
         let isOriginalQueen: Bool
+    }
+
+    private struct PinRelationIdentity: Hashable {
+        let pinningPieceID: Int
+        let pinnedPieceID: Int
+        let kingID: Int
     }
 
     private struct ParsedUCI {
@@ -643,8 +733,10 @@ public enum ThemeDetector {
     private static func parseInitialBoard(fen: String) -> [String: TrackedPiece]? {
         guard let pieces = parsePieceBoard(fen: fen) else { return nil }
         var board: [String: TrackedPiece] = [:]
-        for (square, piece) in pieces {
+        for (id, square) in pieces.keys.sorted().enumerated() {
+            guard let piece = pieces[square] else { return nil }
             board[square] = TrackedPiece(
+                id: id,
                 kind: piece.kind,
                 color: piece.color,
                 moveCount: 0,
@@ -718,6 +810,7 @@ public enum ThemeDetector {
             let sourceBeforeCurrentMove = source
             let whiteCastledBeforePlyP = whiteCastled
             let blackCastledBeforePlyP = blackCastled
+            let boardBeforeCurrentMove = board
 
             guard applyTrackedMove(
                 board: &board,
@@ -736,7 +829,9 @@ public enum ThemeDetector {
                     blackCastledBeforePlyP: blackCastledBeforePlyP,
                     fromSquare: parsed.from,
                     preMoveFullmoveNumber: preMoveFullmoveNumber,
-                    replayed: replayed
+                    replayed: replayed,
+                    boardBeforeCurrentMove: boardBeforeCurrentMove,
+                    boardAfterCurrentMove: board
                 )
             }
         }

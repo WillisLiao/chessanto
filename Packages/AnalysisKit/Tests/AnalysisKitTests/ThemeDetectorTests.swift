@@ -7,6 +7,267 @@ private func line(rank: Int, cp: Int?, mate: Int?, pv: [String], depth: Int = 20
     RankedLine(rank: rank, scoreCentipawns: cp, mateIn: mate, principalVariationUCI: pv, depth: depth)
 }
 
+private func pinInput(preFEN: String, uci: String, postFEN: String) -> ReportInput {
+    ReportInput(
+        plies: [
+            PlyRecord(fen: preFEN, lines: [], playedUCI: nil),
+            PlyRecord(fen: postFEN, lines: [], playedUCI: uci),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+}
+
+private func pinFact(
+    pinningPieceKind: PieceKind,
+    pinningSquare: String,
+    pinnedPieceKind: PieceKind,
+    pinnedSquare: String,
+    kingSquare: String
+) -> PinFact {
+    PinFact(
+        ply: 1,
+        pinningPieceKind: pinningPieceKind,
+        pinningSquare: pinningSquare,
+        pinnedPieceKind: pinnedPieceKind,
+        pinnedSquare: pinnedSquare,
+        kingSquare: kingSquare
+    )
+}
+
+// MARK: - PinFact
+
+@Test func pinFactFiresForTheDirectRookFixture() {
+    let input = pinInput(
+        preFEN: "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1",
+        uci: "d7e7",
+        postFEN: "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .rook,
+        pinningSquare: "e7",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e2",
+        kingSquare: "e1"
+    ))
+}
+
+@Test func pinFactFiresForTheDirectBishopFixture() {
+    let input = pinInput(
+        preFEN: "4k3/8/2n5/8/2B5/8/8/K7 w - - 0 1",
+        uci: "c4b5",
+        postFEN: "4k3/8/2n5/1B6/8/8/8/K7 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .bishop,
+        pinningSquare: "b5",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "c6",
+        kingSquare: "e8"
+    ))
+}
+
+@Test func pinFactFiresForTheDirectQueenFixture() {
+    let input = pinInput(
+        preFEN: "4k3/4n3/8/8/1Q6/8/8/K7 w - - 0 1",
+        uci: "b4e4",
+        postFEN: "4k3/4n3/8/8/4Q3/8/8/K7 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .queen,
+        pinningSquare: "e4",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e7",
+        kingSquare: "e8"
+    ))
+}
+
+@Test func pinFactFiresForAPromotedRookAttacker() {
+    let input = pinInput(
+        preFEN: "8/4P3/8/8/4n3/8/8/K3k3 w - - 0 1",
+        uci: "e7e8r",
+        postFEN: "4R3/8/8/8/4n3/8/8/K3k3 b - - 0 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .rook,
+        pinningSquare: "e8",
+        pinnedPieceKind: .knight,
+        pinnedSquare: "e4",
+        kingSquare: "e1"
+    ))
+}
+
+@Test func pinFactDoesNotFireForAPreExistingPinOnAnUnrelatedMove() {
+    let input = pinInput(
+        preFEN: "k3r3/p7/8/8/8/8/4R3/4K3 b - - 0 1",
+        uci: "a7a6",
+        postFEN: "k3r3/8/p7/8/8/8/4R3/4K3 w - - 0 2"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+}
+
+@Test func pinFactDoesNotFireWhenPinnedPieceCapturesItsAttacker() {
+    let input = pinInput(
+        preFEN: "k3r3/8/8/8/8/8/4R3/4K3 w - - 0 1",
+        uci: "e2e8",
+        postFEN: "k7/8/8/8/8/8/8/4K3 b - - 0 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+}
+
+@Test func pinFactDoesNotFireWhenPinnedPieceMovesAlongTheSameLine() {
+    let input = pinInput(
+        preFEN: "k3r3/8/8/8/8/8/4R3/4K3 w - - 0 1",
+        uci: "e2e3",
+        postFEN: "k3r3/8/8/8/8/4R3/8/4K3 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+}
+
+@Test func pinFactFiresWhenMovingABlockerRevealsAPin() {
+    let input = pinInput(
+        preFEN: "k3r3/8/8/8/4N3/8/4R3/4K3 w - - 0 1",
+        uci: "e4c5",
+        postFEN: "k3r3/8/8/2N5/8/8/4R3/4K3 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .rook,
+        pinningSquare: "e8",
+        pinnedPieceKind: .rook,
+        pinnedSquare: "e2",
+        kingSquare: "e1"
+    ))
+}
+
+@Test func pinFactDoesNotFireWhenASameColorBlockerRemains() {
+    let input = pinInput(
+        preFEN: "k3r3/1p6/4b3/8/8/8/4R3/4K3 b - - 0 1",
+        uci: "b7b6",
+        postFEN: "k3r3/8/1p2b3/8/8/8/4R3/4K3 w - - 0 2"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+}
+
+@Test func pinFactFiresWhenASameColorBlockerMovesAway() {
+    let input = pinInput(
+        preFEN: "k3r3/1p6/4b3/8/8/8/4R3/4K3 b - - 0 1",
+        uci: "e6f5",
+        postFEN: "k3r3/1p6/8/5b2/8/8/4R3/4K3 w - - 1 2"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .rook,
+        pinningSquare: "e8",
+        pinnedPieceKind: .rook,
+        pinnedSquare: "e2",
+        kingSquare: "e1"
+    ))
+}
+
+@Test func pinFactFiresForAnInterpositionIntoCheck() {
+    let input = pinInput(
+        preFEN: "k3r3/8/8/8/8/3B4/8/4K3 w - - 0 1",
+        uci: "d3e2",
+        postFEN: "k3r3/8/8/8/8/8/4B3/4K3 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == pinFact(
+        pinningPieceKind: .rook,
+        pinningSquare: "e8",
+        pinnedPieceKind: .bishop,
+        pinnedSquare: "e2",
+        kingSquare: "e1"
+    ))
+}
+
+@Test func pinFactExcludesRelativePinAndSkewerTransitions() {
+    let relative = pinInput(
+        preFEN: "7k/4r3/4Q3/8/8/8/8/7K w - - 0 1",
+        uci: "h1g1",
+        postFEN: "7k/4r3/4Q3/8/8/8/6K1/8 b - - 1 1"
+    )
+    let skewer = pinInput(
+        preFEN: "4r3/4K3/8/8/4Q3/8/8/7k w - - 0 1",
+        uci: "e7f7",
+        postFEN: "4r3/5K2/8/8/4Q3/8/8/7k b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: relative, ply: 1) == nil)
+    #expect(ThemeDetector.pin(input: skewer, ply: 1) == nil)
+}
+
+@Test func pinFactRejectsWrongSideMalformedAndStaleTransitions() {
+    let wrongSide = pinInput(
+        preFEN: "k7/3r4/8/8/8/8/4N3/4K3 w - - 0 1",
+        uci: "d7e7",
+        postFEN: "k7/4r3/8/8/8/8/4N3/4K3 b - - 1 1"
+    )
+    let malformed = pinInput(
+        preFEN: "4K2/8/8/8/8/8/4N3/4k3 b - - 0 1",
+        uci: "d7e7",
+        postFEN: "4K2/4r3/8/8/8/8/4N3/4k3 w - - 1 2"
+    )
+    let stalePost = pinInput(
+        preFEN: "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1",
+        uci: "d7e7",
+        postFEN: "k7/3r4/8/8/8/8/4N3/4K3 w - - 1 2"
+    )
+    #expect(ThemeDetector.pin(input: wrongSide, ply: 1) == nil)
+    #expect(ThemeDetector.pin(input: malformed, ply: 1) == nil)
+    #expect(ThemeDetector.pin(input: stalePost, ply: 1) == nil)
+}
+
+@Test func pinFactRejectsMissingKingAndMalformedMoves() {
+    let missingKing = pinInput(
+        preFEN: "8/8/8/8/8/8/4N3/4K3 b - - 0 1",
+        uci: "d7e7",
+        postFEN: "8/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    )
+    let missingPromotionSuffix = pinInput(
+        preFEN: "8/4P3/8/8/4n3/8/8/K3k3 w - - 0 1",
+        uci: "e7e8",
+        postFEN: "4R3/8/8/8/4n3/8/8/K3k3 b - - 0 1"
+    )
+    let truncatedUCI = pinInput(
+        preFEN: "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1",
+        uci: "d7e",
+        postFEN: "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    )
+    let illegalUCI = pinInput(
+        preFEN: "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1",
+        uci: "d7e2",
+        postFEN: "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    )
+    #expect(ThemeDetector.pin(input: missingKing, ply: 1) == nil)
+    #expect(ThemeDetector.pin(input: missingPromotionSuffix, ply: 1) == nil)
+    #expect(ThemeDetector.pin(input: truncatedUCI, ply: 1) == nil)
+    #expect(ThemeDetector.pin(input: illegalUCI, ply: 1) == nil)
+}
+
+@Test func pinFactRejectsAmbiguousMultipleNewRelations() {
+    let input = pinInput(
+        preFEN: "r3k3/8/2p1n3/8/Q7/8/R7/K7 w - - 0 1",
+        uci: "a4e4",
+        postFEN: "r3k3/8/2p1n3/8/4Q3/8/R7/K7 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+}
+
+@Test func pinFactRejectsOutOfRangePly() {
+    let input = pinInput(
+        preFEN: "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 1",
+        uci: "d7e7",
+        postFEN: "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 0) == nil)
+    #expect(ThemeDetector.pin(input: input, ply: 2) == nil)
+}
+
+@Test func pinFactKeepsAnExistingRelationThroughLegalCastling() {
+    let input = pinInput(
+        preFEN: "4k3/3n4/8/1B6/8/8/8/4K2R w K - 0 1",
+        uci: "e1g1",
+        postFEN: "4k3/3n4/8/1B6/8/8/8/5RK1 b - - 1 1"
+    )
+    #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
+}
+
 // MARK: - PunishmentFact
 
 @Test func punishmentFactFiresOnUndefendedHangCapturesJustMovedPiece() {
