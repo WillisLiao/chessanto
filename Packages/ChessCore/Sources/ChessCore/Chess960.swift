@@ -248,12 +248,12 @@ public enum Chess960 {
             var whiteFiles: [Int] = []
             if let q = whiteQueensideRookFile { whiteFiles.append(q) }
             if let k = whiteKingsideRookFile { whiteFiles.append(k) }
-            for f in whiteFiles.sorted(by: >) { res.append(files[f]) }
+            for f in whiteFiles.sorted() { res.append(files[f]) }
 
             var blackFiles: [Int] = []
             if let q = blackQueensideRookFile { blackFiles.append(q) }
             if let k = blackKingsideRookFile { blackFiles.append(k) }
-            for f in blackFiles.sorted(by: >) { res.append(files[f].lowercased()) }
+            for f in blackFiles.sorted() { res.append(files[f].lowercased()) }
 
             return res.isEmpty ? "-" : res
         }

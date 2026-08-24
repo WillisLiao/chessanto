@@ -189,6 +189,99 @@ import Testing
     #expect(afterKingMove.split(separator: " ")[2] == "-")
 }
 
+@Test func shredderFENRightsAreInCanonicalAscendingOrder() {
+    // After White castles kingside, remaining rights (Black's a+h rooks)
+    // must be written in canonical ascending Shredder order "ah", not "ha".
+    let cleared = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/R3K2R w AHah - 0 1"
+    #expect(ChessGame.isValidFEN(cleared))
+    let castled = Chess960.performCastle(color: .white, side: .kingside, in: cleared)
+    #expect(castled != nil)
+    #expect(castled?.resultingFEN.split(separator: " ")[2] == "ah")
+}
+
+@Test func plainOneFileKingStepIsNotCastled() {
+    // King on f1 with kingside rook on h1: the single-step move f1-g1 must
+    // stay a plain king move; castling is king-onto-rook or multi-file jump.
+    let fen = "7k/8/8/8/8/8/8/R4K1R w HA - 0 1"
+    var game = ChessGame(startingFEN: fen)
+    let played = game.playMove(from: SquareCoordinate(notation: "f1"), to: SquareCoordinate(notation: "g1"), at: game.startIndex)
+    #expect(played != nil)
+    let after = game.fen(at: played!)
+    #expect(after?.hasPrefix("7k/8/8/8/8/8/8/R5KR b") == true, "Rook must still be on h1, got \(String(describing: after))")
+
+    // Dropping the king onto its own rook (h1) castles.
+    var game2 = ChessGame(startingFEN: fen)
+    let castleMove = game2.playMove(from: SquareCoordinate(notation: "f1"), to: SquareCoordinate(notation: "h1"), at: game2.startIndex)
+    #expect(castleMove != nil)
+    let afterCastle = game2.fen(at: castleMove!)
+    #expect(afterCastle?.contains("R4RK1") == true, "King g1 rook f1 expected, got \(String(describing: afterCastle))")
+}
+
+@Test func replayLineHandlesGenericChess960CastlingUCI() {
+    // King on c1, rooks a1/h1: kingside castle UCI is c1g1 (multi-file king
+    // jump), landing king g1 / rook f1.
+    let explicit = "rbk4r/pppppppp/8/8/8/8/PPPPPPPP/RBK4R w AHah - 0 1"
+    let replayed = ChessGame.replayLine(fromUCI: ["c1g1"], startingFEN: explicit)
+    #expect(replayed.count == 1)
+    #expect(replayed.first?.san == "O-O")
+    #expect(replayed.first?.resultingFEN.contains("RB3RK1") == true,
+            "King must land on g1 and rook on f1, got \(String(describing: replayed.first?.resultingFEN))")
+
+    // A plain ROOK move to the c-file must not be mistaken for castling
+    // even though it lands on the queenside castled-king file.
+    let rookUCI = ChessGame.replayLine(fromUCI: ["a1c1"], startingFEN: "7k/8/8/8/8/8/8/R3K2R w HA - 0 1")
+    #expect(rookUCI.count == 1)
+    #expect(rookUCI.first?.movedPieceKind == .rook)
+}
+
+@Test func castlingRightsSurviveNormalMovesInReplayAndPlay() {
+    // ChessKit's FEN serialization strips Shredder rights, so a normal move
+    // must carry them forward or later castling would be impossible.
+    let fen = "rbk4r/pppppppp/8/8/8/8/PPPPPPPP/RBK4R w AHah - 0 1"
+
+    let replayed = ChessGame.replayLine(fromUCI: ["a2a3"], startingFEN: fen)
+    #expect(replayed.count == 1)
+    #expect(replayed.first?.resultingFEN.contains(" AHah ") == true,
+            "Rights must survive a normal move in replay, got \(String(describing: replayed.first?.resultingFEN))")
+
+    var game = ChessGame(startingFEN: fen)
+    let played = game.playMove(from: SquareCoordinate(notation: "a2"), to: SquareCoordinate(notation: "a3"), at: game.startIndex)
+    #expect(played != nil)
+    #expect(game.fen(at: played!)?.contains(" AHah ") == true,
+            "Rights must survive a normal move in play, got \(String(describing: game.fen(at: played!)))")
+
+    // And castling still works afterwards: multi-file king jump to g-file.
+    _ = game.playMove(from: SquareCoordinate(notation: "h7"), to: SquareCoordinate(notation: "h6"), at: played!)
+    let blackReplied = game.mainlineIndices[1]
+    let castled = game.playMove(from: SquareCoordinate(notation: "c1"), to: SquareCoordinate(notation: "g1"), at: blackReplied)
+    #expect(castled != nil)
+    let afterCastle = game.fen(at: castled!)
+    #expect(afterCastle?.contains("RB3RK1") == true, "King g1 rook f1 expected, got \(String(describing: afterCastle))")
+    #expect(afterCastle?.contains(" ah ") == true,
+            "Only Black rights remain after White castles, got \(String(describing: afterCastle))")
+}
+
+@Test func chess960PGNExportRoundTripsHeadersAndMoves() throws {
+    let game = try ChessGame(pgn: lichessFixture960)
+    let reparsed = try ChessGame(pgn: game.pgnString)
+
+    #expect(reparsed.tags["Variant"] == "Chess960")
+    #expect(reparsed.tags["SetUp"] == "1")
+    #expect(reparsed.tags["FEN"] == game.tags["FEN"])
+    #expect(reparsed.mainlineIndices.count == game.mainlineIndices.count)
+
+    for (original, roundTripped) in zip(game.mainlineIndices, reparsed.mainlineIndices) {
+        #expect(reparsed.san(at: roundTripped) == game.san(at: original))
+        #expect(reparsed.fen(at: roundTripped) == game.fen(at: original))
+    }
+}
+
+@Test func standardFromFENGamesAreNotTaggedChess960() {
+    let midgame = ChessGame(startingFEN: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")
+    #expect(midgame.tags["Variant"] == nil)
+    #expect(midgame.tags["SetUp"] == nil)
+}
+
 @Test func chess960GamePlayMoveAndLegalMoves() {
     // Start game from position RNNBBKQR
     let fen = Chess960.startingFEN(backRank: "RNNBBKQR", useShredderFEN: true)
