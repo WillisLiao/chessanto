@@ -14,17 +14,18 @@ ChessCore, AnalysisKit, and CoachKit focused and full package tests pass.
 
 ## Next up
 
-P4.2 fork detection and move-quality flags, P4.5 multi-ply practice, and P4.8's bounded Coach-purpose repair are integrated on `codex/roadmap-completion`; see their entries below.
-Continue Priority 4 in `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md`: the remaining P4.2 skewer, discovered-attack, back-rank-weakness, and trapped-piece detectors.
-The [%clk] backlog claim was investigated and confirmed false (no clock parsing exists in the codebase today).
-P4.3 (takeaways that actually say something), P4.6 (real spaced repetition), and P2.5 (Coach entry points clarity) are now implemented; see below.
-P4.2's ignored-threat detector is now implemented; see below.
-P1.6/P4.4 (`brilliant`) is implemented; see below.
-Priority 5's small UI details batch is now implemented; see below.
-Also still open: visual-only rendering verification (arrival animation timing, coordinate point size, drawn annotation shapes) whenever a composited display is available to the agent - drag and drop itself is now confirmed live, see below.
-The only unimplemented Priority 2 item left is the dark-mode question, an open product decision rather than a scoped task.
+All scoped roadmap tasks from `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md` are now implemented and integrated into `main` as of 2026-08-24.
+P1.1-P1.7 (analysis correctness), P2.2/P2.5/P2.6 (flow), P3.1-P3.3 (board), P4.1-P4.8 (teaching depth), and P5 (UI polish) are all complete; see their entries below.
+The `codex/roadmap-completion` branch was fast-forward merged into `main` and pushed to `origin/main` at commit `7dce456`.
+
+Still open but explicitly scoped as separate, later sessions (no bootstrap document written yet):
+- P4.2 remaining tactical detectors: skewer, discovered attack, back-rank weakness, trapped piece.
+  The `[%clk]` time-per-move insight was investigated and confirmed false (no clock parsing exists in the codebase today; would need a new parser and migration before any time-vs-error analysis is possible).
+- Visual-only rendering verification (arrival animation timing, coordinate point size, drawn annotation shapes) whenever a composited display is available to the agent - drag and drop itself is now confirmed live, see below.
+- The dark-mode question is an open product decision rather than a scoped task.
+- Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
+
 `scripts/axdrag.swift` and `scripts/axprobe.swift` were enhanced this session with more robust app activation and window-handle polling.
-Open product decision: whether to disable the Coach below 8B models (see P4.8 below).
 
 ## Current integration validation (2026-08-24)
 
