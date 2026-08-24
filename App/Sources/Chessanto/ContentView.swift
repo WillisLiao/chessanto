@@ -5,6 +5,7 @@ import Persistence
 struct ContentView: View {
     @EnvironmentObject private var library: GameLibrary
     @EnvironmentObject private var companion: MacCompanionManager
+    @EnvironmentObject private var engineService: EngineService
     @Environment(\.scenePhase) private var scenePhase
     private enum LibrarySource: Equatable {
         case allGames
@@ -18,6 +19,7 @@ struct ContentView: View {
         case game(Int64)
         case playerBrief
         case recentlyDeleted
+        case playVsEngine
     }
 
     @State private var librarySource: LibrarySource = .allGames
@@ -38,42 +40,9 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(spacing: 0) {
-                libraryControls
-                if isOrganizing {
-                    organizingList
-                } else {
-                    browsingList
-                }
-                BatchAnalysisBar(coordinator: batchAnalysis)
-                sidebarBottomBar
-            }
-            .navigationTitle("Games")
-            .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 340)
+            sidebarContent
         } detail: {
-            switch detailDestination {
-            case .game(let gameID):
-                if let game = library.games.first(where: { $0.id == gameID }) {
-                    GameReplayView(
-                        game: game,
-                        store: library.store,
-                        pendingPracticeLoadCards: pendingPracticeGameID == game.id ? pendingPracticeLoadCards : nil,
-                        onPendingPracticeConsumed: {
-                            pendingPracticeGameID = nil
-                            pendingPracticeLoadCards = nil
-                        }
-                    )
-                    .id(game.id)
-                } else {
-                    emptySelectionView
-                }
-            case .playerBrief:
-                PlayerBriefView(onOpenPractice: openPractice)
-            case .recentlyDeleted:
-                RecentlyDeletedView()
-            case .empty:
-                emptySelectionView
-            }
+            detailContent
         }
         .onDrop(of: [.text, .pgn], isTargeted: $isTargeted) { providers in
             handleDrop(providers: providers)
@@ -103,6 +72,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .importPGNRequested)) { _ in
             isShowingImporter = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .playVsEngineRequested)) { _ in
+            detailDestination = .playVsEngine
         }
         .alert("Import error", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
@@ -136,6 +108,62 @@ struct ContentView: View {
         }
     }
 
+    private var sidebarContent: some View {
+        VStack(spacing: 0) {
+            libraryControls
+            if isOrganizing {
+                organizingList
+            } else {
+                browsingList
+            }
+            BatchAnalysisBar(coordinator: batchAnalysis)
+            sidebarBottomBar
+        }
+        .navigationTitle("Games")
+        .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 340)
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        switch detailDestination {
+        case .game(let gameID):
+            if let game = library.games.first(where: { $0.id == gameID }) {
+                GameReplayView(
+                    game: game,
+                    store: library.store,
+                    pendingPracticeLoadCards: pendingPracticeGameID == game.id ? pendingPracticeLoadCards : nil,
+                    onPendingPracticeConsumed: {
+                        pendingPracticeGameID = nil
+                        pendingPracticeLoadCards = nil
+                    }
+                )
+                .id(game.id)
+            } else {
+                emptySelectionView
+            }
+        case .playerBrief:
+            PlayerBriefView(onOpenPractice: openPractice)
+        case .recentlyDeleted:
+            RecentlyDeletedView()
+        case .playVsEngine:
+            PlayVsEngineView(
+                store: library.store,
+                engineOpponent: engineService,
+                onReviewGame: handleReviewGame
+            )
+        case .empty:
+            emptySelectionView
+        }
+    }
+
+    private func handleReviewGame(_ game: GameRecord) {
+        library.reload()
+        if let gameID = game.id {
+            librarySource = .allGames
+            detailDestination = .game(gameID)
+        }
+    }
+
     private var libraryControls: some View {
         VStack(spacing: DesignSpacing.xs) {
             sourceRow("All Games", systemImage: "list.bullet", isSelected: librarySource == .allGames) {
@@ -146,6 +174,9 @@ struct ContentView: View {
             }
             sourceRow("Player Brief", systemImage: "doc.text.magnifyingglass", isSelected: librarySource == .playerBrief) {
                 selectLibrarySource(.playerBrief)
+            }
+            sourceRow("Play vs Engine", systemImage: "cpu", isSelected: detailDestination == .playVsEngine) {
+                detailDestination = .playVsEngine
             }
             sourceRow(
                 "Recently Deleted",
@@ -452,14 +483,15 @@ struct ContentView: View {
 
                 if library.games.isEmpty {
                     HStack(spacing: DesignSpacing.sm) {
-                        // The text has always offered two ways in; only one
-                        // of them was a button, and it was the one a user who
-                        // just confirmed a chess.com account does not want.
+                        Button("Play vs Engine") {
+                            detailDestination = .playVsEngine
+                        }
+                        .buttonStyle(.dsPrimary)
+
                         if library.isChessComAccountConfirmed {
-                            Button("Fetch my chess.com games") {
+                            Button("Fetch chess.com games") {
                                 isShowingChessComFetch = true
                             }
-                            .buttonStyle(.dsPrimary)
                             Button("Import PGN…") {
                                 isShowingImporter = true
                             }
@@ -467,7 +499,6 @@ struct ContentView: View {
                             Button("Import PGN…") {
                                 isShowingImporter = true
                             }
-                            .buttonStyle(.dsPrimary)
                             Button("Fetch from chess.com…") {
                                 isShowingChessComFetch = true
                             }
@@ -490,6 +521,11 @@ struct ContentView: View {
     private var sidebarBottomBar: some View {
         HStack(spacing: DesignSpacing.sm) {
             Menu {
+                Button {
+                    detailDestination = .playVsEngine
+                } label: {
+                    Label("Play vs Engine…", systemImage: "cpu")
+                }
                 Button {
                     isShowingImporter = true
                 } label: {
