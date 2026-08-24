@@ -1,9 +1,7 @@
-# Next session: M5 - rule-based coaching report
+# Milestone M5 - Rule-Based Coaching Report [Completed Historical Record]
 
-This is a self-contained execution plan for a fresh session with no prior context.
-It was prepared by a 2026-07-17 planning session that read all the relevant source (AnalysisKit, Persistence, the replay view model and view, and chesskit-swift's checked-out internals) and verified the risky claims below with a real scratch-package run against ChessCore plus a real download of the opening dataset - the facts are verified, not guessed.
-Follow it step by step; the design decisions are already made, do not re-derive or re-litigate them.
-Read `PLAN.md`'s "Analysis pipeline" steps 6-7, the "Opening book" section, and the M5 milestone for product context, but where this file is more specific, this file wins.
+Historical note: Milestone M5 was completed and verified in production.
+This document is preserved as the original execution record.
 
 The accept criterion is unusual and hard: **the report for a spot-checked game reads correctly with zero false statements, and every claim traces to an engine line or board fact.**
 The design below makes that enforceable in code (typed Facts, closed templates, an auditor that drops anything it cannot re-verify), not by careful prose writing.

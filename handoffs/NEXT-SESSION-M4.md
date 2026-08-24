@@ -1,8 +1,7 @@
-# Next session: M4 - chess.com fetch
+# Milestone M4 - chess.com fetch [Completed Historical Record]
 
-This is a bootstrap, not a fully de-risked execution plan like M2's -
-read it, then re-derive the details from the current code and `PLAN.md`
-rather than treating every line here as fixed.
+Historical note: Milestone M4 is implemented and verified in production.
+This document is preserved as the original planning record.
 
 ## Where things stand
 
@@ -100,10 +99,7 @@ bullet before starting:
 
 ## Known gaps carried over from M3 (not this milestone's job, but don't be surprised)
 
-- No promote/collapse variation controls (only delete, back-to-game).
-- No promotion picker (auto-promotes to queen).
-- Replaying a variation move identical to the real mainline continuation
-  creates a redundant variation branch instead of being recognized as the
-  mainline (chesskit `Move` equality quirk) - see the 2026-07-17 devlog.
-- `LinesPanelView`'s adopt-line buttons' accessibility exposure is
-  unconfirmed - re-verify if you touch that view.
+- No promote/collapse variation controls (only delete, back-to-game remain).
+- Promotion picker: originally absent in M3, subsequently implemented in Priority 3 (`BoardInteraction` and `PracticeSessionViewModel`).
+- Replaying a variation move identical to the real mainline continuation creates a redundant variation branch instead of being recognized as the mainline (chesskit `Move` equality quirk) - see the 2026-07-17 devlog.
+- `LinesPanelView`'s adopt-line buttons were updated in Priority 5 to distinguish inspecting a line from adopting it.

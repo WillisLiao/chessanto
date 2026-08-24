@@ -1,7 +1,8 @@
-# Next session - V1 hardening phase 3
+# V1 Hardening Phase 3 [Historical Scoping Record]
 
-This document is a scoping starting point, not a fully verified execution plan the way `handoffs/NEXT-SESSION-V1-HARDENING-PHASE-2.md` was.
-Phase 2 closed the engine-correctness and grading-correctness gaps (F1 through F7) with live-reproduced diagnosis and a full six-step implementation.
+Historical note: Most items from this candidate list were subsequently implemented in later sessions (including the `PracticeSessionViewModel` multi-ply state machine, promotion picker, accessibility target fixes, and layout hardening).
+Recording review decisions for Reveal and Skip remains an open item.
+This document is preserved as the original scoping record.
 Full detail is in the `V1 hardening phase 2` section of `handoffs/HANDOFF.md` and the `V1 hardening phase 2: bounded engine search and typed grading` section of `devlogs/2026-07-19.md`.
 
 Before starting implementation, a planning session (or the start of this session) should do what the phase-2 plan's own predecessor did: read every file this phase touches in full, verify claims against the live app rather than trusting this document, and fix the design decisions before writing code.

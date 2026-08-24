@@ -1,9 +1,7 @@
-# Next session: M7 - position chat
+# Milestone M7 - Position Chat [Completed Historical Record]
 
-This is a self-contained execution plan for a fresh session with no prior context.
-It was prepared by a 2026-07-17 prep session (the same discipline as M6's prep) that read every source file M7 builds on in full, verified the new conversational mechanics against the live Ollama 0.31.2 server, and ran a real ChessCore scratch package to pin down the proposed-move precheck's behavior - the facts below are verified, not guessed.
-Follow it step by step; the design decisions are already made, do not re-derive or re-litigate them.
-Read `PLAN.md`'s "Position chat", "Verified Coach", and M7 milestone sections for product context, but where this file is more specific, this file wins (one deliberate deviation from PLAN.md's "Streaming responses" bullet is called out and justified in the design decisions).
+Historical note: Milestone M7 was completed and verified in production.
+This document is preserved as the original execution record.
 
 The accept criterion (PLAN.md M7):
 

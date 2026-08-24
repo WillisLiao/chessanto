@@ -1,7 +1,7 @@
-# Next session - real spaced repetition (P4.6)
+# Spaced Repetition (P4.6) [Completed Historical Record]
 
-Bootstrap document for unstarted work.
-Written 2026-08-24, running in parallel with `handoffs/NEXT-SESSION-TAKEAWAYS.md` and `handoffs/NEXT-SESSION-COACH-ENTRY-POINTS.md` (separate sessions, separate git worktrees/branches - do not read or wait on either, your work is independent).
+Historical note: Spaced repetition upgrade to ease-factor SM-2 was completed on 2026-08-24 (see `devlogs/2026-08-24-spaced-repetition.md` and `handoffs/HANDOFF.md`).
+This document is preserved as the original session plan.
 
 You are working in a dedicated git worktree on branch `spaced-repetition-p4.6`, checked out from `main`. This is a real, separate checkout - commit and push this branch when you are done, do not attempt to merge to `main` yourself, and do not touch the primary checkout at `/Users/willis/Documents/chessanto` (other sessions may be using it).
 

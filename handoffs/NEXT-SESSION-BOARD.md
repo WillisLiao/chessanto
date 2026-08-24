@@ -1,9 +1,7 @@
-# Next session - the board
+# Priority 3 - the board [Completed Historical Record]
 
-Bootstrap for Priority 3 of the 2026-07-30 product review.
-Nothing in this document is implemented.
-
-Read `handoffs/HANDOFF.md` first.
+Historical note: Priority 3 board behaviors (drag and drop, promotion picker, sound effects, piece animations, and annotation routing) have been implemented and verified.
+This document is preserved as the original planning record.
 The review that produced this is `handoffs/NEXT-SESSION-ANALYSIS-CORRECTNESS.md` (Priority 1 of which is now done); this document expands its Priority 3 into a workable plan.
 
 ## Why this is the next thing

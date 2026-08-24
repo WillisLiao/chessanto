@@ -5,16 +5,18 @@ Produced by the 2026-07-30 player-lens review session, which read the codebase a
 
 Read this together with `handoffs/HANDOFF.md`.
 
-**Status: Priority 1 is implemented (2026-07-30), except P1.6 (`brilliant`).**
-Priorities 2 through 5 are still unstarted and remain the plan.
+**Living Status (Updated 2026-08-24):**
+Priority 1 is fully implemented (including P1.6 `brilliant` sacrifice detection).
+Priority 2 is implemented (P2.1 through P2.6, including Coach entry points clarity); dark mode remains an open product decision.
+Priority 3 is implemented (drag and drop live confirmed, promotion picker, animations, sounds, annotations); visual-only rendering verification remains open.
+Priority 4 is substantially implemented: P4.1/P4.7 beginner vocabulary, P4.2 ignored threats, forks, and move quality flags, P4.3 concrete takeaways, P4.4 brilliant sacrifices, P4.5 multi-ply practice, P4.6 SM-2 spaced repetition, and P4.8 Coach purpose repair.
+The remaining P4.2 detector motifs (pins, skewers, discovered attacks, back-rank weaknesses, trapped pieces) remain open.
+The `[%clk]` time-data premise was audited and confirmed false (no clock parsing exists in the codebase today).
+Priority 5's small UI details batch is fully implemented (8 of 8 items).
 
-Two items in Priority 1 were disproved while being implemented, and this document is superseded on those two points only.
-See `handoffs/HANDOFF.md` and `devlogs/2026-07-30.md` for the corrections:
-
-- P1.3's "already-decided positions" half is wrong. Moves in an already-mated position grade `.excellent`, not `.blunder`, because the mover's win probability is pinned at 0 and the drop is therefore 0. Only the forced-move half was a real defect.
-- P1.1's implementation notes describe a delivery race between the final `info` line and the terminating `bestmove`. There is no such race: the line is never emitted at all, and the ±1 ply is inherent to Stockfish under MultiPV.
-
-The rest of this document stands as written.
+Two items in Priority 1 were disproved while being implemented, and this document is superseded on those two points:
+- P1.3's "already-decided positions" half was incorrect; moves in an already-mated position grade `.excellent`, not `.blunder`, because the mover's win probability is pinned at 0 and the drop is therefore 0.
+- P1.1's delivery race description was incorrect; the ±1 ply is inherent to Stockfish under MultiPV.
 
 ## What this session did
 
@@ -229,8 +231,8 @@ Missing and high value, all reachable by board replay over positions already sto
 - Forks, pins, skewers, discovered attacks, back rank, and trapped pieces.
 - Whether the played move was a capture or a check, whether it moved an already-developed piece again, whether the same piece moved twice before castling, and whether the queen came out before move five.
 
-`[%clk]` comments are already parsed from chess.com PGNs per the M1 and M2 records and are never used.
-Time per move correlated with error rate is one of the highest-value insights available to a club player.
+Historical note on `[%clk]`: the claim that clock comments were parsed was investigated and confirmed false; no clock parsing exists in the codebase today.
+Time per move correlated with error rate remains a potential future insight once clock parsing is introduced.
 
 ### P4.3 Takeaways almost always say nothing
 

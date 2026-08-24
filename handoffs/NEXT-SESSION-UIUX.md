@@ -1,9 +1,7 @@
-# Next session: UI/UX audit and redesign plan (planning only, no code)
+# UI/UX Audit and Redesign Plan [Completed Historical Record]
 
-This is a briefing for a planning session, not an execution plan.
-Chessanto's v1 (M1-M8) shipped and is functionally complete per `PLAN.md`, but the UI/UX is rough.
-Your job this session is to audit the whole app and produce a redesign plan.
-**Do not implement anything.**
+Historical note: The UI/UX audit and subsequent execution passes have been completed in production.
+This document is preserved as the original planning record.
 The output of this session is a plan document another session (running Sonnet) will execute later.
 
 ## Why this session exists

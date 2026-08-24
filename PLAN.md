@@ -6,8 +6,9 @@ It is also a full chess.com-style analysis board: scrub anywhere in the game wit
 No account, no cloud, no internet required for analysis.
 The bar: the best modern local chess analyzer and teacher, not a toy.
 
-This plan is written for Claude Sonnet to execute milestone by milestone.
-Each milestone has acceptance criteria; do not move on until they pass.
+This plan originally guided the initial milestone-by-milestone development of Chessanto.
+Milestones M1 through M8, UI/UX clarity passes, active learning loop, and core Priority 1 through Priority 5 items are implemented in production.
+See `handoffs/HANDOFF.md` for living status and active integration tracking.
 
 ## Product decisions (already made - do not re-litigate)
 
@@ -130,78 +131,69 @@ Offer:
 
 ## Milestones
 
-Work in this order. Keep the app runnable at the end of every milestone.
+Milestones M1 through M8 are completed and verified in production.
 
-### M1 - Skeleton, board, and game replay
-- Xcode project + local SPM packages laid out as above; GRDB wired up with migrations.
-- Custom SwiftUI board view: piece rendering (bundle an open-licensed SVG/PDF piece set, e.g. from Lichess's lila repo), coordinates, last-move highlight, board flip, resizable.
-- PGN import via file open, drag-drop onto the window, and paste. Imported games persist and appear in a sidebar game list.
-- Game replay: move list with keyboard navigation (arrow keys), click any move to jump.
-- **Accept:** import a real chess.com PGN (headers, clocks, comments) and step through the full game with no parse errors; relaunch and the game is still there.
+### M1 - Skeleton, board, and game replay [Completed]
+- Xcode project and local SPM packages configured; GRDB persistence wired with migrations.
+- Custom SwiftUI board view with piece rendering, coordinates, last-move highlights, board flip, and resizable layout.
+- PGN import via file open, drag-drop onto window, and paste.
+- Game replay with move list and keyboard navigation.
 
-### M2 - Engine integration and move classification
-- EngineKit: launch bundled Stockfish, UCI handshake, configure threads/hash sensibly for the machine, MultiPV parsing, clean shutdown, crash recovery (relaunch and resume queue).
-- Background analysis queue with progress reporting and cancellation; results cached in SQLite.
-- Eval bar next to the board; eval graph across the whole game (click to jump to a move).
-- Live infinite analysis of the displayed position: eval bar and top engine lines refine in real time while scrubbing, with the debounced single-session design from Exploration Mode.
-- Move classification and accuracy per the pipeline above; classification badges on the move list and board.
-- **Accept:** analyze a ~40-move game on Standard quality in under ~30s on an M-series Mac; classifications broadly match what chess.com/Lichess report for the same game (spot-check 3 real games); re-opening an analyzed game shows results instantly from cache; scrubbing rapidly through the game never shows a stale eval for the wrong position.
+### M2 - Engine integration and move classification [Completed]
+- EngineKit in-process Stockfish integration with MultiPV parsing and clean lifecycle management.
+- Background analysis queue with progress reporting, cancellation, and SQLite caching.
+- Live eval bar and whole-game eval graph.
+- Live infinite analysis of the displayed position during scrubbing with generation-counter debouncing.
+- Move classification and accuracy aggregation.
 
-### M3 - Exploration Mode
-- Free variation play on the board, variation tree move list (promote/delete/collapse, "back to game"), variations persisted.
-- Engine lines panel with clickable, adoptable MultiPV lines.
-- **Accept:** from any game position, play a 5-move variation with a sub-variation inside it, watch the eval bar track every explored position live, delete the sub-variation, quit and relaunch, and the remaining variation is intact.
+### M3 - Exploration Mode [Completed]
+- Free variation play on the board, variation tree in the move list (delete subtree, back to game), and variation persistence.
+- Engine lines panel with adoptable MultiPV lines.
+- Promotion and collapse variation controls remain open.
 
-### M4 - chess.com fetch
-- ChessComKit with the archive flow above; username stored in settings.
-- Game browser UI for fetched games with multi-select import.
-- **Accept:** enter a real username, fetch, import 5 games, analyze one; airplane-mode launch still works fully for PGN import and analysis.
+### M4 - chess.com fetch [Completed]
+- ChessComKit archive client with descriptive User-Agent.
+- Game browser sheet with multi-select import and duplicate detection.
 
-### M5 - Rule-based coaching report
-- Theme detection and key-moment selection.
-- Game report view: accuracy summary, classification counts, opening name and deviation point, key moments list with rule-based explanation text ("14...Qd7 hangs the knight on c6; after 15.Bxc6 you lose a piece. Better was 14...Ne7, defending.") built from templates over the structured Facts.
-- Whole-game takeaways section (rule-based aggregation of recurring themes).
-- **Accept:** the report for a spot-checked game reads correctly with zero false statements; every claim traces to an engine line or board fact.
+### M5 - Rule-based coaching report [Completed]
+- Theme detection and key-moment selection pipeline.
+- Game report view with accuracy summary, classification counts, opening book identification, and rule-based explanations from structured Facts.
+- Whole-game takeaways summarizing recurring patterns.
 
-### M6 - Local LLM coach
-- CoachKit: Ollama detection, model picker onboarding (table above), model pull with progress, health checks.
-- The full Verified Coach stack: structured payloads, CoachVerifier output gate with regenerate-then-fallback, engine-tool loop with per-response call cap.
-- LLM narration for key moments and game summary, rating-adaptive (three prompt registers: beginner, intermediate, advanced).
-- Settings: teaching level, model choice, coach on/off (off = M5 rule-based text).
-- **Accept:** with Ollama running, key moments get natural coaching prose in which every cited line passes CoachVerifier; the grounding test harness passes in CI; with Ollama stopped, the app silently falls back to rule-based text; Intel/no-Ollama paths show the right guidance.
+### M6 - Local LLM coach [Completed]
+- CoachKit with Ollama client, model catalog, and health checks.
+- Verified Coach stack with structured payloads, CoachVerifier output gate, and fallback to rule-based explanations.
+- Rating-adaptive prompt registers (beginner, intermediate, advanced).
 
-### M7 - Position chat
-- Chat panel per the design above: legality check, engine-tool loop, CoachVerifier gate, streaming, persistence, works from any explored variation position.
-- Suggested starter questions per key moment ("Why was this a blunder?", "What was the idea behind the best move?").
-- **Accept:** ask "what if I played <legal move>?" and the answer cites the actual engine eval of that move; ask about an illegal move and the app says it is illegal rather than sending it to the LLM; ask an open question ("how do I attack here?") and watch the coach make at least one engine tool call before answering.
+### M7 - Position chat [Completed]
+- Conversational chat attached to the displayed position with legality prechecks, evaluate tool loop, and CoachVerifier gate.
+- Suggested starter prompts and chat history persistence per game.
 
-### M8 - Polish and packaging
-- Onboarding flow: welcome, chess.com username (optional), rating band, hardware detection + model picker.
-- Settings window; analysis quality selector; light/dark board themes.
-- Empty states, error states, and progress states everywhere; App sandbox enabled with only the entitlements actually needed (network client, user-selected file read).
-- Player improvement dashboard (v1-simple): accuracy trend over imported games, most frequent mistake themes.
-- Release build script; Developer ID signing + notarization steps documented in README (can be run by the user if they have a developer account; unsigned local builds must also work).
-- **Accept:** a fresh user can go from first launch to a coached game report in under 5 minutes with no docs; full E2E pass of the flows in `handoffs/HANDOFF.md`.
+### M8 - Polish and packaging [Completed]
+- Onboarding flow with optional chess.com username, rating band, and model guidance.
+- Settings window, light appearance lock, and sandbox entitlements.
+- Player Brief improvement dashboard with accuracy history and recurring motifs.
+- Release build script and documentation.
 
 ## Testing strategy
 
-- Unit tests: win-probability and accuracy math, move classification thresholds, PGN edge cases (annotations, variations, clock tags), UCI response parsing, theme detectors (feed crafted FENs with known tactics), chess.com API response decoding (fixture JSON).
-- Integration test: analyze a bundled fixture game end-to-end against a golden classification file; runs in CI without Ollama.
-- CoachVerifier unit tests: crafted LLM outputs with illegal moves, invented lines, and wrong eval claims must all be caught; clean outputs must pass untouched.
-- LLM grounding test harness: runs N real narrations and chat turns against fixture payloads through CoachVerifier and fails CI on any unverified claim reaching output (catches hallucination regressions when prompts or models change).
-- Exploration mode stress test: scripted rapid scrubbing and variation creation while the engine session runs, asserting no stale-eval rendering and no engine process leaks.
-- Manual E2E per milestone as listed in acceptance criteria; be picky about UI details - misaligned squares, wrong piece scaling, or janky eval-bar animation are bugs, not polish items.
+- Unit tests: win-probability and accuracy math, move classification thresholds, PGN edge cases, UCI response parsing, theme detectors, and chess.com API response decoding.
+- Integration test: analyze a bundled fixture game end-to-end against a golden classification file.
+- CoachVerifier unit tests: crafted outputs with illegal moves, invented lines, and wrong eval claims caught before display.
+- LLM grounding test harness: tests narrations and chat turns against fixture payloads through CoachVerifier.
+- Exploration mode stress test: rapid scrubbing and variation creation with generation-tagged analysis.
+- Full automated test suite across packages and the macOS App target.
 
 ## Risks and mitigations
 
-- **LLM chess hallucination** - the top product risk, addressed architecturally by the Verified Coach stack: structured input, the CoachVerifier hard gate (nothing unverified renders), the engine-tool loop, and a CI harness that fails on any leak. The residual risk is verifier gaps (claims phrased in ways the parser misses), so grow the verifier's claim-extraction tests with every new prompt or model.
-- **Engine session management** - chesskit-engine runs Stockfish in-process (no subprocess/pipes to leak), but stale results during rapid scrubbing are still possible with an async response stream. Mitigate with a single owning actor in EngineKit and position generation counters on all results (drop anything not matching the currently displayed position).
-- **Stockfish is GPLv3** via chesskit-engine - fine for local personal use; revisit licensing before any public distribution (see Architecture note).
-- **RAM pressure** - running Stockfish (hash) + a 14B model + the app on a 16 GB machine. Keep Stockfish hash modest (256 MB default), and pause engine analysis while the LLM is generating if memory pressure is high.
-- **chess.com API changes/rate limits** - the API is unofficial-but-public; wrap it thinly, cache aggressively, and always keep the PGN path as the reliable fallback.
-- **chesskit-swift gaps** - if it lacks something (e.g. Chess960 or odd PGN variants), fix behind the ChessCore facade; do not leak the dependency into the app layer.
+- **LLM chess hallucination** - addressed architecturally by the Verified Coach stack: structured input, the CoachVerifier hard gate, the engine-tool loop, and default-closed concreteness gating.
+- **Engine session management** - chesskit-engine runs Stockfish in-process with generation counters on all results to prevent stale evals during scrubbing.
+- **Stockfish is GPLv3** - repository is licensed under GPLv3.
+- **RAM pressure** - modest default Stockfish hash and recommended model sizing by hardware tier.
+- **chess.com API changes/rate limits** - wrapped in ChessComKit, cached locally, with offline PGN import as fallback.
+- **chesskit-swift gaps** - wrapped behind ChessCore facade.
 
 ## Out of scope for v1
 
-Puzzles/drills generated from your mistakes, spaced repetition, repertoire training, playing against the engine, Lichess import, iCloud sync, Chess960.
-Note them in HANDOFF.md as future directions; do not build them.
+Historical note: mistake-derived practice cards and SM-2 spaced repetition were originally listed here, but were subsequently implemented and integrated into production (see `App/Sources/Chessanto/Training/` and `Packages/Persistence/Sources/Persistence/`).
+The following remain explicitly out of scope: repertoire training, playing against the engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.

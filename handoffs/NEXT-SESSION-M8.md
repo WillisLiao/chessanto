@@ -1,9 +1,7 @@
-# Next session: M8 - polish and packaging
+# Milestone M8 - Polish and Packaging [Completed Historical Record]
 
-This is a self-contained execution plan for a fresh session with no prior context.
-It was prepared by a 2026-07-18 prep session (the same discipline as M6/M7's prep) that read every file this milestone touches in full, verified the risky claims live (a real 301-second timeout measurement against a frozen Ollama, a raw-AX-API probe of the built Release app, live chess.com API sampling across rating bands, a release-mode ReportBuilder timing run, and the lichess piece-set license file), and resolved every open question from the old bootstrap into fixed decisions.
-Follow it step by step; the design decisions are already made, do not re-derive or re-litigate them.
-Read `PLAN.md`'s M8 milestone section for product context, but where this file is more specific, this file wins.
+Historical note: Milestone M8 was completed and verified in production.
+This document is preserved as the original execution record.
 
 The accept criterion (PLAN.md M8): a fresh user can go from first launch to a coached game report in under 5 minutes with no docs; full E2E pass of the flows in `handoffs/HANDOFF.md`.
 

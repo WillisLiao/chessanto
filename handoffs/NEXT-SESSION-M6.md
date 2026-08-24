@@ -1,9 +1,7 @@
-# Next session: M6 - local LLM coach
+# Milestone M6 - Local LLM Coach [Completed Historical Record]
 
-This is a self-contained execution plan for a fresh session with no prior context.
-It was prepared by a 2026-07-17 planning session that verified every risky claim below against a live `ollama serve` instance (v0.31.2, real curl transcripts pasted in), the real Ollama model registry, and real scratch-package runs against ChessCore - the facts are verified, not guessed.
-Follow it step by step; the design decisions are already made, do not re-derive or re-litigate them.
-Read `PLAN.md`'s "Verified Coach", "Model Picker", and M6 milestone sections for product context, but where this file is more specific, this file wins (one deliberate deviation from PLAN.md's model table is called out in verified fact 11).
+Historical note: Milestone M6 was completed and verified in production (with P4.8 bounded Coach purpose repair subsequently applied).
+This document is preserved as the original execution record.
 
 The accept criterion (PLAN.md M6): with Ollama running, key moments get natural coaching prose in which every cited line passes CoachVerifier; the grounding test harness passes; with Ollama stopped, the app silently falls back to rule-based text; Intel/no-Ollama paths show the right guidance.
 The M5 discipline carries over unchanged: **nothing unverified ever renders.**

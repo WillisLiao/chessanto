@@ -1,7 +1,7 @@
-# Next session - Priority 5 small UI details
+# Priority 5 Small UI Details [Completed Historical Record]
 
-Bootstrap document for unstarted work.
-Written 2026-08-24, running in parallel with `handoffs/NEXT-SESSION-THREAT-DETECTOR.md` and `handoffs/NEXT-SESSION-BOARD-QA.md` (separate sessions, separate git worktrees/branches - do not read or wait on either, your work is independent).
+Historical note: Priority 5 small UI polish items (8 of 8) were completed on 2026-08-24 (see `devlogs/2026-08-24-ui-polish.md` and `handoffs/HANDOFF.md`).
+This document is preserved as the original session plan.
 
 You are working in a dedicated git worktree on branch `ui-polish-p5`, checked out from `main` at commit `b5a00b4`. This is a real, separate checkout - commit and push this branch when you are done, do not attempt to merge to `main` yourself, and do not touch the primary checkout at `/Users/willis/Documents/chessanto` (a different session may be using it).
 
