@@ -28,7 +28,10 @@ struct EvalBarView: View {
                     Text(eval.label)
                         .font(.dsNotation)
                         .foregroundStyle(isWhiteBetter(eval) ? .black : .white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                         .padding(.vertical, 3)
+                        .padding(.horizontal, 1)
                 }
             }
         }

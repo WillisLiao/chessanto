@@ -78,9 +78,33 @@ capture.arguments = ["-x", "-o", "-l\(window.id)", outputPath]
 try capture.run()
 capture.waitUntilExit()
 
-guard capture.terminationStatus == 0, FileManager.default.fileExists(atPath: outputPath) else {
-    FileHandle.standardError.write("window capture failed\n".data(using: .utf8)!)
-    exit(1)
+if capture.terminationStatus == 0 && FileManager.default.fileExists(atPath: outputPath) {
+    print("captured \(applicationName) window \(window.id) \(window.title) -> \(outputPath)")
+    exit(0)
 }
 
-print("captured \(applicationName) window \(window.id) \(window.title) -> \(outputPath)")
+// Fallback to in-process QACapture via CHESSANTO_QA_DIR
+let home = FileManager.default.homeDirectoryForCurrentUser.path
+let defaultSandboxedQADir = "\(home)/Library/Containers/com.chessanto.app/Data/tmp/qa-shots"
+let qaDir = ProcessInfo.processInfo.environment["CHESSANTO_QA_DIR"] ?? defaultSandboxedQADir
+let qaURL = URL(fileURLWithPath: qaDir, isDirectory: true)
+let uniqueID = UUID().uuidString
+let trigger = qaURL.appendingPathComponent("capture-\(uniqueID)")
+let expected = qaURL.appendingPathComponent("\(uniqueID).png")
+
+if FileManager.default.fileExists(atPath: qaURL.path) {
+    try? Data().write(to: trigger)
+    let start = Date()
+    while Date().timeIntervalSince(start) < 3.0 {
+        if FileManager.default.fileExists(atPath: expected.path) {
+            try? FileManager.default.removeItem(atPath: outputPath)
+            try FileManager.default.moveItem(at: expected, to: URL(fileURLWithPath: outputPath))
+            print("captured \(applicationName) window via QACapture -> \(outputPath)")
+            exit(0)
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+}
+
+FileHandle.standardError.write("window capture failed\n".data(using: .utf8)!)
+exit(1)

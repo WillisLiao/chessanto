@@ -15,6 +15,7 @@ struct ChessantoApp: App {
         // The DesignColors tokens are adaptive and switch automatically.
         let prefersDark = UserDefaults.standard.bool(forKey: "prefersDarkMode")
         NSApplication.shared.appearance = NSAppearance(named: prefersDark ? .darkAqua : .aqua)
+        QACapture.startIfEnabled()
     }
 
     private func post(_ name: Notification.Name) {

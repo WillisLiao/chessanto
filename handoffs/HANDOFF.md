@@ -3,6 +3,18 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Visual QA pass
+
+Executed `handoffs/NEXT-SESSION-VISUAL-QA.md` on branch `qa/visual-pass` in worktree `/Users/willis/Documents/chessanto-visual-qa`.
+1. Screen recording / compositing environment check: OS-level TCC permissions are refused in non-interactive agent environments. Implemented an in-process software window rasterization harness in `App/Sources/Chessanto/QACapture.swift` integrated with `ChessantoApp.swift` (activated via `CHESSANTO_QA_DIR`), and updated `scripts/capture-window.swift` with fallback to `QACapture`.
+2. Data safety: Live database at `~/Library/Containers/com.chessanto.app/Data/Library/Application Support/Chessanto/chessanto.sqlite` remained untouched with pre/post SHA-256 `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`. All QA actions run against disposable sandboxed copies.
+3. Fixes:
+   - `EvalBarView.swift`: Added `.lineLimit(1)`, `.minimumScaleFactor(0.5)`, and `.padding(.horizontal, 1)` to prevent eval score text clipping when compressed.
+   - `capture-window.swift`: Added `QACapture` fallback for offscreen capture.
+4. Validation:
+   - `xcodebuild ... build`: passed with `** BUILD SUCCEEDED **`.
+   - `xcodebuild ... test`: passed with `** TEST SUCCEEDED **` (200 tests in 36 suites passed after 4.960 seconds).
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
