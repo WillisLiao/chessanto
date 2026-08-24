@@ -180,6 +180,11 @@ public struct OpeningBook: Sendable {
     /// (including from-FEN games whose starting position is already
     /// non-standard).
     public func lookup(fens: [String]) -> OpeningMatch? {
+        guard let first = fens.first,
+              ChessGame.epd(fromFEN: first) == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"
+        else {
+            return nil
+        }
         var best: OpeningMatch?
         let upperBound = min(fens.count - 1, 40)
         guard upperBound >= 1 else { return nil }

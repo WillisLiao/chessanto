@@ -17,7 +17,12 @@ enum PGNCompatibility {
         case unpairedVariationDelimiter
     }
 
-    public static func parse(pgn: String) throws -> Game {
+    public struct ParsedPGN {
+        public let game: Game
+        public let fens: [MoveTree.Index: String]
+    }
+
+    public static func parse(pgn: String) throws -> ParsedPGN {
         let lines = pgn.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.hasPrefix("%") }
@@ -48,7 +53,7 @@ enum PGNCompatibility {
     }
 
     private static func startingPosition(from tags: Game.Tags) throws -> Position {
-        if tags.setUp == "1" {
+        if tags.setUp == "1" || !tags.fen.isEmpty {
             guard let position = Position(fen: tags.fen) else {
                 throw Error.invalidSetUpOrFEN
             }
@@ -231,13 +236,15 @@ enum PGNCompatibility {
         _ moveText: String,
         startingPosition: Position,
         tags: Game.Tags
-    ) throws -> Game {
+    ) throws -> ParsedPGN {
         let tokens = try tokenize(moveText: moveText)
         var game = Game(startingWith: startingPosition, tags: tags)
 
-        guard !tokens.isEmpty else { return game }
+        guard !tokens.isEmpty else { return ParsedPGN(game: game, fens: [:]) }
 
         var currentMoveIndex = startingPosition.sideToMove == .white ? MoveTree.Index.minimum : MoveTree.Index.minimum.next
+        var positionsByIndex: [MoveTree.Index: Position] = [currentMoveIndex: startingPosition]
+        var fensByIndex: [MoveTree.Index: String] = [currentMoveIndex: tags.fen.isEmpty ? startingPosition.fen : tags.fen]
         var variationStack: [MoveTree.Index] = []
 
         var iterator = tokens.makeIterator()
@@ -248,15 +255,70 @@ enum PGNCompatibility {
                 break
 
             case let .san(san):
-                guard let position = game.positions[currentMoveIndex] else {
+                guard let currentPosition = positionsByIndex[currentMoveIndex] else {
+                    throw Error.invalidMove(san)
+                }
+                let currentFEN = fensByIndex[currentMoveIndex] ?? currentPosition.fen
+
+                if san.hasPrefix("O-O") || san.hasPrefix("0-0") {
+                    let isQueenside = san.hasPrefix("O-O-O") || san.hasPrefix("0-0-0")
+                    let side: Chess960.CastlingSide = isQueenside ? .queenside : .kingside
+                    let color: PieceColor = (currentPosition.sideToMove == .white) ? .white : .black
+                    if let castled = Chess960.performCastle(color: color, side: side, in: currentFEN),
+                       let nextPos = Position(fen: castled.resultingFEN) {
+                        let isWhite = (currentPosition.sideToMove == .white)
+                        let kingRank = isWhite ? 1 : 8
+                        let kingPiece = currentPosition.pieces.first { $0.kind == .king && $0.color == currentPosition.sideToMove }
+                        let kingStart = kingPiece?.square ?? Square(isQueenside ? "c\(kingRank)" : "g\(kingRank)")
+                        let kingEnd = Square(isQueenside ? "c\(kingRank)" : "g\(kingRank)")
+                        let template = SANParser.parse(move: isQueenside ? "O-O-O" : "O-O", in: (isWhite ? Position.standard : Position(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1")!))
+                        let moveResult = template?.result ?? .move
+                        let move = Move(result: moveResult, piece: kingPiece ?? Piece(.king, color: currentPosition.sideToMove, square: kingStart), start: kingStart, end: kingEnd)
+                        currentMoveIndex = game.make(move: move, from: currentMoveIndex)
+                        positionsByIndex[currentMoveIndex] = nextPos
+                        fensByIndex[currentMoveIndex] = castled.resultingFEN
+                        continue
+                    }
+                    if let move = parseSAN(san, in: currentPosition) {
+                        var board = Board(position: currentPosition)
+                        if let played = board.move(pieceAt: move.start, to: move.end) {
+                            currentMoveIndex = game.make(move: played, from: currentMoveIndex)
+                            positionsByIndex[currentMoveIndex] = board.position
+                            fensByIndex[currentMoveIndex] = board.position.fen
+                            continue
+                        }
+                    }
                     throw Error.invalidMove(san)
                 }
 
-                guard let move = parseSAN(san, in: position) else {
+                guard let move = parseSAN(san, in: currentPosition) else {
                     throw Error.invalidMove(san)
                 }
 
+                var board = Board(position: currentPosition)
+                guard var playedMove = board.move(pieceAt: move.start, to: move.end) else {
+                    throw Error.invalidMove(san)
+                }
+                if let promotedPiece = move.promotedPiece {
+                    playedMove = board.completePromotion(of: playedMove, to: promotedPiece.kind)
+                }
+                let nextPos = board.position
+                let updatedWithRights = Chess960.updateCastlingRights(
+                    in: currentFEN,
+                    movingFrom: playedMove.start.notation,
+                    movingTo: playedMove.end.notation,
+                    movedPieceKind: playedMove.piece.kind.asPieceKind,
+                    movedPieceColor: playedMove.piece.color.asPieceColor
+                )
+                let rightsField = updatedWithRights.split(separator: " ", omittingEmptySubsequences: true)[2]
+                var nextFENFields = nextPos.fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+                if nextFENFields.count == 6 {
+                    nextFENFields[2] = String(rightsField)
+                }
+                let nextFullFEN = nextFENFields.joined(separator: " ")
                 currentMoveIndex = game.make(move: move, from: currentMoveIndex)
+                positionsByIndex[currentMoveIndex] = nextPos
+                fensByIndex[currentMoveIndex] = nextFullFEN
 
             case let .annotation(annotation):
                 if let rawValue = firstMatch(in: annotation, pattern: #"^\$\d{2,3}$"#),
@@ -291,7 +353,7 @@ enum PGNCompatibility {
             }
         }
 
-        return game
+        return ParsedPGN(game: game, fens: fensByIndex)
     }
 
     private static func firstMatch(in string: String, pattern: String) -> String? {
