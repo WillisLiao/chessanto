@@ -62,7 +62,7 @@ Because `chesskit-swift` erroneously moved the `b1` rook to `e1`, `2. Rb5` faile
 
 - `swift test` in `Packages/ChessCore`: Executed 47 tests across 4 suites with 0 failures in `0.016s`.
 - `swift test` in `Packages/Persistence`: Executed 44 tests across 2 suites with 0 failures in `0.570s`.
-- `swift test` in `Packages/AnalysisKit`: Executed 88 tests across 6 suites with 0 failures in `74.152s`.
+- `swift test` in `Packages/AnalysisKit`: Executed 172 tests across 6 suites with 0 failures in `111.342s`.
 - `xcodebuild -project Chessanto.xcodeproj -scheme Chessanto -destination 'platform=macOS' test`: Full test suite passed with `** TEST SUCCEEDED **`.
 - `xcodebuild -project Chessanto.xcodeproj -scheme Chessanto -destination 'platform=macOS' -configuration Release build`: Build succeeded with `** BUILD SUCCEEDED **`.
 - Database safety verified: live database SHA-256 hash at `~/Library/Containers/com.chessanto.app/Data/Library/Application Support/Chessanto/chessanto.sqlite` remains `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`.
