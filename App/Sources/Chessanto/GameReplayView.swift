@@ -17,6 +17,7 @@ struct GameReplayView: View {
     @State private var quality: AnalysisQuality = .standard
     @State private var analysisTask: Task<Void, Never>?
     @State private var interaction = BoardInteraction()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// A game-review app should open on the review. The scoresheet is one
     /// click away; the report was two plus knowing it existed.
     @State private var rightPaneTab: RightPaneTab = .report
@@ -92,7 +93,7 @@ struct GameReplayView: View {
                         .zIndex(1)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: isCoachOpen)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isCoachOpen)
         }
         .navigationTitle("\(game.white) vs \(game.black)")
         .alert("Load error", isPresented: errorBinding) {
@@ -900,6 +901,11 @@ private struct MoveListView: View {
     /// (decision A), wired from a right-click/hover context menu.
     let onAskCoach: (Int) -> Void
 
+    // Move-number columns scale with the user's text size so a two-digit
+    // move number at an accessibility size never clips.
+    @ScaledMetric(relativeTo: .body) private var standardNumberWidth: CGFloat = 28
+    @ScaledMetric(relativeTo: .body) private var pieceNamesNumberWidth: CGFloat = 40
+
     private var pairs: [(number: Int, white: MoveIndex?, black: MoveIndex?)] {
         let plies = Array(viewModel.moveIndices.dropFirst())
         return stride(from: 0, to: plies.count, by: 2).map { i in
@@ -940,7 +946,7 @@ private struct MoveListView: View {
                     )
                     .font(.dsNotation)
                     .foregroundStyle(DesignColors.textSecondary)
-                    .frame(width: 40, alignment: .leading)
+                    .frame(width: pieceNamesNumberWidth, alignment: .leading)
                     moveCell(index)
                 }
                 variations(after: index)
@@ -951,7 +957,7 @@ private struct MoveListView: View {
                     Text("\(pair.number).")
                         .font(.dsNotation)
                         .foregroundStyle(DesignColors.textSecondary)
-                        .frame(width: 28, alignment: .leading)
+                        .frame(width: standardNumberWidth, alignment: .leading)
                     moveCell(pair.white)
                     moveCell(pair.black)
                 }
@@ -1112,6 +1118,7 @@ private struct MoveListView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("delete-variation-\(san)")
+            .accessibilityLabel("Delete variation \(moveNotation.move(san).spoken)")
         }
         .padding(.leading, CGFloat(depth) * 16)
     }

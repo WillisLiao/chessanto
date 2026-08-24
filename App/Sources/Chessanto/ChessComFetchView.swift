@@ -64,6 +64,7 @@ struct ChessComFetchView: View {
                 }
             }
             .buttonStyle(.dsPrimary)
+            .accessibilityLabel(isLoading ? "Fetching games" : "Fetch games")
             .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
         }
         .padding()
@@ -101,6 +102,12 @@ struct ChessComFetchView: View {
             }
             .buttonStyle(.plain)
             .disabled(imported)
+            .accessibilityLabel(
+                imported
+                    ? "\(game.white.username) versus \(game.black.username), already imported"
+                    : "Select \(game.white.username) versus \(game.black.username)"
+            )
+            .accessibilityValue(imported ? "Imported" : (selection.contains(game.url) ? "Selected" : "Not selected"))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(game.white.username) (\(game.white.rating)) vs \(game.black.username) (\(game.black.rating))")

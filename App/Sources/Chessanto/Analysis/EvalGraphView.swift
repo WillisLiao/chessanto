@@ -75,6 +75,12 @@ struct EvalGraphView: View {
             }
             .overlay(Rectangle().stroke(DesignColors.hairline, lineWidth: 1))
             .contentShape(Rectangle())
+            // The strip itself is pointer-scrubbed, so give VoiceOver a real
+            // summary of where the game stands; keyboard users step plies
+            // with the arrow keys or the Game menu instead of dragging.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Evaluation graph")
+            .accessibilityValue(Self.hoverLabel(ply: currentPly, winPercentForWhite: currentPly < series.count ? series[currentPly] : nil))
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in

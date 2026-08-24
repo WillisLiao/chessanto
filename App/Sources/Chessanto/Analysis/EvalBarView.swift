@@ -3,6 +3,7 @@ import SwiftUI
 /// Vertical eval bar, filled from the bottom with White's win probability.
 struct EvalBarView: View {
     let eval: EvalDisplay?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let width: CGFloat = 24
 
@@ -13,7 +14,7 @@ struct EvalBarView: View {
                 Color.black
                 Color.white
                     .frame(height: proxy.size.height * whiteFraction)
-                    .animation(.easeInOut(duration: 0.25), value: whiteFraction)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: whiteFraction)
                 // The advantage cap: a thin brass tick at the black/white
                 // boundary, so the side currently ahead reads at a glance
                 // instead of requiring a careful compare of the two fills.
@@ -21,7 +22,7 @@ struct EvalBarView: View {
                     .fill(DesignColors.accent)
                     .frame(height: 3)
                     .offset(y: -proxy.size.height * whiteFraction)
-                    .animation(.easeInOut(duration: 0.25), value: whiteFraction)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: whiteFraction)
             }
             .overlay(alignment: (eval.map { isWhiteBetter($0) } ?? true) ? .bottom : .top) {
                 if let eval {

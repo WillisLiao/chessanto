@@ -60,7 +60,9 @@ struct OnboardingView: View {
                 .padding()
             }
         }
-        .frame(width: 640, height: 450)
+        // Minimums, not a fixed size: at the largest accessibility text
+        // sizes this flow has to be allowed to grow instead of clipping.
+        .frame(minWidth: 640, minHeight: 450)
         .background(DesignColors.surface0)
         .onAppear {
             username = library.chessComUsername
@@ -73,7 +75,7 @@ struct OnboardingView: View {
     private var stepRail: some View {
         VStack(alignment: .leading, spacing: DesignSpacing.md) {
             Text("Chessanto")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(DesignColors.textPrimary)
                 .padding(.bottom, DesignSpacing.lg)
             ForEach(Page.allCases, id: \.self) { candidate in
@@ -110,7 +112,7 @@ struct OnboardingView: View {
     private var welcomePage: some View {
         VStack(alignment: .leading, spacing: DesignSpacing.lg) {
             Text("Your games, turned into a study record")
-                .font(.system(size: 26, weight: .semibold))
+                .font(.title.weight(.semibold))
                 .foregroundStyle(DesignColors.textPrimary)
             Text("Chessanto reviews your own play, keeps every claim tied to analysis, and builds the positions worth revisiting.")
                 .font(.dsBody)
@@ -128,7 +130,9 @@ struct OnboardingView: View {
         HStack(alignment: .firstTextBaseline, spacing: DesignSpacing.lg) {
             Text(title)
                 .font(.dsBody.weight(.semibold))
-                .frame(width: 110, alignment: .leading)
+                // A floor, not a ceiling: the title column grows with the
+                // text instead of squeezing it at accessibility sizes.
+                .frame(minWidth: 110, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(detail)
                     .font(.dsBody)
@@ -183,6 +187,9 @@ struct OnboardingView: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
+            // The visible page heading carries the label visually; this
+            // gives the picker itself a name for VoiceOver.
+            .accessibilityLabel("Teaching level")
         }
     }
 

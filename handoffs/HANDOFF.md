@@ -3,6 +3,49 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state - Accessibility matrix (2026-08-24)
+
+The full accessibility audit-and-fix pass is implemented on branch
+`feature/accessibility-matrix` (worktree `../chessanto-accessibility-matrix`, cut from `main`, not merged).
+Full matrix, measured contrast ratios, and quoted live axprobe evidence are in
+`devlogs/2026-08-24-accessibility-matrix.md`.
+
+Board VoiceOver semantics: each of the 64 square buttons now announces its
+piece plus address ("White pawn e4") with selected/legal-destination/
+practice-hint/last-move states as accessibility values; piece images left
+the AX tree; every move posts a "White pawn e2 to e4" announcement. The
+strings and flip-aware cursor geometry live in the new pure
+`BoardAccessibility` module with 8 unit tests.
+
+Keyboard piece movement: arrows walk keyboard focus between squares
+(`@FocusState` bound to the buttons, `.onMoveCommand` on the focusable board),
+Space/Return press through the native button action, brass ring shows the
+cursor. Cursor and focus are deliberately one thing - the first attempt's
+separate internal cursor was caught fighting Full Keyboard Access in live
+testing and unified. Remaining manual check: Tab/arrows/Space play in a real
+session; synthesized AX-focus and key events cannot reach SwiftUI's focus
+system from this agent environment (new `scripts/axkey.swift` and
+`scripts/axfocused.swift` shipped for that future check).
+
+Contrast (measured, not eyeballed): classification colors are adaptive and
+AA-passing in both modes after light-mode failures as low as 1.86:1; the
+dark-mode primary button label flipped to dark ink (was 1.98:1); dark error
+token brightened past AA; three `.borderedProminent` usages moved to the
+app's primary style.
+
+Dynamic Type: all design-system fonts now scale on system text styles;
+lines-panel heights, move-number columns (`@ScaledMetric`), and the
+onboarding/dashboard/companion fixed frames were made scale-safe.
+Reduced Motion: eval bar, coach slide-over, and promotion hover animations
+now respect it; move announcements intentionally still post.
+
+Gates: `xcodegen generate`, build `** BUILD SUCCEEDED **`, test
+"Test run with 208 tests in 37 suites passed" / `** TEST SUCCEEDED **`.
+Live database verified byte-identical before and after QA (SHA-256 prefix
+`3ab332c1722e43c2`). Note for future sessions: parallel sessions launching
+Chessanto instances by name caused silent instance deaths and frontmost
+stealing during this session's QA; prefer PID-targeted AX scripts.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.

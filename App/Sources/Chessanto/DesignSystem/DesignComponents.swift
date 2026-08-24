@@ -67,7 +67,11 @@ struct PrimaryButtonStyle: ButtonStyle {
                     isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.34
                 )
             )
-            .foregroundStyle(Color.white)
+            // The label must flip with the background: white passes on the
+            // light-mode brass (#765313, 6.96:1) but fails at 1.98:1 on the
+            // brighter dark-mode brass (#D4B566), where near-black text is
+            // what reads.
+            .foregroundStyle(Color.dynamic(light: NSColor.white, dark: NSColor(hex: "#1C1A17")))
             .clipShape(RoundedRectangle(cornerRadius: DesignShape.controlRadius))
             .opacity(isEnabled ? 1 : 0.72)
     }

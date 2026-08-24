@@ -7,6 +7,10 @@ import AppKit
 /// readable contrast in dark mode. The board's own square/piece colors
 /// are untouched - these tokens are for surrounding chrome only.
 /// See `ChessantoApp` for the app-wide appearance policy.
+///
+/// Contrast is verified against WCAG AA (4.5:1 for the small text this app
+/// uses) for every token on every surface in both modes; see the
+/// accessibility-matrix devlog of 2026-08-24 for the measured ratios.
 enum DesignColors {
     static let surface0 = Color.dynamic(light: NSColor(hex: "#FAF9F6"), dark: NSColor(hex: "#1C1A17"))
     static let surface1 = Color.dynamic(light: NSColor(hex: "#F3F0E9"), dark: NSColor(hex: "#252220"))
@@ -17,7 +21,7 @@ enum DesignColors {
     static let accent = Color.dynamic(light: NSColor(hex: "#A6791F"), dark: NSColor(hex: "#C9A04A"))
     static let accentText = Color.dynamic(light: NSColor(hex: "#765313"), dark: NSColor(hex: "#D4B566"))
     static let selection = Color.dynamic(light: NSColor(hex: "#F2E8D2"), dark: NSColor(hex: "#3A3220"))
-    static let error = Color.dynamic(light: NSColor(hex: "#B42318"), dark: NSColor(hex: "#E55A4F"))
+    static let error = Color.dynamic(light: NSColor(hex: "#B42318"), dark: NSColor(hex: "#EB675C"))
 }
 
 extension NSColor {

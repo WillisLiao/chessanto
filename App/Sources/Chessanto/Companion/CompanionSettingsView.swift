@@ -17,7 +17,9 @@ struct CompanionSettingsView: View {
             }
             .padding(DesignSpacing.xl)
         }
-        .frame(width: 610, height: 650)
+        // Minimums, not a fixed size: content must be able to grow with
+        // the user's accessibility text size.
+        .frame(minWidth: 610, minHeight: 650)
         .background(DesignColors.surface0)
     }
 
