@@ -102,6 +102,12 @@ struct CoachSetupView: View {
                 }
             }
 
+            if !coachModel.isEmpty && !CoachModelCatalog.meetsModelFloor(coachModel) {
+                Text("This model is below the recommended 8B parameter floor. The coach will use rule-based explanations only, because smaller models produce unhelpful tautological responses. Install a larger model (8B or above) to enable AI narration.")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.accent)
+            }
+
             if !coachModel.isEmpty && !modelsWithTools.contains(coachModel) {
                 Text("This model doesn't support tool calling - the coach will still narrate from the analysis data, but won't be able to calculate live lines.")
                     .font(.dsSecondary)

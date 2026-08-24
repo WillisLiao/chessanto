@@ -214,6 +214,93 @@ public struct MoveQualityFact: Sendable, Equatable, Codable {
     }
 }
 
+/// A replay-verified skewer created by the played move.
+/// A skewer is the inverse of a pin: a slider attacks a more valuable
+/// piece in front of a less valuable piece. When the valuable piece moves,
+/// the piece behind is exposed to capture.
+public struct SkewerFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let attackingPieceKind: PieceKind
+    public let attackingSquare: String
+    public let frontPieceKind: PieceKind
+    public let frontSquare: String
+    public let backPieceKind: PieceKind
+    public let backSquare: String
+
+    public init(
+        ply: Int,
+        attackingPieceKind: PieceKind,
+        attackingSquare: String,
+        frontPieceKind: PieceKind,
+        frontSquare: String,
+        backPieceKind: PieceKind,
+        backSquare: String
+    ) {
+        self.ply = ply
+        self.attackingPieceKind = attackingPieceKind
+        self.attackingSquare = attackingSquare
+        self.frontPieceKind = frontPieceKind
+        self.frontSquare = frontSquare
+        self.backPieceKind = backPieceKind
+        self.backSquare = backSquare
+    }
+}
+
+/// A discovered attack created by the played move: the mover's move
+/// uncovered a line from one of the mover's own pieces to an enemy piece,
+/// creating a new attack that did not exist before the move.
+public struct DiscoveredAttackFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let attackingPieceKind: PieceKind
+    public let attackingSquare: String
+    public let targetPieceKind: PieceKind
+    public let targetSquare: String
+
+    public init(
+        ply: Int,
+        attackingPieceKind: PieceKind,
+        attackingSquare: String,
+        targetPieceKind: PieceKind,
+        targetSquare: String
+    ) {
+        self.ply = ply
+        self.attackingPieceKind = attackingPieceKind
+        self.attackingSquare = attackingSquare
+        self.targetPieceKind = targetPieceKind
+        self.targetSquare = targetSquare
+    }
+}
+
+/// Fires when the played move left the mover's king on the back rank with
+/// no flight squares - the classic back-rank weakness that makes a
+/// back-rank mate possible.
+public struct BackRankWeaknessFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let kingSquare: String
+    public let kingColor: PieceColor
+
+    public init(ply: Int, kingSquare: String, kingColor: PieceColor) {
+        self.ply = ply
+        self.kingSquare = kingSquare
+        self.kingColor = kingColor
+    }
+}
+
+/// Fires when the played move left one of the mover's pieces (non-pawn,
+/// non-king) with no safe move - every legal destination is attacked by
+/// an enemy piece, so the piece cannot move without being lost.
+public struct TrappedPieceFact: Sendable, Equatable, Codable {
+    public let ply: Int
+    public let pieceKind: PieceKind
+    public let square: String
+
+    public init(ply: Int, pieceKind: PieceKind, square: String) {
+        self.ply = ply
+        self.pieceKind = pieceKind
+        self.square = square
+    }
+}
+
 /// All facts attached to one selected key moment.
 public struct KeyMoment: Sendable, Equatable, Codable {
     public let ply: Int
@@ -226,6 +313,10 @@ public struct KeyMoment: Sendable, Equatable, Codable {
     public let allowedMate: AllowedMateFact?
     public let moveQuality: MoveQualityFact?
     public let pin: PinFact?
+    public let skewer: SkewerFact?
+    public let discoveredAttack: DiscoveredAttackFact?
+    public let backRankWeakness: BackRankWeaknessFact?
+    public let trappedPiece: TrappedPieceFact?
 
     public init(
         ply: Int,
@@ -237,7 +328,11 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         missedMate: MissedMateFact? = nil,
         allowedMate: AllowedMateFact? = nil,
         moveQuality: MoveQualityFact? = nil,
-        pin: PinFact? = nil
+        pin: PinFact? = nil,
+        skewer: SkewerFact? = nil,
+        discoveredAttack: DiscoveredAttackFact? = nil,
+        backRankWeakness: BackRankWeaknessFact? = nil,
+        trappedPiece: TrappedPieceFact? = nil
     ) {
         self.ply = ply
         self.evalSwing = evalSwing
@@ -249,5 +344,9 @@ public struct KeyMoment: Sendable, Equatable, Codable {
         self.allowedMate = allowedMate
         self.moveQuality = moveQuality
         self.pin = pin
+        self.skewer = skewer
+        self.discoveredAttack = discoveredAttack
+        self.backRankWeakness = backRankWeakness
+        self.trappedPiece = trappedPiece
     }
 }

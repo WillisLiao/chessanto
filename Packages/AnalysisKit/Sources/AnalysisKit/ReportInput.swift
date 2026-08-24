@@ -27,15 +27,15 @@ public struct RankedLine: Sendable, Codable, Equatable {
 /// that was actually played to reach it.
 public struct PlyRecord: Sendable, Codable, Equatable {
     public let fen: String
-    /// Ranked lines, sorted by `rank` ascending; rank 1 is the engine's best.
     public let lines: [RankedLine]
-    /// The UCI of the mainline move that produced this ply, `nil` at ply 0.
     public let playedUCI: String?
+    public let clockSeconds: Int?
 
-    public init(fen: String, lines: [RankedLine], playedUCI: String?) {
+    public init(fen: String, lines: [RankedLine], playedUCI: String?, clockSeconds: Int? = nil) {
         self.fen = fen
         self.lines = lines
         self.playedUCI = playedUCI
+        self.clockSeconds = clockSeconds
     }
 
     public var rank1: RankedLine? {

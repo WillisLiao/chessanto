@@ -62,7 +62,11 @@ public enum ReportBuilder {
                 missedMate: ThemeDetector.missedMate(input: input, ply: p),
                 allowedMate: ThemeDetector.allowedMate(input: input, ply: p),
                 moveQuality: ThemeDetector.moveQuality(input: input, ply: p),
-                pin: ThemeDetector.pin(input: input, ply: p)
+                pin: ThemeDetector.pin(input: input, ply: p),
+                skewer: ThemeDetector.skewer(input: input, ply: p),
+                discoveredAttack: ThemeDetector.discoveredAttack(input: input, ply: p),
+                backRankWeakness: ThemeDetector.backRankWeakness(input: input, ply: p),
+                trappedPiece: ThemeDetector.trappedPiece(input: input, ply: p)
             )
             if let audited = FactAuditor.audit(candidate, input: input) {
                 keyMoments.append(audited)
@@ -185,7 +189,12 @@ public enum ReportBuilder {
             }
         }
 
-        // Priority 4: General Error Frequency
+        // Priority 4: Time pressure (errors made while low on clock)
+        if let timeTakeaway = timePressureTakeaway(input: input, keyMoments: keyMoments, whiteCounts: whiteCounts, blackCounts: blackCounts) {
+            takeaways.append(timeTakeaway)
+        }
+
+        // Priority 5: General Error Frequency
         var errorTakeaways: [(text: String, errorCount: Int, isWhite: Bool)] = []
         if let whiteSummary = errorFrequencyTakeaway(player: input.playerName(isWhite: true), counts: whiteCounts) {
             errorTakeaways.append((text: whiteSummary.text, errorCount: whiteSummary.errorCount, isWhite: true))
@@ -203,7 +212,7 @@ public enum ReportBuilder {
             takeaways.append(entry.text)
         }
 
-        // Priority 5: Clean Game / No Pattern Fallback
+        // Priority 6: Clean Game / No Pattern Fallback
         if takeaways.isEmpty {
             takeaways.append(
                 keyMoments.isEmpty
@@ -213,6 +222,38 @@ public enum ReportBuilder {
         }
 
         return Array(takeaways.prefix(3))
+    }
+
+    /// Fires when a player made errors while low on clock (under 30 seconds).
+    /// Requires `[%clk]` data in `PlyRecord.clockSeconds`, which is parsed
+    /// from PGN comments at import time. No clock data means no claim.
+    private static func timePressureTakeaway(
+        input: ReportInput,
+        keyMoments: [KeyMoment],
+        whiteCounts: [MoveClassification: Int],
+        blackCounts: [MoveClassification: Int]
+    ) -> String? {
+        func lowTimeErrors(for isWhite: Bool) -> Int {
+            let errorClassifications: [MoveClassification] = [.inaccuracy, .mistake, .blunder, .missedWin]
+            var count = 0
+            for p in 1..<input.plies.count where input.moverIsWhite(atPly: p) == isWhite {
+                guard let clock = input.plies[p].clockSeconds, clock < 30 else { continue }
+                if keyMoments.contains(where: { $0.ply == p }) {
+                    count += 1
+                }
+            }
+            return count
+        }
+        let whiteLowTimeErrors = lowTimeErrors(for: true)
+        let blackLowTimeErrors = lowTimeErrors(for: false)
+        guard whiteLowTimeErrors >= 2 || blackLowTimeErrors >= 2 else { return nil }
+        if whiteLowTimeErrors >= blackLowTimeErrors {
+            let player = input.playerName(isWhite: true)
+            return "\(player) made \(whiteLowTimeErrors) errors while low on time (under 30 seconds remaining)."
+        } else {
+            let player = input.playerName(isWhite: false)
+            return "\(player) made \(blackLowTimeErrors) errors while low on time (under 30 seconds remaining)."
+        }
     }
 
     private static func errorFrequencyTakeaway(

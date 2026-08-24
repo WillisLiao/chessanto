@@ -581,6 +581,155 @@ public enum ThemeDetector {
         )
     }
 
+    /// Fires when the played move created a new skewer that did not exist
+    /// in the pre-move position. A skewer is a slider attacking a more
+    /// valuable piece in front of a less valuable piece on the same line.
+    /// Only fires when exactly one new skewer appears, to avoid ambiguity.
+    public static func skewer(input: ReportInput, ply p: Int) -> SkewerFact? {
+        guard p >= 1, p < input.plies.count else { return nil }
+        let preMove = input.plies[p - 1]
+        let postMove = input.plies[p]
+        guard validPinFEN(preMove.fen), validPinFEN(postMove.fen) else { return nil }
+
+        let preSkewers = ChessGame.skewers(in: preMove.fen)
+        let postSkewers = ChessGame.skewers(in: postMove.fen)
+
+        let preSet = Set(preSkewers)
+        let newSkewers = postSkewers.filter { !preSet.contains($0) }
+        guard let newSkewer = newSkewers.first, newSkewers.count == 1 else { return nil }
+
+        return SkewerFact(
+            ply: p,
+            attackingPieceKind: newSkewer.attackingPieceKind,
+            attackingSquare: newSkewer.attackingSquare,
+            frontPieceKind: newSkewer.frontPieceKind,
+            frontSquare: newSkewer.frontSquare,
+            backPieceKind: newSkewer.backPieceKind,
+            backSquare: newSkewer.backSquare
+        )
+    }
+
+    /// Fires when the played move uncovered a new attack from one of the
+    /// mover's own pieces to an enemy piece. Compares which enemy pieces
+    /// were attacked before and after the move, and reports the first new
+    /// attacker-target pair that appeared.
+    public static func discoveredAttack(input: ReportInput, ply p: Int) -> DiscoveredAttackFact? {
+        guard p >= 1, p < input.plies.count,
+            let playedUCI = input.plies[p].playedUCI
+        else { return nil }
+        let preMove = input.plies[p - 1]
+        let postMove = input.plies[p]
+        guard validPinFEN(preMove.fen), validPinFEN(postMove.fen) else { return nil }
+
+        let moverIsWhite = input.moverIsWhite(atPly: p)
+        let moverColor: PieceColor = moverIsWhite ? .white : .black
+
+        // Collect all enemy pieces attacked by mover's pieces, before and after
+        let preAttacked = attackedEnemyPieces(in: preMove.fen, by: moverColor)
+        let postAttacked = attackedEnemyPieces(in: postMove.fen, by: moverColor)
+
+        // New attacks that appeared after the move
+        let newAttacks = postAttacked.filter { post in
+            !preAttacked.contains { $0.targetSquare == post.targetSquare && $0.attackingSquare == post.attackingSquare }
+        }
+
+        // Filter out attacks by the piece that just moved (those are direct attacks, not discovered)
+        guard let parsed = parseUCI(playedUCI) else { return nil }
+        let movedFromSquare = parsed.from
+        let discovered = newAttacks.filter { $0.attackingSquare != movedFromSquare }
+
+        guard let attack = discovered.first, discovered.count == 1 else { return nil }
+
+        return DiscoveredAttackFact(
+            ply: p,
+            attackingPieceKind: attack.attackingPieceKind,
+            attackingSquare: attack.attackingSquare,
+            targetPieceKind: attack.targetPieceKind,
+            targetSquare: attack.targetSquare
+        )
+    }
+
+    private struct AttackPair: Hashable {
+        let attackingPieceKind: PieceKind
+        let attackingSquare: String
+        let targetPieceKind: PieceKind
+        let targetSquare: String
+    }
+
+    private static func attackedEnemyPieces(in fen: String, by color: PieceColor) -> Set<AttackPair> {
+        guard let board = parsePieceBoard(fen: fen) else { return [] }
+        var result: Set<AttackPair> = []
+        for (square, piece) in board where piece.color == color && piece.kind != .pawn {
+            let attacked = ChessGame.attackedEnemySquares(from: square, in: fen)
+            for target in attacked {
+                if let targetPiece = board[target.square], targetPiece.color != color {
+                    result.insert(AttackPair(
+                        attackingPieceKind: piece.kind,
+                        attackingSquare: square,
+                        targetPieceKind: targetPiece.kind,
+                        targetSquare: target.square
+                    ))
+                }
+            }
+        }
+        return result
+    }
+
+    /// Fires when the played move left the mover's king on the back rank
+    /// with no flight squares (the classic back-rank weakness).
+    public static func backRankWeakness(input: ReportInput, ply p: Int) -> BackRankWeaknessFact? {
+        guard p >= 1, p < input.plies.count else { return nil }
+        let postMove = input.plies[p]
+        guard validPinFEN(postMove.fen) else { return nil }
+
+        let moverIsWhite = input.moverIsWhite(atPly: p)
+        let kingColor: PieceColor = moverIsWhite ? .white : .black
+
+        guard ChessGame.hasBackRankWeakness(fen: postMove.fen, for: kingColor) else { return nil }
+
+        guard let board = parsePieceBoard(fen: postMove.fen) else { return nil }
+        guard let king = board.first(where: { $0.value.kind == .king && $0.value.color == kingColor }) else {
+            return nil
+        }
+
+        return BackRankWeaknessFact(
+            ply: p,
+            kingSquare: king.key,
+            kingColor: kingColor
+        )
+    }
+
+    /// Fires when the played move left one of the mover's pieces (non-pawn,
+    /// non-king) with no safe move - every legal destination is attacked by
+    /// an enemy piece, so the piece is trapped.
+    public static func trappedPiece(input: ReportInput, ply p: Int) -> TrappedPieceFact? {
+        guard p >= 1, p < input.plies.count else { return nil }
+        let postMove = input.plies[p]
+        guard validPinFEN(postMove.fen) else { return nil }
+
+        let moverIsWhite = input.moverIsWhite(atPly: p)
+        let moverColor: PieceColor = moverIsWhite ? .white : .black
+
+        // Switch side to move to the mover's opponent (the position after the
+        // mover's move is the opponent's turn), then check the mover's pieces
+        // for trapped status
+        let opponentFEN = switchActiveColor(postMove.fen, to: moverColor.opposite)
+
+        guard let trapped = ChessGame.trappedPieces(in: opponentFEN).first else { return nil }
+
+        // Only report if the trapped piece belongs to the mover
+        guard let board = parsePieceBoard(fen: postMove.fen),
+            let piece = board[trapped.square],
+            piece.color == moverColor
+        else { return nil }
+
+        return TrappedPieceFact(
+            ply: p,
+            pieceKind: trapped.kind,
+            square: trapped.square
+        )
+    }
+
     private struct MainlineTracking {
         let pieceBeforeCurrentMove: TrackedPiece
         let whiteCastledBeforePlyP: Bool

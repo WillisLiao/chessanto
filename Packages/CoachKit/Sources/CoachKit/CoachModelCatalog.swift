@@ -34,4 +34,26 @@ public enum CoachModelCatalog {
         }
         return Recommendation(defaultModel: "qwen3:32b", alternativeModel: "qwen2.5:32b")
     }
+
+    /// The minimum model size (in billions of parameters) for the Coach to
+    /// be enabled. Below this floor, the Coach falls back to rule-based text
+    /// only, because smaller models produce tautological or unhelpful
+    /// responses (P4.8). Returns true if the model meets the floor.
+    public static let minimumParameterCountB = 8.0
+
+    /// Whether a model tag meets the 8B parameter floor for Coach enablement.
+    public static func meetsModelFloor(_ modelTag: String) -> Bool {
+        if let size = approxDownloadSizeGB[modelTag] {
+            return size >= 4.0
+        }
+        // Try to extract a parameter count from the tag (e.g. "qwen3:4b" -> 4)
+        if let match = modelTag.range(of: #"(\d+(?:\.\d+)?)b"#, options: .regularExpression) {
+            let numStr = modelTag[match].dropLast()
+            if let num = Double(numStr) {
+                return num >= minimumParameterCountB
+            }
+        }
+        // Unknown models are allowed (no false disabling)
+        return true
+    }
 }

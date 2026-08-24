@@ -72,6 +72,26 @@ public enum FactAuditor {
         return fact == expected
     }
 
+    public static func verify(_ fact: SkewerFact, input: ReportInput) -> Bool {
+        guard let expected = ThemeDetector.skewer(input: input, ply: fact.ply) else { return false }
+        return fact == expected
+    }
+
+    public static func verify(_ fact: DiscoveredAttackFact, input: ReportInput) -> Bool {
+        guard let expected = ThemeDetector.discoveredAttack(input: input, ply: fact.ply) else { return false }
+        return fact == expected
+    }
+
+    public static func verify(_ fact: BackRankWeaknessFact, input: ReportInput) -> Bool {
+        guard let expected = ThemeDetector.backRankWeakness(input: input, ply: fact.ply) else { return false }
+        return fact == expected
+    }
+
+    public static func verify(_ fact: TrappedPieceFact, input: ReportInput) -> Bool {
+        guard let expected = ThemeDetector.trappedPiece(input: input, ply: fact.ply) else { return false }
+        return fact == expected
+    }
+
     /// Re-verifies every Fact attached to `moment`, dropping (setting to
     /// `nil`) any that fail. `evalSwing` is the moment's foundation - if it
     /// fails, the whole moment is unsalvageable and `nil` is returned.
@@ -102,7 +122,11 @@ public enum FactAuditor {
             missedMate: keep(moment.missedMate, verify: { verify($0, input: input) }, label: "MissedMateFact"),
             allowedMate: keep(moment.allowedMate, verify: { verify($0, input: input) }, label: "AllowedMateFact"),
             moveQuality: keep(moment.moveQuality, verify: { verify($0, input: input) }, label: "MoveQualityFact"),
-            pin: keep(moment.pin, verify: { verify($0, input: input) }, label: "PinFact")
+            pin: keep(moment.pin, verify: { verify($0, input: input) }, label: "PinFact"),
+            skewer: keep(moment.skewer, verify: { verify($0, input: input) }, label: "SkewerFact"),
+            discoveredAttack: keep(moment.discoveredAttack, verify: { verify($0, input: input) }, label: "DiscoveredAttackFact"),
+            backRankWeakness: keep(moment.backRankWeakness, verify: { verify($0, input: input) }, label: "BackRankWeaknessFact"),
+            trappedPiece: keep(moment.trappedPiece, verify: { verify($0, input: input) }, label: "TrappedPieceFact")
         )
     }
 }

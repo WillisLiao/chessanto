@@ -11,9 +11,18 @@ struct GeneralSettingsView: View {
     @State private var soundsEnabled = true
     @State private var playerName = ""
     @State private var username: String = ""
+    @AppStorage("prefersDarkMode") private var prefersDarkMode = false
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Toggle("Dark mode", isOn: $prefersDarkMode)
+                Text("Chessanto defaults to light. Enable dark mode for evening or low-light study.")
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Analysis") {
                 Picker("Default quality", selection: $quality) {
                     ForEach(AnalysisQuality.allCases) { quality in

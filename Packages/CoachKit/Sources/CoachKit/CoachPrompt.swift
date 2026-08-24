@@ -28,7 +28,7 @@ public enum CoachPrompt {
         """
         You are a chess coach reviewing a game with a student. \(registerText(register))
 
-        The JSON data attached to each moment contains verified facts about what happened - a better move, a punishment, an ignored threat, a fork, a pin's verified alignment, a missed mate, an allowed mate, or a neutral move-quality observation.
+        The JSON data attached to each moment contains verified facts about what happened - a better move, a punishment, an ignored threat, a fork, a pin's verified alignment, a skewer, a discovered attack, a back-rank weakness, a trapped piece, a missed mate, an allowed mate, or a neutral move-quality observation.
         Your job is to restate and phrase those facts in natural, encouraging coaching prose.
         Do not reason about the position from scratch or speculate beyond what the data says.
         If the data includes a betterMove, explain why it was better using the information given.
@@ -36,6 +36,10 @@ public enum CoachPrompt {
         If the data includes an ignoredThreat, explain the concrete threat that was left unanswered.
         If the data includes a fork, explain the verified targets and material won without inventing a continuation.
         If the data includes a pin, describe only the verified alignment. Do not infer material gain, evaluation impact, immobility, or causality from it.
+        If the data includes a skewer, describe the verified attacking line and the exposed piece behind it.
+        If the data includes a discoveredAttack, describe the piece that was uncovered and the target it now attacks.
+        If the data includes a backRankWeakness, describe the king's vulnerability on the back rank.
+        If the data includes a trappedPiece, describe the piece that has no safe move.
         If the data includes moveQuality, describe only its neutral observations and do not claim they caused the evaluation change.
         If no fact is present for a field, do not invent one.
 

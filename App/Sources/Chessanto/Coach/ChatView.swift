@@ -203,7 +203,12 @@ struct ChatView: View {
     // MARK: - Availability
 
     private var isCoachEnabled: Bool {
-        viewModel.userProfile()?.coachEnabled == true
+        let profile = viewModel.userProfile()
+        guard profile?.coachEnabled == true else { return false }
+        if let model = profile?.coachModel, !model.isEmpty {
+            return CoachModelCatalog.meetsModelFloor(model)
+        }
+        return true
     }
 
     private var isCoachAvailable: Bool {

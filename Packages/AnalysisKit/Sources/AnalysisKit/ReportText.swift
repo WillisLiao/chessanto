@@ -109,6 +109,18 @@ public enum ReportText {
         if let pin = moment.pin {
             text += " " + pinSentence(pin)
         }
+        if let skewer = moment.skewer {
+            text += " " + skewerSentence(skewer)
+        }
+        if let discoveredAttack = moment.discoveredAttack {
+            text += " " + discoveredAttackSentence(discoveredAttack)
+        }
+        if let backRankWeakness = moment.backRankWeakness {
+            text += " " + backRankWeaknessSentence(backRankWeakness)
+        }
+        if let trappedPiece = moment.trappedPiece {
+            text += " " + trappedPieceSentence(trappedPiece)
+        }
         if let moveQuality = moment.moveQuality, let sentence = moveQualitySentence(moveQuality) {
             text += " " + sentence
         }
@@ -231,6 +243,22 @@ public enum ReportText {
 
     private static func pinSentence(_ fact: PinFact) -> String {
         "This move resulted in an absolute pin: the \(fact.pinningPieceKind.rawValue) on \(fact.pinningSquare) lined up the \(fact.pinnedPieceKind.rawValue) on \(fact.pinnedSquare) with its king on \(fact.kingSquare)."
+    }
+
+    private static func skewerSentence(_ fact: SkewerFact) -> String {
+        "This move created a skewer: the \(fact.attackingPieceKind.rawValue) on \(fact.attackingSquare) attacked the \(fact.frontPieceKind.rawValue) on \(fact.frontSquare), which when it moves exposes the \(fact.backPieceKind.rawValue) on \(fact.backSquare)."
+    }
+
+    private static func discoveredAttackSentence(_ fact: DiscoveredAttackFact) -> String {
+        "This move uncovered a discovered attack: the \(fact.attackingPieceKind.rawValue) on \(fact.attackingSquare) now attacks the \(fact.targetPieceKind.rawValue) on \(fact.targetSquare)."
+    }
+
+    private static func backRankWeaknessSentence(_ fact: BackRankWeaknessFact) -> String {
+        "This left the king on \(fact.kingSquare) on the back rank with no flight squares, vulnerable to a back-rank mate."
+    }
+
+    private static func trappedPieceSentence(_ fact: TrappedPieceFact) -> String {
+        "This left the \(fact.pieceKind.rawValue) on \(fact.square) trapped: every legal move loses the piece."
     }
 
     private static func moveQualitySentence(_ fact: MoveQualityFact) -> String? {

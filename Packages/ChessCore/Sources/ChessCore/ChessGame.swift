@@ -652,4 +652,234 @@ extension ChessGame {
     public static func epd(fromFEN fen: String) -> String {
         fen.split(separator: " ", maxSplits: 4).prefix(4).joined(separator: " ")
     }
+
+    /// One structural skewer in a single position.
+    /// A skewer is the inverse of a pin: a slider attacks a more valuable
+    /// piece in front of a less valuable piece on the same line. When the
+    /// valuable piece moves, the piece behind is exposed.
+    public struct Skewer: Hashable, Sendable {
+        public let attackingPieceKind: PieceKind
+        public let attackingSquare: String
+        public let frontPieceKind: PieceKind
+        public let frontSquare: String
+        public let backPieceKind: PieceKind
+        public let backSquare: String
+        public let frontColor: PieceColor
+
+        public init(
+            attackingPieceKind: PieceKind,
+            attackingSquare: String,
+            frontPieceKind: PieceKind,
+            frontSquare: String,
+            backPieceKind: PieceKind,
+            backSquare: String,
+            frontColor: PieceColor
+        ) {
+            self.attackingPieceKind = attackingPieceKind
+            self.attackingSquare = attackingSquare
+            self.frontPieceKind = frontPieceKind
+            self.frontSquare = frontSquare
+            self.backPieceKind = backPieceKind
+            self.backSquare = backSquare
+            self.frontColor = frontColor
+        }
+    }
+
+    /// Inventories structural skewers in a single position.
+    /// A skewer exists when a slider (R/B/Q) attacks a more valuable piece
+    /// that, if it moves, exposes a less valuable piece behind it on the same
+    /// ray. The king is the most valuable piece; queen next; then rook; then
+    /// minor pieces. Pawns are never skewer targets.
+    /// Uses ChessKit's legal-move generator, keeping geometry in ChessKit.
+    public static func skewers(in fen: String) -> [Skewer] {
+        guard let position = Position(fen: fen) else { return [] }
+        let board = Board(position: position)
+        let sliders: Set<Piece.Kind> = [.rook, .bishop, .queen]
+
+        func pieceValue(_ kind: PieceKind) -> Int {
+            switch kind {
+            case .pawn: return 1
+            case .knight, .bishop: return 3
+            case .rook: return 5
+            case .queen: return 9
+            case .king: return 100
+            }
+        }
+
+        var result: [Skewer] = []
+        for attacker in position.pieces where sliders.contains(attacker.kind) {
+            let attackedSquares = board.legalMoves(forPieceAt: attacker.square)
+                .map { $0.notation }
+                .sorted()
+            guard attackedSquares.count >= 2 else { continue }
+
+            for i in 0..<(attackedSquares.count - 1) {
+                let frontSquare = attackedSquares[i]
+                guard let frontPiece = position.piece(at: Square(frontSquare)),
+                    frontPiece.color != attacker.color,
+                    frontPiece.kind != .pawn
+                else { continue }
+
+                for j in (i + 1)..<attackedSquares.count {
+                    let backSquare = attackedSquares[j]
+                    guard let backPiece = position.piece(at: Square(backSquare)),
+                        backPiece.color != attacker.color,
+                        backPiece.kind != .pawn
+                    else { continue }
+
+                    let frontValue = pieceValue(frontPiece.kind.asPieceKind)
+                    let backValue = pieceValue(backPiece.kind.asPieceKind)
+                    guard frontValue > backValue else { continue }
+
+                    if isCollinear(from: attacker.square.notation, through: frontSquare, to: backSquare) {
+                        result.append(Skewer(
+                            attackingPieceKind: attacker.kind.asPieceKind,
+                            attackingSquare: attacker.square.notation,
+                            frontPieceKind: frontPiece.kind.asPieceKind,
+                            frontSquare: frontSquare,
+                            backPieceKind: backPiece.kind.asPieceKind,
+                            backSquare: backSquare,
+                            frontColor: frontPiece.color.asPieceColor
+                        ))
+                    }
+                }
+            }
+        }
+        return result.sorted { $0.attackingSquare < $1.attackingSquare }
+    }
+
+    /// True when three squares lie on a single straight line (rank, file, or
+    /// diagonal), with the first square on the outside and the other two in
+    /// order along the same ray.
+    private static func isCollinear(from a: String, through b: String, to c: String) -> Bool {
+        guard let aFile = a.first, let aRank = a.last,
+            let bFile = b.first, let bRank = b.last,
+            let cFile = c.first, let cRank = c.last
+        else { return false }
+        let aF = fileIndex(aFile), bF = fileIndex(bFile), cF = fileIndex(cFile)
+        guard let aR = Int(String(aRank)), let bR = Int(String(bRank)), let cR = Int(String(cRank)) else {
+            return false
+        }
+        let df1 = bF - aF, dr1 = bR - aR
+        let df2 = cF - aF, dr2 = cR - aR
+        // Must be on the same ray from a
+        guard (df1 == 0 && df2 == 0) || (dr1 == 0 && dr2 == 0) || (abs(df1) == abs(dr1) && abs(df2) == abs(dr2)) else {
+            return false
+        }
+        // b must be between a and c (shorter distance to a)
+        let distAB = df1 * df1 + dr1 * dr1
+        let distAC = df2 * df2 + dr2 * dr2
+        return distAB < distAC
+    }
+
+    private static func fileIndex(_ c: Character) -> Int {
+        Int(c.asciiValue ?? 0) - Int(Character("a").asciiValue ?? 0)
+    }
+
+    /// Whether the king of `color` is on the back rank (rank 1 for White,
+    /// rank 8 for Black) with no flight squares available - the classic
+    /// back-rank weakness that makes a back-rank mate possible.
+    public static func hasBackRankWeakness(fen: String, for color: PieceColor) -> Bool {
+        guard let position = Position(fen: fen) else { return false }
+        guard let king = position.pieces.first(where: { $0.kind == .king && $0.color.asPieceColor == color }) else {
+            return false
+        }
+        let backRank = color == .white ? 1 : 8
+        guard king.square.rank.value == backRank else { return false }
+
+        let board = Board(position: position)
+        let escapeMoves = board.legalMoves(forPieceAt: king.square)
+            .map { $0.notation }
+        let allOnBackRank = escapeMoves.allSatisfy { move in
+            move.last == Character(String(backRank))
+        }
+        guard allOnBackRank || escapeMoves.isEmpty else { return false }
+
+        let kingFileNum = king.square.file.number
+        let forwardRank = color == .white ? backRank + 1 : backRank - 1
+        let pawnShieldSquares: [Int] = [kingFileNum - 1, kingFileNum, kingFileNum + 1]
+        var hasPawnShield = false
+        for fileNum in pawnShieldSquares where (1...8).contains(fileNum) {
+            let fileChar = fileToChar(fileNum)
+            let squareStr = "\(fileChar)\(forwardRank)"
+            if let p = position.piece(at: Square(squareStr)),
+                p.kind == .pawn && p.color.asPieceColor == color {
+                hasPawnShield = true
+            }
+        }
+        return hasPawnShield || escapeMoves.isEmpty
+    }
+
+    private static func fileToChar(_ index: Int) -> Character {
+        let a = Int(Character("a").asciiValue ?? 97)
+        return Character(UnicodeScalar(a + index - 1) ?? UnicodeScalar(97))
+    }
+
+    /// A piece is trapped when it has very few legal moves and most of them
+    /// are to attacked squares where the piece would be lost. Returns the
+    /// squares of pieces (excluding pawns and kings) that have no safe move
+    /// (a move to a square not attacked by any enemy piece).
+    public static func trappedPieces(in fen: String) -> [(square: String, kind: PieceKind)] {
+        guard let position = Position(fen: fen) else { return [] }
+        let board = Board(position: position)
+        let sideToMove: Piece.Color = fen.split(separator: " ").count > 1
+            && fen.split(separator: " ")[1] == "b"
+            ? .black : .white
+        let sideToMoveExternal: PieceColor = sideToMove.asPieceColor
+
+        var result: [(String, PieceKind)] = []
+        for piece in position.pieces where piece.color == sideToMove
+            && piece.kind != .pawn && piece.kind != .king
+        {
+            let moves = board.legalMoves(forPieceAt: piece.square)
+            guard !moves.isEmpty else { continue }
+
+            let hasSafeMove = moves.contains { destination in
+                let destSquare = destination.notation
+                guard let target = position.piece(at: destination) else {
+                    return !isSquareAttacked(square: destSquare, by: sideToMoveExternal.opposite, in: fen)
+                }
+                return target.color != sideToMove
+                    && !isSquareAttacked(square: destSquare, by: sideToMoveExternal.opposite, in: fen)
+            }
+            if !hasSafeMove {
+                result.append((piece.square.notation, piece.kind.asPieceKind))
+            }
+        }
+        return result.sorted { $0.0 < $1.0 }
+    }
+
+    /// Whether `square` is attacked by any piece of `color` in the position
+    /// described by `fen`. Uses ChessKit's legal-move generator.
+    public static func isSquareAttacked(square: String, by color: PieceColor, in fen: String) -> Bool {
+        guard let position = Position(fen: fen) else { return false }
+        let board = Board(position: position)
+        let target = Square(square)
+        return position.pieces
+            .filter { $0.color.asPieceColor == color }
+            .contains { board.legalMoves(forPieceAt: $0.square).contains(target) }
+    }
+
+    /// Parses `[%clk 1:23:45]` clock annotations from PGN comments and
+    /// returns the clock time in seconds for each move. Returns nil for
+    /// comments without a clock annotation.
+    /// Format: `[%clk HH:MM:SS]` or `[%clk MM:SS]`.
+    public static func parseClockAnnotation(_ comment: String) -> Int? {
+        // Find [%clk ...] in the comment
+        guard let clkRange = comment.range(of: "\\[%clk\\s+([^\\]]+)\\]", options: .regularExpression) else {
+            return nil
+        }
+        let clkContent = String(comment[clkRange])
+        // Extract the time string
+        guard let timeRange = clkContent.range(of: "\\d{1,2}:\\d{2}(?::\\d{2})?", options: .regularExpression) else {
+            return nil
+        }
+        let timeStr = String(clkContent[timeRange])
+        let parts = timeStr.split(separator: ":").compactMap { Int($0) }
+        switch parts.count {
+        case 2: return parts[0] * 60 + parts[1]
+        case 3: return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        default: return nil
+        }
+    }
 }

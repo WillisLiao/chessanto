@@ -7,13 +7,14 @@ struct ChessantoApp: App {
     @StateObject private var engineService = EngineService()
     @StateObject private var coachService = CoachService()
     @StateObject private var companionManager = MacCompanionManager()
+    @AppStorage("prefersDarkMode") private var prefersDarkMode = false
 
     init() {
-        // Chessanto is white-forward by design (user decision, 2026-07-18) -
-        // it does not follow the system's dark mode setting. Pinning
-        // NSApp's appearance keeps native chrome (sidebar, titlebar,
-        // controls) in lockstep with the light-only DesignColors tokens.
-        NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        // Chessanto defaults to light (user decision, 2026-07-18) but now
+        // supports dark mode when the user enables it in General Settings.
+        // The DesignColors tokens are adaptive and switch automatically.
+        let prefersDark = UserDefaults.standard.bool(forKey: "prefersDarkMode")
+        NSApplication.shared.appearance = NSAppearance(named: prefersDark ? .darkAqua : .aqua)
     }
 
     private func post(_ name: Notification.Name) {
@@ -38,7 +39,7 @@ struct ChessantoApp: App {
                     idealHeight: 720
                 )
                 .tint(DesignColors.accent)
-                .preferredColorScheme(.light)
+                .preferredColorScheme(prefersDarkMode ? .dark : .light)
                 .task {
                     await engineService.start()
                     await companionManager.start(

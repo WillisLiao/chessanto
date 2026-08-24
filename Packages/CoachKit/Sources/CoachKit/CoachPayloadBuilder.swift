@@ -27,6 +27,10 @@ public struct CoachFactsPayload: Codable, Sendable {
     public let allowedMate: AllowedMateFact?
     public let moveQuality: MoveQualityFact?
     public let pin: PinFact?
+    public let skewer: SkewerFact?
+    public let discoveredAttack: DiscoveredAttackFact?
+    public let backRankWeakness: BackRankWeaknessFact?
+    public let trappedPiece: TrappedPieceFact?
 
     public init(
         betterMove: BetterMoveFact?,
@@ -36,7 +40,11 @@ public struct CoachFactsPayload: Codable, Sendable {
         missedMate: MissedMateFact?,
         allowedMate: AllowedMateFact?,
         moveQuality: MoveQualityFact? = nil,
-        pin: PinFact? = nil
+        pin: PinFact? = nil,
+        skewer: SkewerFact? = nil,
+        discoveredAttack: DiscoveredAttackFact? = nil,
+        backRankWeakness: BackRankWeaknessFact? = nil,
+        trappedPiece: TrappedPieceFact? = nil
     ) {
         self.betterMove = betterMove
         self.punishment = punishment
@@ -46,6 +54,10 @@ public struct CoachFactsPayload: Codable, Sendable {
         self.allowedMate = allowedMate
         self.moveQuality = moveQuality
         self.pin = pin
+        self.skewer = skewer
+        self.discoveredAttack = discoveredAttack
+        self.backRankWeakness = backRankWeakness
+        self.trappedPiece = trappedPiece
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -57,6 +69,10 @@ public struct CoachFactsPayload: Codable, Sendable {
         case allowedMate
         case moveQuality
         case pin
+        case skewer
+        case discoveredAttack
+        case backRankWeakness
+        case trappedPiece
     }
 
     public init(from decoder: Decoder) throws {
@@ -69,6 +85,10 @@ public struct CoachFactsPayload: Codable, Sendable {
         allowedMate = try container.decodeIfPresent(AllowedMateFact.self, forKey: .allowedMate)
         moveQuality = try container.decodeIfPresent(MoveQualityFact.self, forKey: .moveQuality)
         pin = try container.decodeIfPresent(PinFact.self, forKey: .pin)
+        skewer = try container.decodeIfPresent(SkewerFact.self, forKey: .skewer)
+        discoveredAttack = try container.decodeIfPresent(DiscoveredAttackFact.self, forKey: .discoveredAttack)
+        backRankWeakness = try container.decodeIfPresent(BackRankWeaknessFact.self, forKey: .backRankWeakness)
+        trappedPiece = try container.decodeIfPresent(TrappedPieceFact.self, forKey: .trappedPiece)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -81,6 +101,10 @@ public struct CoachFactsPayload: Codable, Sendable {
         try container.encodeIfPresent(allowedMate, forKey: .allowedMate)
         try container.encodeIfPresent(moveQuality, forKey: .moveQuality)
         try container.encodeIfPresent(pin, forKey: .pin)
+        try container.encodeIfPresent(skewer, forKey: .skewer)
+        try container.encodeIfPresent(discoveredAttack, forKey: .discoveredAttack)
+        try container.encodeIfPresent(backRankWeakness, forKey: .backRankWeakness)
+        try container.encodeIfPresent(trappedPiece, forKey: .trappedPiece)
     }
 }
 
@@ -270,7 +294,11 @@ public enum CoachPayloadBuilder {
                 missedMate: moment.missedMate,
                 allowedMate: moment.allowedMate,
                 moveQuality: moment.moveQuality,
-                pin: moment.pin
+                pin: moment.pin,
+                skewer: moment.skewer,
+                discoveredAttack: moment.discoveredAttack,
+                backRankWeakness: moment.backRankWeakness,
+                trappedPiece: moment.trappedPiece
             )
         )
     }
