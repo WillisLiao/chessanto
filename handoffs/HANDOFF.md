@@ -3,6 +3,14 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Opening book quality
+
+The opening book coverage audit harness and architecture analysis are in place on `feature/opening-book-quality`.
+A corpus of 4,698 real Chess.com games from five titled players (Hikaru Nakamura, Magnus Carlsen, Daniel Naroditsky, Levy Rozman, and Fabiano Caruana) was assembled for systematic coverage and deviation-point benchmarking.
+The bundled dataset consists of `eco.json` (3,803 entries, 497 KB) and `eco-index.json` (3,801 resolved unique EPD positions, 542 KB), totaling ~1.0 MB (well under the multi-megabyte budget in PLAN.md).
+Identified the root cause of early-deviation reports on deep theoretical mainlines: `eco-indexer` only stores terminal line positions rather than retaining intermediate theoretical plies, causing games that depart mid-variation to fall back to earlier parent entries.
+AnalysisKit package tests pass with 195 tests across 6 suites, and `xcodegen generate` succeeds cleanly.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.
