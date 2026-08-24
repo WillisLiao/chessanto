@@ -4,7 +4,8 @@
 
 This session diagnosed and resolved the real end-user PGN load failure reported as `ChessKit.PGNParser.Error error 2` and `invalidMove("Rb5")`.
 The defect prevented importing and viewing real Chess.com games such as `Hikaru vs Casablanca` (57 moves, 113 plies).
-A narrow, robust `PGNCompatibility` parser was introduced in `ChessCore` to correctly handle disambiguated captures and all standard PGN movetext elements without accepting illegal chess or altering canonical SAN representations.
+A targeted compatibility adapter was implemented in `ChessCore` as a fallback when upstream `ChessKit.Game(pgn:)` throws.
+The compatibility parser resolves affected disambiguated piece-capture tokens using `ChessKit.Board.move(pieceAt:to:)` to obtain canonical move metadata, requiring exactly one legal source candidate, while preserving upstream behavior for ordinary PGNs.
 
 ## 1. Reproduction Path and Exact Error
 
@@ -43,25 +44,27 @@ Because `chesskit-swift` erroneously moved the `b1` rook to `e1`, `2. Rb5` faile
 
 - **RED Evidence**: Running `swift test` on `Packages/ChessCore` against the minimal regression fixture produced the exact error:
   `RealGameFixtureTests.swift: Caught error: invalidMove("Rb5")`
-- **GREEN Evidence**: With `PGNCompatibility` in place, running `swift test` passed all 44 tests across 4 suites in `ChessCoreTests`, including `minimalDisambiguatedCaptureRegression` and `parsesHikaruVsCasablancaGame` (validating all 113 plies, final FEN `1r6/1PR5/8/3B4/1k2P2p/p2K3P/8/8 b - - 0 57`, and UCI translations `f1e1` and `b1b5`).
+- **GREEN Evidence**: With the compatibility fallback in place, running `swift test` passed all 47 tests across 4 suites in `ChessCoreTests`, including `minimalDisambiguatedCaptureRegression` and `parsesHikaruVsCasablancaGame` (validating all 113 plies, final FEN `1r6/1PR5/8/3B4/1k2P2p/p2K3P/8/8 b - - 0 57`, and UCI moves `f1e1` and `b1b5`).
 
-## 5. Architectural Fix and Guarantees
+## 5. Architectural Design and Guarantees
 
-A dedicated compatibility parser `PGNCompatibility.swift` was implemented inside `Packages/ChessCore/Sources/ChessCore/`:
-1. `PGNCompatibility.parse(pgn:)` handles PGN tags, custom `SetUp` and `FEN` starting positions, movetext tokenization, annotations (`!`, `?`, `!?`, `??`, `!!`, `?!`, `□`, `$1`, `$2`), comments (including clock data `{[%clk ...]}`), variations `( ... )`, and game results.
-2. For SAN move parsing, `parseSAN` detects piece moves with disambiguation (`file`, `rank`, or `square`) before `x` or target square, queries `Board.canMove` for legal candidate pieces of matching color and kind, filters by disambiguator, and synthesizes the exact `Move` with proper `disambiguation` and `result` metadata.
-3. Standard moves, castling, en-passant, and pawn promotions are parsed with full legality validation.
-4. Illegal chess moves (e.g. impossible piece destinations, moves through obstacles, moves into check, wrong color to move) are strictly rejected with `PGNCompatibility.Error.invalidMove(san)`.
-5. Canonical SAN is never rewritten or mutated globally; re-exporting via `game.pgnString` preserves disambiguated move notation (e.g., `Rfxe1`).
-6. `ChessGame.swift` required only a one-line change on line 18 (`self.game = try PGNCompatibility.parse(pgn: pgn)`), leaving the rest of the file untouched to prevent merge conflicts with active branches.
+1. `ChessGame.init(pgn:)` retains `ChessKit.Game(pgn:)` as the primary parser and invokes `PGNCompatibility.parse(pgn:)` only when upstream parsing throws.
+2. In `PGNCompatibility.parseSAN`, only affected disambiguated piece-capture tokens (`[KQRBN]` moves containing `x` with a preceding disambiguator) are intercepted.
+3. Candidate source pieces are filtered using `Board.canMove` and the SAN disambiguator (`file`, `rank`, or `square`).
+4. Exactly one legal source candidate is required (`guard candidates.count == 1 else { return nil }`).
+5. Legal move creation, capture metadata, check state, and canonical disambiguation are obtained directly through `ChessKit.Board.move(pieceAt:to:)` with no JSON encoding or synthetic serialization.
+6. All other tokens (pawn moves, non-disambiguated piece moves, castling) delegate directly to `ChessKit.SANParser.parse`.
+7. Full regression coverage verifies ordinary upstream games, compact PGN formats (`1.e4 e5`), attached move numbers (`1...d5`), comments (`{[%clk ...]}`), NAGs (`$1`, `$2`), annotations (`!`, `?`, `!?`, `??`), variations, custom `SetUp`/`FEN` positions, castling, promotion, and en passant.
+8. Illegal chess moves remain strictly rejected with `PGNCompatibility.Error.invalidMove(san)`.
+9. Canonical SAN is never mutated globally; re-exporting via `game.pgnString` preserves standard SAN notation.
 
-## 6. Full Validation Results
+## 6. Exact Verification Commands and Test Counts
 
-- `Packages/ChessCore`: 44 tests in 4 suites passed in `0.014s`.
-- `Packages/Persistence`: 15 tests in 2 suites passed in `0.046s`.
-- `Packages/AnalysisKit`: 15 tests in 2 suites passed in `0.052s`.
-- App tests (`ChessantoTests`): `GameReplayViewModelPGNHardeningTests` passed and full macOS test suite succeeded with `** TEST SUCCEEDED **`.
-- macOS build: `** BUILD SUCCEEDED **`.
+- `swift test` in `Packages/ChessCore`: Executed 47 tests across 4 suites with 0 failures in `0.016s`.
+- `swift test` in `Packages/Persistence`: Executed 44 tests across 2 suites with 0 failures in `0.570s`.
+- `swift test` in `Packages/AnalysisKit`: Executed 88 tests across 6 suites with 0 failures in `74.152s`.
+- `xcodebuild -project Chessanto.xcodeproj -scheme Chessanto -destination 'platform=macOS' test`: Full test suite passed with `** TEST SUCCEEDED **`.
+- `xcodebuild -project Chessanto.xcodeproj -scheme Chessanto -destination 'platform=macOS' -configuration Release build`: Build succeeded with `** BUILD SUCCEEDED **`.
 - Database safety verified: live database SHA-256 hash at `~/Library/Containers/com.chessanto.app/Data/Library/Application Support/Chessanto/chessanto.sqlite` remains `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`.
 - `git diff --check` passed with 0 errors.
 - Verified 0 em dash characters across all project code and documentation.

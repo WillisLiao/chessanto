@@ -3,92 +3,18 @@ import Foundation
 
 /// Internal compatibility parser for PGN games.
 ///
-/// Addresses upstream `chesskit-swift` parser limitations, such as
-/// disambiguated piece captures (e.g., `Rfxe1`, `Nbxd7+`, `Ra1xe1`),
-/// while preserving full compliance with PGN standards including
-/// comments, NAGs, annotations, variations, castling, promotions,
-/// checks, checkmates, and custom starting positions.
+/// Invoked as a targeted fallback when upstream `ChessKit.Game(pgn:)` throws.
+/// Resolves disambiguated piece-capture tokens (e.g., `Rfxe1`, `Nbxd7+`, `R1xe1`, `Ra1xe1`)
+/// that upstream `SANParser` rejects due to an incomplete regex lookahead, while
+/// preserving complete fidelity for comments, NAGs, annotations, variations,
+/// castling, promotions, checks, and custom starting positions.
 enum PGNCompatibility {
 
     public enum Error: Swift.Error, Equatable {
-        case tooManyLineBreaks
         case invalidSetUpOrFEN
-        case invalidTagFormat
-        case mismatchedTagBrackets
-        case tagStringNotFound
-        case tagSymbolNotFound
-        case unexpectedTagCharacter(String)
-        case invalidAnnotation(String)
         case invalidMove(String)
-        case unexpectedMoveTextToken
         case unpairedCommentDelimiter
         case unpairedVariationDelimiter
-    }
-
-    private struct MoveDTO: Codable {
-        var result: Move.Result
-        var piece: Piece
-        var start: Square
-        var end: Square
-        var promotedPiece: Piece?
-        var disambiguation: Move.Disambiguation?
-        var checkState: Move.CheckState
-        var assessment: Move.Assessment
-        var comment: String
-    }
-
-    private static let jsonEncoder = JSONEncoder()
-    private static let jsonDecoder = JSONDecoder()
-
-    private static func createMove(
-        result: Move.Result,
-        piece: Piece,
-        start: Square,
-        end: Square,
-        promotedPiece: Piece? = nil,
-        disambiguation: Move.Disambiguation? = nil,
-        checkState: Move.CheckState = .none,
-        assessment: Move.Assessment = .null,
-        comment: String = ""
-    ) -> Move {
-        if disambiguation == nil && promotedPiece == nil {
-            return Move(
-                result: result,
-                piece: piece,
-                start: start,
-                end: end,
-                checkState: checkState,
-                assessment: assessment,
-                comment: comment
-            )
-        }
-
-        let dto = MoveDTO(
-            result: result,
-            piece: piece,
-            start: start,
-            end: end,
-            promotedPiece: promotedPiece,
-            disambiguation: disambiguation,
-            checkState: checkState,
-            assessment: assessment,
-            comment: comment
-        )
-
-        if let data = try? jsonEncoder.encode(dto),
-           let move = try? jsonDecoder.decode(Move.self, from: data) {
-            return move
-        }
-
-        return Move(
-            result: result,
-            piece: piece,
-            start: start,
-            end: end,
-            checkState: checkState,
-            assessment: assessment,
-            comment: comment
-        )
     }
 
     public static func parse(pgn: String) throws -> Game {
@@ -117,7 +43,6 @@ enum PGNCompatibility {
 
         let tags = try parseTags(from: tagLines.joined(separator: "\n"))
         let startingPos = try startingPosition(from: tags)
-
         let moveText = moveTextLines.joined(separator: " ")
         return try parseMoveText(moveText, startingPosition: startingPos, tags: tags)
     }
@@ -207,7 +132,7 @@ enum PGNCompatibility {
                 }
                 inComment = true
             } else if c == "}" {
-                if !inComment {
+                guard inComment else {
                     throw Error.unpairedCommentDelimiter
                 }
                 tokens.append(.comment(currentToken.trimmingCharacters(in: .whitespaces)))
@@ -264,14 +189,19 @@ enum PGNCompatibility {
             return [.result(text)]
         }
 
-        if text.hasPrefix("$") || text.hasPrefix("!") || text.hasPrefix("?") || text == "□" {
-            return [.annotation(text)]
+        // Handle attached move numbers like "1.e4", "1...e5", "57.Rxc7"
+        if let match = firstMatchGroups(in: text, pattern: #"^(\d+\.{1,3})(.*)$"#), match.count == 2 {
+            let numberPart = match[0]
+            let remainder = match[1]
+            if remainder.isEmpty {
+                return [.number(numberPart)]
+            } else {
+                return [.number(numberPart)] + convertTokens(from: remainder)
+            }
         }
 
-        if let first = text.first, first.isWholeNumber {
-            if text.contains(".") {
-                return [.number(text)]
-            }
+        if text.hasPrefix("$") || text.hasPrefix("!") || text.hasPrefix("?") || text == "□" {
+            return [.annotation(text)]
         }
 
         // Check for attached annotation suffixes like "Nf3!", "Nc6?", "Bb5!?"
@@ -284,6 +214,17 @@ enum PGNCompatibility {
         }
 
         return [.san(text)]
+    }
+
+    private static func firstMatchGroups(in string: String, pattern: String) -> [String]? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsString = string as NSString
+        guard let match = regex.firstMatch(in: string, range: NSRange(location: 0, length: nsString.length)) else { return nil }
+        var groups: [String] = []
+        for i in 1..<match.numberOfRanges {
+            groups.append(nsString.substring(with: match.range(at: i)))
+        }
+        return groups
     }
 
     private static func parseMoveText(
@@ -363,80 +304,58 @@ enum PGNCompatibility {
     public static func parseSAN(_ san: String, in position: Position) -> Move? {
         let clean = san.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "#", with: "")
 
+        // Resolve disambiguated piece-capture tokens that upstream SANParser drops:
         if let firstChar = clean.first, let pieceKind = Piece.Kind(rawValue: String(firstChar)) {
             let body = clean.dropFirst()
-            let isCapture = body.contains("x")
-
-            if let end = extractTargetSquare(from: clean) {
-                let endStr = end.notation
-                var disambigStr = ""
-                if isCapture {
-                    if let xIdx = body.firstIndex(of: "x") {
-                        disambigStr = String(body[body.startIndex..<xIdx])
-                    }
-                } else if let endRange = body.range(of: endStr, options: .backwards) {
-                    disambigStr = String(body[body.startIndex..<endRange.lowerBound])
-                }
-
-                if !disambigStr.isEmpty {
-                    var disambiguation: Move.Disambiguation?
-                    if disambigStr.count == 2 {
-                        let sq = Square(disambigStr)
-                        disambiguation = .bySquare(sq)
-                    } else if disambigStr.count == 1 {
-                        let char = disambigStr.first!
-                        if ("a"..."h").contains(char), let file = Square.File(rawValue: disambigStr) {
-                            disambiguation = .byFile(file)
-                        } else if ("1"..."8").contains(char), let rankNum = Int(disambigStr) {
-                            disambiguation = .byRank(Square.Rank(rankNum))
-                        }
-                    }
-
-                    if let disambiguation {
-                        let color = position.sideToMove
-                        let board = Board(position: position)
-                        let matchingPieces = position.pieces.filter {
-                            $0.kind == pieceKind && $0.color == color && board.canMove(pieceAt: $0.square, to: end)
-                        }
-
-                        let candidates = matchingPieces.filter { piece in
-                            switch disambiguation {
-                            case let .byFile(file):
-                                return piece.square.file == file
-                            case let .byRank(rank):
-                                return piece.square.rank == rank
-                            case let .bySquare(sq):
-                                return piece.square == sq
+            if body.contains("x"), let end = extractTargetSquare(from: clean) {
+                if let xIdx = body.firstIndex(of: "x") {
+                    let disambigStr = String(body[body.startIndex..<xIdx])
+                    if !disambigStr.isEmpty {
+                        var disambiguation: Move.Disambiguation?
+                        if disambigStr.count == 2 {
+                            let sq = Square(disambigStr)
+                            disambiguation = .bySquare(sq)
+                        } else if disambigStr.count == 1 {
+                            let char = disambigStr.first!
+                            if ("a"..."h").contains(char), let file = Square.File(rawValue: disambigStr) {
+                                disambiguation = .byFile(file)
+                            } else if ("1"..."8").contains(char), let rankNum = Int(disambigStr) {
+                                disambiguation = .byRank(Square.Rank(rankNum))
                             }
                         }
 
-                        if let piece = candidates.first {
-                            let checkState: Move.CheckState = san.contains("#") ? .checkmate : (san.contains("+") ? .check : .none)
-                            let result: Move.Result
-                            if isCapture {
-                                if let captured = position.piece(at: end) {
-                                    result = .capture(captured)
-                                } else {
-                                    return nil
+                        if let disambiguation {
+                            let color = position.sideToMove
+                            let board = Board(position: position)
+                            let matchingPieces = position.pieces.filter {
+                                $0.kind == pieceKind && $0.color == color && board.canMove(pieceAt: $0.square, to: end)
+                            }
+
+                            let candidates = matchingPieces.filter { piece in
+                                switch disambiguation {
+                                case let .byFile(file):
+                                    return piece.square.file == file
+                                case let .byRank(rank):
+                                    return piece.square.rank == rank
+                                case let .bySquare(sq):
+                                    return piece.square == sq
                                 }
-                            } else {
-                                result = .move
                             }
 
-                            return createMove(
-                                result: result,
-                                piece: piece,
-                                start: piece.square,
-                                end: end,
-                                disambiguation: disambiguation,
-                                checkState: checkState
-                            )
+                            // Require exactly one legal source candidate after applying the SAN disambiguator
+                            guard candidates.count == 1, let candidate = candidates.first else {
+                                return nil
+                            }
+
+                            var playBoard = Board(position: position)
+                            return playBoard.move(pieceAt: candidate.square, to: end)
                         }
                     }
                 }
             }
         }
 
+        // For all other tokens, delegate to upstream SANParser
         return SANParser.parse(move: san, in: position)
     }
 
