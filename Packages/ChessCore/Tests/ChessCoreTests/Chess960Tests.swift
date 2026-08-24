@@ -303,6 +303,32 @@ import Testing
     #expect(game.san(at: move1!) == "Nc3")
 }
 
+// MARK: - Engine Mode Detection
+
+@Test func standardPositionsDoNotRequireChess960EngineMode() {
+    #expect(!Chess960.requiresChess960EngineMode(fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"))
+    #expect(!Chess960.requiresChess960EngineMode(fen: "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"))
+    #expect(!Chess960.requiresChess960EngineMode(fen: "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"))
+    // Rights that have lapsed entirely leave nothing for the engine to
+    // misinterpret, in any position.
+    #expect(!Chess960.requiresChess960EngineMode(fen: "4k3/8/8/8/8/8/8/4K3 w - - 0 1"))
+    // A partial traditional field whose implied squares hold is standard.
+    #expect(!Chess960.requiresChess960EngineMode(fen: "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1"))
+}
+
+@Test func chess960PositionsRequireChess960EngineMode() {
+    // Shredder-FEN file letters always mean non-standard rights.
+    #expect(Chess960.requiresChess960EngineMode(fen: Chess960.startingFEN(index: 0)))
+    // X-FEN spelling (traditional letters) with non-standard geometry:
+    // the Lichess export shape, king on f1/f8 with outer rooks.
+    #expect(Chess960.requiresChess960EngineMode(fen: "rnnbbkqr/pppppppp/8/8/8/8/PPPPPPPP/RNNBBKQR w KQkq - 0 1"))
+    // A single traditional right whose rook square doesn't hold.
+    #expect(Chess960.requiresChess960EngineMode(fen: "4k3/8/8/8/8/8/8/2R1K3 w K - 0 1"))
+    // A traditional right whose rook square doesn't hold (king on e1,
+    // rook on b1).
+    #expect(Chess960.requiresChess960EngineMode(fen: "4k3/8/8/8/8/8/8/1R2K3 w Q - 0 1"))
+}
+
 // MARK: - Real Game PGN Fixture Tests
 
 private let lichessFixture960 = """

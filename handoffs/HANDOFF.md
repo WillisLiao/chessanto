@@ -3,6 +3,51 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Chess960 app integration IN PROGRESS, unverified
+
+Implementation of Chess960 app integration lives on
+`feature/chess960-app-integration` (worktree `../chessanto-chess960-app-integration`),
+built on a local merge of `feature/chess960-core`. NOT MERGED, NOT PUSHED,
+NOT VERIFIED - the session wrapped before the verification bar could run;
+`swift test --package-path Packages/ChessCore` was still in its cold build
+when it hit the shell timeout. Full narrative and the precise next steps are
+in `devlogs/2026-08-25-chess960-app-integration.md`.
+
+What is implemented:
+
+- The one real pipeline bug found: Stockfish needs `UCI_Chess960=true`
+  for 960 games (castling PV spelling is flag-dependent, collides with plain
+  king moves when the king starts adjacent to the g/c file, and the option
+  must be sent between search-stop and `position`, which only
+  `AnalysisEngine.setPosition` can guarantee). Fixed via
+  `Chess960.requiresChess960EngineMode(fen:)` (ChessCore), a cached
+  `chess960:` parameter on `AnalysisEngine.setPosition` (EngineKit), and
+  both EngineService search seams passing it.
+- Audit found no other standard-start assumptions: import path, board
+  rendering (`BoardPositionMapper` reads the board field only), report
+  pipeline (FEN-driven), and opening-book silence (core's `lookup` guard)
+  all already behave correctly for 960 games.
+- engine-smoke section 6 pins the castling-spelling contract with a
+  deterministic mate-in-1 castle probe matrix plus two real 960-mode
+  searches.
+
+What remains for next session:
+
+- Write the App E2E test (real Lichess 960 fixture through import ->
+  load -> board arrangement -> synthetic analysis rows -> report with
+  `opening == nil`); pattern from `GameReplayViewModelRegisterTests`,
+  fixture PGN copyable from `Chess960Tests.swift`. Then `xcodegen generate`
+  and run the full verification bar, quoting real output into the devlog:
+  AnalysisKit + Persistence swift tests, xcodebuild build/test. Also run
+  `swift run --package-path Packages/EngineKit engine-smoke` for section 6,
+  and rerun `swift test --package-path Packages/ChessCore` (timed out
+  mid-build this session; nothing known to fail).
+- Commit everything on the branch (done for current state), do not merge
+  to main, do not push.
+- Optional pairing skipped deliberately: play-vs-engine is not merged to
+  main, so no "random 960 position" start option was added.
+
+
 ## Current state - Chess960 core (2026-08-25)
 
 Chess960 rules and import are implemented on `feature/chess960-core` (not merged).

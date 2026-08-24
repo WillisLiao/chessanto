@@ -148,7 +148,7 @@ public actor AnalysisEngine {
     /// waiting for `readyok`, which Stockfish only sends after every
     /// previously queued command and its output have been fully processed.
     @discardableResult
-    public func setPosition(fen: String, moves: [String] = []) async -> Int {
+    public func setPosition(fen: String, moves: [String] = [], chess960: Bool? = nil) async -> Int {
         if isSearching {
             await engine.send(command: .stop)
             var waited = 0
@@ -172,10 +172,26 @@ public actor AnalysisEngine {
         // (`engine-smoke`'s generation-isolation assertion); it is a
         // mitigation, not a proof.
         try? await Task.sleep(nanoseconds: 30_000_000)
+        // UCI_Chess960 changes how castling is generated and how castling
+        // moves are spelled in PVs (king-to-rook vs king-to-g/c-file), so it
+        // has to be in effect before the `position` command: Stockfish latches
+        // the flag onto the position object at parse time. The setoption also
+        // cannot be sent while a search is running (engines ignore option
+        // changes mid-search), which is why it lives here - after any
+        // in-flight search has been stopped and drained above, and before the
+        // position is sent. Redundant options are skipped via the last value
+        // actually applied.
+        if let chess960, chess960 != appliedChess960 {
+            await engine.send(command: .setoption(id: "UCI_Chess960", value: chess960 ? "true" : "false"))
+            appliedChess960 = chess960
+        }
         generation += 1
         await engine.send(command: .position(.fen(fen), moves: moves.isEmpty ? nil : moves))
         return generation
     }
+
+    /// The `UCI_Chess960` value most recently sent to the engine, if any.
+    private var appliedChess960: Bool?
 
     /// Sends a UCI `setoption` (e.g. "Hash", "EvalFile"). Only call between
     /// searches; engines ignore option changes while searching.
