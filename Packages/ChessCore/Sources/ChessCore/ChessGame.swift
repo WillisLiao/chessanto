@@ -384,7 +384,7 @@ extension ChessGame {
 
     private static func strictFENFields(_ fen: String) -> [String]? {
         let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
-        guard fields.count == 6, validFENMetadata(fields) else { return nil }
+        guard fields.count == 6, validFENMetadata(fields), validFENCounters(fields) else { return nil }
         return fields
     }
 
@@ -415,6 +415,15 @@ extension ChessGame {
             return false
         }
         return true
+    }
+
+    private static func validFENCounters(_ fields: [String]) -> Bool {
+        guard fields.count >= 6 else { return true }
+        return validUnsignedDecimal(fields[4]) && validUnsignedDecimal(fields[5])
+    }
+
+    private static func validUnsignedDecimal(_ field: String) -> Bool {
+        !field.isEmpty && field.allSatisfy { "0123456789".contains($0) }
     }
 
     private static func strictPieceBoard(_ boardField: String) -> StrictPieceBoard? {
@@ -632,7 +641,7 @@ extension ChessGame {
     /// engine-tool argument validation) need this check first.
     public static func isValidFEN(_ fen: String) -> Bool {
         let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
-        guard validFENMetadata(fields) else { return false }
+        guard validFENMetadata(fields), validFENCounters(fields) else { return false }
         return Position(fen: fen) != nil
     }
 

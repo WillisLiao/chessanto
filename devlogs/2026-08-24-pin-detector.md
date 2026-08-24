@@ -17,8 +17,10 @@ The primitive removes each candidate blocker from a hypothetical FEN and asks Ch
 The original legal-move set must contain a capture of the candidate, which prevents a skewer or an unrelated already-checking slider from being reported as a pin.
 No rook, bishop, or queen ray geometry is hand-written.
 The six-field guard also rejects unknown, duplicate, or out-of-order castling rights and en-passant fields outside the a3-h3 and a6-h6 ranks before ChessKit parsing.
+Strict validation requires ASCII unsigned decimal halfmove and fullmove fields, so signed spellings such as `+1` fail before numeric conversion.
 
 The detector validates the persisted transition through the repository's replay and FEN continuity checks.
+Mainline tracking applies that strict validation to every persisted row used before the target ply, not only the target transition.
 It accepts only the documented transient en-passant normalization and the narrow real en-passant halfmove correction.
 It compares pre- and post-move relations by physical attacker, pinned-piece, and king identities rather than by coordinates or kinds.
 Promotion retains the pawn identity after its kind changes, castling moves the rook identity, and captures remove ordinary or en-passant identities.

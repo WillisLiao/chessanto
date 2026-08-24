@@ -345,10 +345,16 @@ private let startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 
 @Test func absolutePinsRequiresValidSideAndCounters() {
     let invalidSide = "k3r3/8/8/8/8/8/4N3/4K3 x - - 0 1"
     let negativeHalfmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - -1 1"
+    let negativeFullmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - 0 -1"
+    let plusHalfmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - +0 1"
+    let plusFullmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - 0 +1"
     let zeroFullmove = "k3r3/8/8/8/8/8/4N3/4K3 w - - 0 0"
 
     #expect(ChessGame.absolutePins(in: invalidSide).isEmpty)
     #expect(ChessGame.absolutePins(in: negativeHalfmove).isEmpty)
+    #expect(ChessGame.absolutePins(in: negativeFullmove).isEmpty)
+    #expect(ChessGame.absolutePins(in: plusHalfmove).isEmpty)
+    #expect(ChessGame.absolutePins(in: plusFullmove).isEmpty)
     #expect(ChessGame.absolutePins(in: zeroFullmove).isEmpty)
 }
 

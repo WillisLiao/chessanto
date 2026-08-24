@@ -240,7 +240,7 @@ private func pinFact(
     #expect(ThemeDetector.pin(input: illegalUCI, ply: 1) == nil)
 }
 
-@Test func pinFactRejectsMalformedCastlingAndEnPassantFields() {
+@Test func pinFactRejectsMalformedFENFieldsAndEarlierMainlineRows() {
     let postFEN = "k7/4r3/8/8/8/8/4N3/4K3 w - - 1 2"
     let malformedPreFENs = [
         "k7/3r4/8/8/8/8/4N3/4K3 b X - 0 1",
@@ -248,12 +248,35 @@ private func pinFact(
         "k7/3r4/8/8/8/8/4N3/4K3 b QK - 0 1",
         "k7/3r4/8/8/8/8/4N3/4K3 b - z9 0 1",
         "k7/3r4/8/8/8/8/4N3/4K3 b - e4 0 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b - - +0 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 +1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b - - -1 1",
+        "k7/3r4/8/8/8/8/4N3/4K3 b - - 0 -1",
     ]
 
     for preFEN in malformedPreFENs {
         let input = pinInput(preFEN: preFEN, uci: "d7e7", postFEN: postFEN)
         #expect(ThemeDetector.pin(input: input, ply: 1) == nil)
     }
+    let input = ReportInput(
+        plies: [
+            PlyRecord(
+                fen: "k7/3r4/8/8/8/8/P3N3/4K3 w X z9 0 1",
+                lines: [], playedUCI: nil
+            ),
+            PlyRecord(
+                fen: "k7/3r4/8/8/8/P7/4N3/4K3 b - - 0 1",
+                lines: [], playedUCI: "a2a3"
+            ),
+            PlyRecord(
+                fen: "k7/4r3/8/8/8/P7/4N3/4K3 w - - 1 2",
+                lines: [], playedUCI: "d7e7"
+            ),
+        ],
+        whiteName: "White", blackName: "Black", result: "*", chessComUsername: nil
+    )
+
+    #expect(ThemeDetector.pin(input: input, ply: 2) == nil)
 }
 
 @Test func pinFactRejectsAmbiguousMultipleNewRelations() {

@@ -299,9 +299,9 @@ public enum ThemeDetector {
     }
 
     private static func validPinFEN(_ fen: String) -> Bool {
-        guard let fields = fenFields(fen),
+        guard ChessGame.isValidFEN(fen),
+            let fields = fenFields(fen),
             fields[1] == "w" || fields[1] == "b",
-            ChessGame.isValidFEN(fen),
             let pieces = parsePieceBoard(fen: fen)
         else {
             return false
@@ -760,6 +760,7 @@ public enum ThemeDetector {
     private static func trackMainline(input: ReportInput, upToPly p: Int) -> MainlineTracking? {
         guard p >= 1, p < input.plies.count,
             let initialBoard = parseInitialBoard(fen: input.plies[0].fen),
+            validPinFEN(input.plies[0].fen),
             sideToMove(in: input.plies[0].fen) != nil,
             fullmoveNumber(in: input.plies[0].fen) != nil
         else {
@@ -774,7 +775,9 @@ public enum ThemeDetector {
             guard let uci = input.plies[k].playedUCI, let parsed = parseUCI(uci) else { return nil }
             let preMoveFEN = input.plies[k - 1].fen
             let postMoveFEN = input.plies[k].fen
-            guard let expectedColor = sideToMove(in: preMoveFEN),
+            guard validPinFEN(preMoveFEN),
+                validPinFEN(postMoveFEN),
+                let expectedColor = sideToMove(in: preMoveFEN),
                 let preMoveFullmoveNumber = fullmoveNumber(in: preMoveFEN),
                 input.moverIsWhite(atPly: k) == (expectedColor == .white),
                 fenFields(postMoveFEN) != nil,
