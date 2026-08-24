@@ -3,6 +3,17 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-24) - Play vs Engine core
+
+The core engine play domain model is implemented on branch `feature/play-vs-engine-core`.
+`LiveGameSession` (`App/Sources/Chessanto/Play/LiveGameSession.swift`) is a `@MainActor` state machine managing live games against Stockfish or scripted opponents.
+Players can select White, Black, or Random sides (`PlayerSideSelection`), and choose from 5 engine strength presets (`EngineStrength.beginner`, `.casual`, `.intermediate`, `.advanced`, `.master` with Stockfish UCI `Skill Level` 0-20, depth caps, and movetime ceilings).
+All user moves and engine moves are strictly validated through `ChessCore.ChessGame.playMove(uci:at:)` and `Board(position:)` - no moves bypass legal validation.
+The session detects all 6 terminal game states in accordance with FIDE rules: checkmate, stalemate, draw by threefold repetition, draw by fifty-move rule, draw by insufficient material, and resignation.
+Completed games are automatically persisted to `GameStore` as `GameRecord` with `GameSource.vsEngine` and full standard PGN tags, flowing directly into `GameReplayViewModel`, report generation, and practice training card pipelines.
+All package tests (`ChessCore`, `EngineKit`, `Persistence`) and app test suites pass with 210 tests across 37 suites (`** TEST SUCCEEDED **`).
+See `devlogs/2026-08-24-play-vs-engine-core.md` for the full public API and design documentation.
+
 ## Current state (2026-08-24) - absolute-pin fact slice
 
 The end-to-end absolute-pin slice is implemented on `codex/roadmap-completion`.

@@ -31,6 +31,7 @@ final class BoundedSearchSession {
     private var collector = BatchCollector()
     private var outcome: Outcome?
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    public private(set) var bestMoveString: String?
 
     init(generation: Int) {
         self.generation = generation
@@ -51,8 +52,9 @@ final class BoundedSearchSession {
     /// by draining that the missing line is never emitted at all, so
     /// waiting only adds latency. Callers report the depth reached rather
     /// than the depth requested.
-    func complete(generation: Int) {
+    func complete(generation: Int, bestMove: String? = nil) {
         guard outcome == nil, generation == self.generation else { return }
+        self.bestMoveString = bestMove
         resolve(.success(collector.rankedInfos))
     }
 
@@ -70,6 +72,26 @@ final class BoundedSearchSession {
         case .success(let infos):
             if infos.isEmpty { throw EngineSearchError.noAnalysis }
             return infos
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    /// Awaits completion and returns the engine's chosen best move in UCI format.
+    func bestMove() async throws -> String {
+        await waitForOutcome()
+        switch outcome! {
+        case .success(let infos):
+            if let bestMoveString, !bestMoveString.isEmpty, bestMoveString != "(none)" {
+                return bestMoveString
+            }
+            if let first = infos.first(where: { ($0.multiPVRank ?? 1) == 1 })?.principalVariation.first, !first.isEmpty {
+                return first
+            }
+            if let fallback = infos.first?.principalVariation.first, !fallback.isEmpty {
+                return fallback
+            }
+            throw EngineSearchError.noAnalysis
         case .failure(let error):
             throw error
         }

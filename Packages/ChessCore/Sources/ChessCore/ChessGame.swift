@@ -192,6 +192,33 @@ extension ChessGame {
         let newIndex = game.make(move: move, from: index.raw)
         return MoveIndex(raw: newIndex)
     }
+
+    /// Attempts to play a legal UCI move (e.g. `"e2e4"`, `"e7e8q"`, `"e1g1"`) at the position for `index`.
+    @discardableResult
+    public mutating func playMove(uci: String, at index: MoveIndex) -> MoveIndex? {
+        guard let position = game.positions[index.raw] else { return nil }
+        let color: Piece.Color = position.fen.split(separator: " ").count > 1
+            && position.fen.split(separator: " ")[1] == "b"
+            ? .black : .white
+        guard let parsedMove = EngineLANParser.parse(move: uci, for: color, in: position) else {
+            return nil
+        }
+        var board = Board(position: position)
+        guard board.canMove(pieceAt: parsedMove.start, to: parsedMove.end),
+            var move = board.move(pieceAt: parsedMove.start, to: parsedMove.end)
+        else {
+            return nil
+        }
+        if let promotedPiece = parsedMove.promotedPiece {
+            move = board.completePromotion(of: move, to: promotedPiece.kind)
+        } else if move.promotedPiece == nil, move.piece.kind == .pawn,
+            parsedMove.end.rank.value == 1 || parsedMove.end.rank.value == 8
+        {
+            return nil
+        }
+        let newIndex = game.make(move: move, from: index.raw)
+        return MoveIndex(raw: newIndex)
+    }
 }
 
 // MARK: - Engine (UCI) bridging
@@ -516,9 +543,15 @@ extension ChessGame {
     /// duplicate chess movement geometry. Only occupied enemy destinations
     /// are returned, which excludes pawn pushes and empty squares.
     public static func attackedEnemySquares(from square: String, in fen: String) -> [(square: String, kind: PieceKind)] {
-        guard let position = Position(fen: fen) else { return [] }
+        guard let initialPosition = Position(fen: fen) else { return [] }
         let source = Square(square)
-        guard source.notation == square, let piece = position.piece(at: source) else { return [] }
+        guard source.notation == square, let piece = initialPosition.piece(at: source) else { return [] }
+
+        var fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count >= 2 else { return [] }
+        fields[1] = piece.color == .white ? "w" : "b"
+        let activeFEN = fields.joined(separator: " ")
+        guard let position = Position(fen: activeFEN) else { return [] }
 
         let board = Board(position: position)
         return board
@@ -854,14 +887,88 @@ extension ChessGame {
     }
 
     /// Whether `square` is attacked by any piece of `color` in the position
-    /// described by `fen`. Uses ChessKit's legal-move generator.
+    /// described by `fen`.
     public static func isSquareAttacked(square: String, by color: PieceColor, in fen: String) -> Bool {
         guard let position = Position(fen: fen) else { return false }
-        let board = Board(position: position)
-        let target = Square(square)
-        return position.pieces
-            .filter { $0.color.asPieceColor == color }
-            .contains { board.legalMoves(forPieceAt: $0.square).contains(target) }
+        guard let fileChar = square.first, let rankChar = square.last,
+            let rank = Int(String(rankChar)), (1...8).contains(rank)
+        else { return false }
+        let file = fileIndex(fileChar) + 1
+        guard (1...8).contains(file) else { return false }
+
+        // Knight attacks
+        let knightDeltas = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
+        for (df, dr) in knightDeltas {
+            let tf = file + df, tr = rank + dr
+            guard (1...8).contains(tf), (1...8).contains(tr) else { continue }
+            let sqStr = "\(fileToChar(tf))\(tr)"
+            if let p = position.piece(at: Square(sqStr)), p.color.asPieceColor == color, p.kind == .knight {
+                return true
+            }
+        }
+
+        // Pawn attacks (from the perspective of square being attacked by color)
+        let pawnRankDelta = color == .white ? -1 : 1
+        let pawnR = rank + pawnRankDelta
+        if (1...8).contains(pawnR) {
+            for df in [-1, 1] {
+                let tf = file + df
+                guard (1...8).contains(tf) else { continue }
+                let sqStr = "\(fileToChar(tf))\(pawnR)"
+                if let p = position.piece(at: Square(sqStr)), p.color.asPieceColor == color, p.kind == .pawn {
+                    return true
+                }
+            }
+        }
+
+        // King attacks (adjacent squares)
+        let kingDeltas = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        for (df, dr) in kingDeltas {
+            let tf = file + df, tr = rank + dr
+            guard (1...8).contains(tf), (1...8).contains(tr) else { continue }
+            let sqStr = "\(fileToChar(tf))\(tr)"
+            if let p = position.piece(at: Square(sqStr)), p.color.asPieceColor == color, p.kind == .king {
+                return true
+            }
+        }
+
+        // Orthogonal sliders (rook, queen)
+        let orthoDirs = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        for (df, dr) in orthoDirs {
+            var step = 1
+            while true {
+                let tf = file + step * df, tr = rank + step * dr
+                guard (1...8).contains(tf), (1...8).contains(tr) else { break }
+                let sqStr = "\(fileToChar(tf))\(tr)"
+                if let p = position.piece(at: Square(sqStr)) {
+                    if p.color.asPieceColor == color && (p.kind == .rook || p.kind == .queen) {
+                        return true
+                    }
+                    break
+                }
+                step += 1
+            }
+        }
+
+        // Diagonal sliders (bishop, queen)
+        let diagDirs = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+        for (df, dr) in diagDirs {
+            var step = 1
+            while true {
+                let tf = file + step * df, tr = rank + step * dr
+                guard (1...8).contains(tf), (1...8).contains(tr) else { break }
+                let sqStr = "\(fileToChar(tf))\(tr)"
+                if let p = position.piece(at: Square(sqStr)) {
+                    if p.color.asPieceColor == color && (p.kind == .bishop || p.kind == .queen) {
+                        return true
+                    }
+                    break
+                }
+                step += 1
+            }
+        }
+
+        return false
     }
 
     /// Parses `[%clk 1:23:45]` clock annotations from PGN comments and
@@ -884,6 +991,188 @@ extension ChessGame {
         case 2: return parts[0] * 60 + parts[1]
         case 3: return parts[0] * 3600 + parts[1] * 60 + parts[2]
         default: return nil
+        }
+    }
+
+    /// The side to move in `fen` (.white or .black).
+    public static func sideToMove(fen: String) -> PieceColor {
+        let parts = fen.split(separator: " ")
+        if parts.count > 1 && parts[1] == "b" {
+            return .black
+        }
+        return .white
+    }
+
+    /// Whether the side to move in `fen` is currently in check.
+    public static func isCheck(fen: String) -> Bool {
+        guard let position = Position(fen: fen) else { return false }
+        let side = sideToMove(fen: fen)
+        guard let king = position.pieces.first(where: { $0.kind == .king && $0.color.asPieceColor == side }) else {
+            return false
+        }
+        return isSquareAttacked(square: king.square.notation, by: side.opposite, in: fen)
+    }
+
+    /// Whether the position in `fen` is checkmate for the side to move.
+    public static func isCheckmate(fen: String) -> Bool {
+        isCheck(fen: fen) && legalMoveCount(fen: fen) == 0
+    }
+
+    /// Whether the position in `fen` is stalemate for the side to move.
+    public static func isStalemate(fen: String) -> Bool {
+        !isCheck(fen: fen) && legalMoveCount(fen: fen) == 0
+    }
+
+    /// Whether the position in `fen` has reached the fifty-move rule draw
+    /// (halfmove clock >= 100).
+    public static func isFiftyMoveDraw(fen: String) -> Bool {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true)
+        guard fields.count >= 5, let halfmoveClock = Int(fields[4]), halfmoveClock >= 100 else {
+            return false
+        }
+        return true
+    }
+
+    /// Whether the position in `fen` is a draw by insufficient material
+    /// (K vs K, KN vs K, KB vs K, KB vs KB with same-colored bishops).
+    public static func hasInsufficientMaterial(fen: String) -> Bool {
+        guard let position = Position(fen: fen) else { return false }
+        let pieces = position.pieces
+        if pieces.contains(where: { $0.kind == .pawn || $0.kind == .rook || $0.kind == .queen }) {
+            return false
+        }
+        let whiteKings = pieces.filter { $0.kind == .king && $0.color == .white }
+        let blackKings = pieces.filter { $0.kind == .king && $0.color == .black }
+        guard whiteKings.count == 1, blackKings.count == 1 else { return false }
+
+        let nonKings = pieces.filter { $0.kind != .king }
+        if nonKings.isEmpty { return true }
+        if nonKings.count == 1 {
+            let kind = nonKings[0].kind
+            if kind == .knight || kind == .bishop { return true }
+            return false
+        }
+        if nonKings.count == 2 {
+            let whiteBishops = nonKings.filter { $0.kind == .bishop && $0.color == .white }
+            let blackBishops = nonKings.filter { $0.kind == .bishop && $0.color == .black }
+            if whiteBishops.count == 1 && blackBishops.count == 1 {
+                let wSquare = whiteBishops[0].square
+                let bSquare = blackBishops[0].square
+                let wColor = (wSquare.file.number + wSquare.rank.value) % 2
+                let bColor = (bSquare.file.number + bSquare.rank.value) % 2
+                if wColor == bColor {
+                    return true
+                }
+            }
+            return false
+        }
+        return false
+    }
+
+    /// Whether the game history has reached a draw by threefold repetition.
+    public static func isThreefoldRepetition(fens: [String]) -> Bool {
+        var counts: [String: Int] = [:]
+        for fen in fens {
+            let key = epd(fromFEN: fen)
+            let newCount = (counts[key] ?? 0) + 1
+            if newCount >= 3 { return true }
+            counts[key] = newCount
+        }
+        return false
+    }
+
+    /// Detects if the current position is game over by checkmate, stalemate,
+    /// insufficient material, fifty-move rule, or threefold repetition.
+    public static func detectOutcome(currentFEN: String, historyFENs: [String]) -> GameOutcome? {
+        if isCheckmate(fen: currentFEN) {
+            let side = sideToMove(fen: currentFEN)
+            return .checkmate(winner: side.opposite)
+        }
+        if isStalemate(fen: currentFEN) {
+            return .stalemate
+        }
+        if hasInsufficientMaterial(fen: currentFEN) {
+            return .insufficientMaterial
+        }
+        if isFiftyMoveDraw(fen: currentFEN) {
+            return .fiftyMoveRule
+        }
+        if isThreefoldRepetition(fens: historyFENs) {
+            return .repetition
+        }
+        return nil
+    }
+}
+
+// MARK: - Game Outcome & Player Side Selection
+
+public enum GameOutcome: Hashable, Sendable, Codable {
+    case checkmate(winner: PieceColor)
+    case stalemate
+    case repetition
+    case fiftyMoveRule
+    case insufficientMaterial
+    case resignation(resignedBy: PieceColor)
+
+    public var resultString: String {
+        switch self {
+        case .checkmate(let winner):
+            return winner == .white ? "1-0" : "0-1"
+        case .resignation(let resignedBy):
+            return resignedBy == .white ? "0-1" : "1-0"
+        case .stalemate, .repetition, .fiftyMoveRule, .insufficientMaterial:
+            return "1/2-1/2"
+        }
+    }
+
+    public var isDraw: Bool {
+        switch self {
+        case .stalemate, .repetition, .fiftyMoveRule, .insufficientMaterial:
+            return true
+        case .checkmate, .resignation:
+            return false
+        }
+    }
+
+    public var winner: PieceColor? {
+        switch self {
+        case .checkmate(let winner):
+            return winner
+        case .resignation(let resignedBy):
+            return resignedBy.opposite
+        case .stalemate, .repetition, .fiftyMoveRule, .insufficientMaterial:
+            return nil
+        }
+    }
+
+    public var terminationDescription: String {
+        switch self {
+        case .checkmate(let winner):
+            return "\(winner == .white ? "White" : "Black") won by checkmate"
+        case .resignation(let resignedBy):
+            return "\(resignedBy == .white ? "Black" : "White") won by resignation"
+        case .stalemate:
+            return "Draw by stalemate"
+        case .repetition:
+            return "Draw by repetition"
+        case .fiftyMoveRule:
+            return "Draw by fifty-move rule"
+        case .insufficientMaterial:
+            return "Draw by insufficient material"
+        }
+    }
+}
+
+public enum PlayerSideSelection: String, CaseIterable, Sendable, Codable {
+    case white
+    case black
+    case random
+
+    public func resolveColor() -> PieceColor {
+        switch self {
+        case .white: return .white
+        case .black: return .black
+        case .random: return Bool.random() ? .white : .black
         }
     }
 }
