@@ -72,8 +72,8 @@ Task.detached {
         var bestMove: String
     }
 
-    func search(fen: String, depth: Int) async -> SearchResult {
-        let generation = await engine.setPosition(fen: fen)
+    func search(fen: String, depth: Int, moves: [String] = [], chess960: Bool? = nil) async -> SearchResult {
+        let generation = await engine.setPosition(fen: fen, moves: moves, chess960: chess960)
         await engine.go(depth: depth)
         var rank1Info: AnalysisEngine.EngineInfo?
         while let update = await iterator.next() {
@@ -343,6 +343,59 @@ Task.detached {
             fail("iteration \(iteration): stalemate bestmove was \(stalemateBestMove ?? "nil"), expected (none)")
         }
         log("iteration \(iteration): stalemate search clean, bestmove (none), no scored info leaked")
+    }
+
+    // 6. Chess960: UCI_Chess960 gates how castling moves are spelled when
+    //    replayed into `position ... moves`, because Stockfish only accepts
+    //    the spelling its current flag produces (UCIEngine::move rewrites a
+    //    castle to the g/c file when the flag is off, and emits king-to-rook
+    //    when it is on; `to_move` matches against exactly that). The app
+    //    analyzes Chess960 games with the flag on, so this pins the contract
+    //    `AnalysisEngine.setPosition(chess960:)` provides: each spelling is
+    //    applied under its own flag and ignored under the other.
+    //
+    //    The probe position is composed so White's only mate in 1 is the
+    //    queenside castle: after O-O-O the rook lands d1 against a lone
+    //    black king on d8 with every escape covered (Nb5 covers c7, Nf5
+    //    covers e7, Qc6 covers c8/e8/d7). A correctly applied castle leaves
+    //    Black mated with no reply, so bestmove is "(none)"; an ignored
+    //    illegal move leaves the base position, where Black is merely lost
+    //    and still has moves. No score-sign or mate-number assertion is
+    //    needed, which keeps the probes immune to terminal-score reporting
+    //    quirks.
+    let castleMateBase = "3k4/8/2Q5/1N3N2/8/8/8/R3K3 w A - 0 1"
+
+    func castleProbe(chess960: Bool, uci: String, expectedApplied: Bool) async {
+        let result = await search(fen: castleMateBase, depth: 6, moves: [uci], chess960: chess960)
+        let applied = result.bestMove == "(none)"
+        guard applied == expectedApplied else {
+            fail(
+                "castle probe (chess960=\(chess960), uci=\(uci)): expected applied=\(expectedApplied), "
+                    + "got bestmove \(result.bestMove)"
+            )
+        }
+        log("castle probe (chess960=\(chess960), uci=\(uci)): applied=\(applied), bestmove \(result.bestMove)")
+    }
+
+    await castleProbe(chess960: false, uci: "e1c1", expectedApplied: true)
+    await castleProbe(chess960: true, uci: "e1a1", expectedApplied: true)
+    await castleProbe(chess960: true, uci: "e1c1", expectedApplied: false)
+    await castleProbe(chess960: false, uci: "e1a1", expectedApplied: false)
+
+    // A real Chess960 start searches sanely with the flag on - both an
+    // X-FEN spelling (KQkq, as Lichess exports when rooks sit on the outer
+    // files) and a Shredder-FEN spelling (file letters).
+    for startFEN in [
+        "rnnbbkqr/pppppppp/8/8/8/8/PPPPPPPP/RNNBBKQR w KQkq - 0 1",
+        "rnnbbkqr/pppppppp/8/8/8/8/PPPPPPPP/RNNBBKQR w AHah - 0 1",
+    ] {
+        let nineSixty = await search(fen: startFEN, depth: 12, chess960: true)
+        guard let info = nineSixty.rank1Info, let cp = info.scoreCentipawns else {
+            fail("chess960 start \(startFEN): no scored rank-1 info received")
+        }
+        log("chess960 start (\(startFEN.hasSuffix("AHah - 0 1") ? "shredder" : "xfen")): cp \(cp), pv \(info.principalVariation.prefix(4).joined(separator: " ")), bestmove \(nineSixty.bestMove)")
+        guard abs(cp) < 150 else { fail("chess960 start eval \(cp)cp is not a sane opening eval") }
+        guard !info.principalVariation.isEmpty else { fail("chess960 start: empty PV") }
     }
 
     await engine.shutdown()

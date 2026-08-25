@@ -209,6 +209,50 @@ public enum Chess960 {
         return isValidBackRank(ranks[7])
     }
 
+    /// Whether a UCI engine must run in Chess960 mode to search `fen`
+    /// correctly.
+    ///
+    /// True when the position's castling geometry differs from standard
+    /// chess: any Shredder-FEN file letter in the castling field, or a
+    /// traditional `K`/`Q`/`k`/`q` right whose implied squares (king on
+    /// e1/e8, rook on h1/a1/h8/a8) do not actually hold. Standard-chess
+    /// positions - including their endgames where rights have lapsed to
+    /// `-` - return false, so callers can leave the engine's default mode
+    /// untouched for them.
+    public static func requiresChess960EngineMode(fen: String) -> Bool {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count >= 3 else { return false }
+        let castling = fields[2]
+        guard castling != "-" else { return false }
+        if castling.contains(where: { !"KQkq".contains($0) }) {
+            return true
+        }
+
+        // Traditional letters only. Expand the board field and verify each
+        // right's implied king and rook square actually holds.
+        func expandedRank(_ compressed: Substring) -> [Character] {
+            var rank: [Character] = []
+            for character in compressed {
+                if let empty = character.wholeNumberValue {
+                    rank.append(contentsOf: Array(repeating: Character(" "), count: empty))
+                } else {
+                    rank.append(character)
+                }
+            }
+            return rank
+        }
+        let ranks = fields[0].split(separator: "/").map(expandedRank)
+        guard ranks.count == 8, ranks.allSatisfy({ $0.count == 8 }) else { return false }
+        let rank1 = ranks[7]
+        let rank8 = ranks[0]
+
+        if castling.contains("K"), rank1[4] != "K" || rank1[7] != "R" { return true }
+        if castling.contains("Q"), rank1[4] != "K" || rank1[0] != "R" { return true }
+        if castling.contains("k"), rank8[4] != "k" || rank8[7] != "r" { return true }
+        if castling.contains("q"), rank8[4] != "k" || rank8[0] != "r" { return true }
+        return false
+    }
+
     // MARK: - Castling Rights and Legality
 
     public enum CastlingSide: Sendable, CaseIterable {

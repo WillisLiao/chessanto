@@ -247,7 +247,10 @@ public final class EngineService: ObservableObject {
             liveLinesByRank = [:]
             liveEvaluation = nil
             liveFEN = fen
-            liveGeneration = await engine.setPosition(fen: fen)
+            liveGeneration = await engine.setPosition(
+                fen: fen,
+                chess960: Chess960.requiresChess960EngineMode(fen: fen)
+            )
             await engine.goInfinite()
         }
     }
@@ -389,7 +392,10 @@ public final class EngineService: ObservableObject {
     private static let deadlineFloorMilliseconds = 3000
 
     func searchOneShot(fen: String, budget: SearchBudget) async throws -> [AnalysisEngine.EngineInfo] {
-        let generation = await engine.setPosition(fen: fen)
+        let generation = await engine.setPosition(
+            fen: fen,
+            chess960: Chess960.requiresChess960EngineMode(fen: fen)
+        )
         let session = BoundedSearchSession(generation: generation)
         activeSearch = session
         let engineRef = engine

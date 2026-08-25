@@ -3,6 +3,13 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Chess960 app integration
+
+Implementation of Chess960 app integration lives on `feature/chess960-app-integration`, built on `feature/chess960-core`.
+- Stockfish `UCI_Chess960=true` engine option wired for 960 games via `Chess960.requiresChess960EngineMode(fen:)` (ChessCore), cached `chess960:` parameter on `AnalysisEngine.setPosition` (EngineKit), and both EngineService search seams passing it.
+- Audit found no other standard-start assumptions: import path, board rendering (`BoardPositionMapper`), report pipeline (FEN-driven), and opening-book silence all behave correctly for 960 games.
+- engine-smoke section 6 pins the castling-spelling contract with a deterministic mate-in-1 castle probe matrix plus two real 960-mode searches.
+
 ## Current state (2026-08-25) - QA Caruana games
 
 On `qa/caruana-games`, the Caruana QA scan is prepared but NOT complete; see `handoffs/NEXT-SESSION-QA-CARUANA-RESUME2.md` for the exact remaining steps.
