@@ -284,6 +284,7 @@ struct ContentView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     private func selectLibrarySource(_ source: LibrarySource) {
@@ -354,6 +355,7 @@ struct ContentView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .contextMenu { contextMenu(for: game) }
     }
 

@@ -3,6 +3,15 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Accessibility matrix
+
+The full accessibility audit-and-fix pass is implemented on branch `feature/accessibility-matrix`.
+Full matrix, measured contrast ratios, and quoted live axprobe evidence are in `devlogs/2026-08-24-accessibility-matrix.md`.
+- Board VoiceOver semantics: each square announces piece + address + states, piece images hidden from AX tree, move announcements posted. Pure `BoardAccessibility` module with 8 unit tests.
+- Keyboard piece movement: arrows walk keyboard focus, Space/Return activates.
+- Adaptive AA contrast ratios in both light and dark mode.
+- Dynamic Type support and Reduced Motion respect.
+
 ## Current state (2026-08-25) - Library search and filter
 
 Implemented on `feature/library-search-filter`.

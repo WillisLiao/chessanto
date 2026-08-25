@@ -109,7 +109,7 @@ struct ChatView: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(DesignColors.accent)
                     Text("PINNED POSITION")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.dsSecondary.weight(.bold))
                         .tracking(0.6)
                         .foregroundStyle(DesignColors.accentText)
                 }
@@ -168,7 +168,7 @@ struct ChatView: View {
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(DesignColors.textSecondary)
                     Text("FOLLOWING BOARD")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.dsSecondary.weight(.bold))
                         .tracking(0.6)
                         .foregroundStyle(DesignColors.textSecondary)
                 }
@@ -287,6 +287,11 @@ struct ChatView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(DesignColors.accentText)
                     .accessibilityIdentifier("chat-jump-\(message.id ?? 0)")
+                    .accessibilityLabel(
+                        message.plyIndex > 0
+                            ? "Jump the board to move \(moveLabel(plyIndex: message.plyIndex))"
+                            : "Jump the board to the start"
+                    )
                 }
             }
         }

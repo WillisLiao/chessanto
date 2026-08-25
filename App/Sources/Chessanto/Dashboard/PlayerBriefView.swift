@@ -159,7 +159,7 @@ struct PlayerBriefView: View {
                     .font(.dsSectionHeader)
                     .foregroundStyle(DesignColors.accentText)
                 Text(snapshot.focus.title)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(DesignColors.textPrimary)
                 Text(snapshot.focus.detail)
                     .font(.dsBody)
@@ -234,7 +234,7 @@ struct PlayerBriefView: View {
     private func metric(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                .font(.dsBody.weight(.semibold).monospacedDigit())
                 .foregroundStyle(DesignColors.textPrimary)
                 .monospacedDigit()
             Text(label)

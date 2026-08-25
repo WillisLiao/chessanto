@@ -170,7 +170,10 @@ struct PracticeContentView: View {
                 Button(feedback.outcome == .incorrect ? "Skip" : "Next") {
                     Task { await viewModel.next() }
                 }
-                .buttonStyle(.borderedProminent)
+                // The app's own primary style, not `.borderedProminent`:
+                // the system style renders a white label on the brass tint,
+                // which fails contrast in both modes.
+                .buttonStyle(.dsPrimary)
             }
         }
     }
@@ -192,7 +195,7 @@ struct PracticeContentView: View {
                     .foregroundStyle(DesignColors.textSecondary)
             }
             Button("Back to game") { onExit() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary)
         }
     }
 

@@ -49,7 +49,19 @@ struct BoardView: View {
     /// `BoardAnnotations` for why they are not persisted.
     @State private var annotations = BoardAnnotations()
 
+    /// The keyboard cursor, which IS the keyboard focus: the square arrow
+    /// keys walk (moving real focus with it) and Space/Return activate via
+    /// the button's own native action. Keeping cursor and focus as one thing
+    /// avoids the split-brain failure mode where arrows move an internal
+    /// cursor while Space activates whichever square button holds focus -
+    /// which is exactly what happens under Full Keyboard Access.
+    @FocusState private var focusedSquare: BoardSquare?
+
     private var isDraggable: Bool { onPieceDropped != nil && pendingPromotion == nil }
+
+    /// Keyboard piece movement only applies where pieces can be moved;
+    /// display-only boards (line preview, thumbnails) never take focus.
+    private var isInteractive: Bool { onSquareTapped != nil }
 
     /// An `onChange`-comparable stand-in for the non-`Equatable` `lastMove`
     /// tuple.
@@ -96,12 +108,24 @@ struct BoardView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .focused($focusedSquare, equals: square)
                         .position(
                             x: CGFloat(col) * squareSize + squareSize / 2,
                             y: CGFloat(row) * squareSize + squareSize / 2
                         )
                         .accessibilityIdentifier("square-\(square.algebraic)")
-                        .accessibilityLabel(square.algebraic)
+                        .accessibilityLabel(BoardAccessibility.squareLabel(piece: position.pieces[square], square: square))
+                        .accessibilityValue(
+                            BoardAccessibility.squareValue(
+                                isSelected: square == selectedSquare,
+                                isLegalDestination: legalDestinations.contains(square),
+                                isHint: hintSquares.contains(square),
+                                isLastMoveSquare: isLastMoveSquare(square)
+                            )
+                        )
+                        .accessibilityAddTraits(
+                            square == selectedSquare ? [.isSelected] : []
+                        )
                     }
                 }
 
@@ -130,9 +154,30 @@ struct BoardView: View {
                                 // the piece it just took.
                                 .zIndex(isDragged ? 2 : (slide == .zero ? 0 : 1))
                                 .accessibilityIdentifier("piece-\(square.algebraic)")
+                                // Pieces are spoken through their square's
+                                // own label ("white pawn e4"); as separate
+                                // elements they would be up to 32 floating,
+                                // location-free announcements.
+                                .accessibilityHidden(true)
                                 .allowsHitTesting(false)
                         }
                     }
+                }
+
+                if let focusedSquare {
+                    let (row, col) = rowCol(for: focusedSquare)
+                    Rectangle()
+                        .strokeBorder(DesignColors.accent, lineWidth: max(squareSize * 0.05, 2))
+                        .frame(width: squareSize, height: squareSize)
+                        .position(
+                            x: CGFloat(col) * squareSize + squareSize / 2,
+                            y: CGFloat(row) * squareSize + squareSize / 2
+                        )
+                        // The cursor ring itself must not block clicks or
+                        // reads; it is pure focus indication. VoiceOver users
+                        // navigate squares directly and never see this.
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
 
                 ForEach(Array(arrows.enumerated()), id: \.offset) { _, arrow in
@@ -170,16 +215,29 @@ struct BoardView: View {
             }
             .frame(width: size, height: size)
             .simultaneousGesture(dragGesture(squareSize: squareSize), including: isDraggable ? .all : .none)
+            // Keyboard-only piece movement: arrows walk the focused square
+            // (establishing it on the last move when nothing is focused
+            // yet), Space/Return press the focused square through its own
+            // native button action, and a visible brass ring shows where
+            // you are. Without this, playing a move needs a mouse even
+            // though every other control in the app is keyboard-reachable.
+            .focusable(isInteractive)
+            .onMoveCommand { direction in
+                guard let mapped = cursorDirection(for: direction) else { return }
+                let current = focusedSquare ?? BoardAccessibility.initialCursor(lastMove: lastMove)
+                focusedSquare = BoardAccessibility.neighbor(of: current, direction: mapped, flipped: flipped) ?? current
+            }
             .onChange(of: lastMoveKey) { _, _ in
                 startSlide()
+                postMoveAnnouncement()
             }
             .onChange(of: position) { _, _ in
                 // An annotation is about the position it was drawn on.
                 // Showing a different one retires it.
                 annotations.clear()
             }
-            // Escape backs out of the picker, the shortcut anyone would try
-            // first for a modal choice they did not mean to open.
+            // Escape backs out of the picker - the shortcut anyone would
+            // try first for a modal choice they did not mean to open.
             .onExitCommand {
                 if pendingPromotion != nil {
                     onPromotionCancelled?()
@@ -195,6 +253,25 @@ struct BoardView: View {
     /// suggestion arrows use, so what the user drew never reads as something
     /// the engine claimed.
     private static let annotationColor = DesignColors.accent.opacity(0.85)
+
+    private func cursorDirection(for direction: MoveCommandDirection) -> CursorDirection? {
+        switch direction {
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        @unknown default: return nil
+        }
+    }
+
+    /// Tells VoiceOver what just moved without requiring the user to
+    /// re-walk the board. Announcements are speech, not motion, so they are
+    /// posted regardless of Reduce Motion.
+    private func postMoveAnnouncement() {
+        guard let lastMove else { return }
+        let text = BoardAccessibility.moveAnnouncement(position: position, lastMove: lastMove)
+        AccessibilityNotification.Announcement(text).post()
+    }
 
     private func handleRightDrag(from start: CGPoint, to end: CGPoint, squareSize: CGFloat) {
         guard let fromSquare = square(at: start, squareSize: squareSize),
@@ -440,6 +517,7 @@ private struct PromotionChoiceView: View {
     let onSelect: () -> Void
 
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
@@ -464,7 +542,7 @@ private struct PromotionChoiceView: View {
         .buttonStyle(.plain)
         .shadow(color: Color.black.opacity(0.22), radius: 4, y: 1)
         .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
     }
 }
 
@@ -477,7 +555,6 @@ private struct PieceView: View {
             .resizable()
             .scaledToFit()
             .frame(width: squareSize * 0.82, height: squareSize * 0.82)
-            .accessibilityLabel("\(piece.color.rawValue) \(piece.kind.rawValue)")
     }
 }
 

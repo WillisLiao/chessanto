@@ -17,9 +17,13 @@ struct LinesPanelView: View {
     /// stable height here the surrounding column reflows on every move,
     /// visibly resizing the board (it sizes itself from whatever space is
     /// left via `GeometryReader` + `.aspectRatio(fit)`).
-    private static let rowHeight: CGFloat = 16
+    ///
+    /// The heights are `@ScaledMetric`, not fixed points: they must grow
+    /// with the user's text size or the largest accessibility sizes would
+    /// clip the lines, while still staying stable across engine updates at
+    /// any given text size.
+    @ScaledMetric(relativeTo: .caption) private var rowHeight: CGFloat = 16
     private static let rowSpacing: CGFloat = 4
-    private static let reservedHeight = rowHeight * 3 + rowSpacing * 2
 
     var body: some View {
         VStack(alignment: .leading, spacing: Self.rowSpacing) {
@@ -27,7 +31,7 @@ struct LinesPanelView: View {
                 Text("No live lines yet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(height: Self.rowHeight, alignment: .top)
+                    .frame(minHeight: rowHeight, alignment: .top)
             } else {
                 ForEach(Array(lines.prefix(3).enumerated()), id: \.offset) { _, line in
                     HStack(alignment: .center, spacing: 6) {
@@ -53,7 +57,7 @@ struct LinesPanelView: View {
                         .help("Adopt this line as a variation")
                         .accessibilityLabel("Adopt variation: \(evalLabel(line)), \(spokenSANLine(line))")
                     }
-                    .frame(height: Self.rowHeight, alignment: .center)
+                    .frame(minHeight: rowHeight, alignment: .center)
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel(
                         "\(evalLabel(line)), \(spokenSANLine(line))"
@@ -61,7 +65,10 @@ struct LinesPanelView: View {
                 }
             }
         }
-        .frame(height: Self.reservedHeight, alignment: .top)
+        .frame(
+            minHeight: rowHeight * 3 + Self.rowSpacing * 2,
+            alignment: .top
+        )
     }
 
     private func evalLabel(_ line: AnalysisEngine.EngineInfo) -> String {

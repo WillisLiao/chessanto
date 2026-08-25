@@ -67,7 +67,9 @@ struct DashboardView: View {
                 .foregroundStyle(DesignColors.textSecondary)
                 .padding()
         }
-        .frame(width: 620, height: 470)
+        // Minimums, not a fixed size: content must be able to grow with
+        // the user's accessibility text size.
+        .frame(minWidth: 620, minHeight: 470)
         .background(DesignColors.surface0)
         .task(id: loadGeneration) { await load() }
     }
@@ -157,7 +159,7 @@ struct DashboardView: View {
                     Label("Review next lesson", systemImage: "target")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary)
                 .controlSize(.large)
             }
         }
@@ -217,7 +219,15 @@ struct DashboardView: View {
                 }
             }
             .frame(height: 180)
+            .accessibilityLabel(accuracyTrendSummary)
         }
+    }
+
+    private var accuracyTrendSummary: String {
+        guard let first = points.first, let last = points.last else {
+            return "No accuracy data yet."
+        }
+        return "Accuracy across \(points.count) games, from \(String(format: "%.0f", first.accuracy)) percent to \(String(format: "%.0f", last.accuracy)) percent."
     }
 
     @ViewBuilder
