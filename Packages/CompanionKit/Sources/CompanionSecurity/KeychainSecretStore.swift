@@ -16,9 +16,13 @@ public struct KeychainSecretStore: SecretStoring, Sendable {
 
     public func save(_ data: Data, account: String) throws {
         let query = baseQuery(account: account)
+        let updateAttributes: [CFString: Any] = [
+            kSecValueData: data,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
         let updateStatus = SecItemUpdate(
             query as CFDictionary,
-            [kSecValueData: data] as CFDictionary
+            updateAttributes as CFDictionary
         )
         if updateStatus == errSecSuccess {
             return

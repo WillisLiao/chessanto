@@ -153,8 +153,11 @@ public enum PairingInvitationVerification {
         _ invitation: PairingInvitation,
         now: Date
     ) throws -> Bool {
-        guard invitation.expiresAt > now else {
+        guard invitation.expiresAt > now, invitation.expiresAt > invitation.createdAt else {
             throw PairingError.invitationExpired
+        }
+        guard invitation.oneTimeSecret.count == 32 else {
+            throw PairingError.invalidInvitationProof
         }
         let publicKey: Curve25519.Signing.PublicKey
         do {
@@ -163,6 +166,16 @@ public enum PairingInvitationVerification {
             )
         } catch {
             throw PairingError.invalidPublicKey
+        }
+        do {
+            _ = try Curve25519.KeyAgreement.PublicKey(
+                rawRepresentation: invitation.macPublicKeys.agreement
+            )
+        } catch {
+            throw PairingError.invalidPublicKey
+        }
+        guard invitation.signature.count == 64 else {
+            throw PairingError.invalidInvitationSignature
         }
         let unsigned = UnsignedPairingInvitation(
             id: invitation.id,
@@ -255,21 +268,16 @@ public actor PairingAuthority {
         guard state.invitation.expiresAt > now else {
             throw PairingError.invitationExpired
         }
-        let proofPayload = PairingProofPayload(
-            invitationID: candidate.invitationID,
-            deviceID: candidate.deviceID,
-            displayName: candidate.displayName,
-            publicKeys: candidate.publicKeys,
-            createdAt: candidate.createdAt
-        )
-        let expectedProof = HMAC<SHA256>.authenticationCode(
-            for: try CanonicalCoding.encode(proofPayload),
-            using: SymmetricKey(data: state.invitation.oneTimeSecret)
-        )
-        guard Data(expectedProof) == candidate.invitationProof else {
-            throw PairingError.invalidInvitationProof
+        guard !candidate.deviceID.rawValue.isEmpty else {
+            throw PairingError.invalidPublicKey
         }
-
+        do {
+            _ = try Curve25519.Signing.PublicKey(
+                rawRepresentation: candidate.publicKeys.signing
+            )
+        } catch {
+            throw PairingError.invalidPublicKey
+        }
         let phoneAgreementKey: Curve25519.KeyAgreement.PublicKey
         do {
             phoneAgreementKey = try .init(
@@ -277,6 +285,23 @@ public actor PairingAuthority {
             )
         } catch {
             throw PairingError.invalidPublicKey
+        }
+        let proofPayload = PairingProofPayload(
+            invitationID: candidate.invitationID,
+            deviceID: candidate.deviceID,
+            displayName: candidate.displayName,
+            publicKeys: candidate.publicKeys,
+            createdAt: candidate.createdAt
+        )
+        let proofPayloadData = try CanonicalCoding.encode(proofPayload)
+        guard
+            HMAC<SHA256>.isValidAuthenticationCode(
+                candidate.invitationProof,
+                authenticating: proofPayloadData,
+                using: SymmetricKey(data: state.invitation.oneTimeSecret)
+            )
+        else {
+            throw PairingError.invalidInvitationProof
         }
         let wrappingKey = try deriveWrappingKey(
             privateKey: agreementKey,
@@ -360,14 +385,19 @@ public enum ContentKeyWrapping {
         } catch {
             throw PairingError.malformedWrappedKey
         }
+        let openedKeyData: Data
         do {
-            return SymmetricKey(data: try AES.GCM.open(
+            openedKeyData = try AES.GCM.open(
                 sealedBox,
                 using: wrappingKey
-            ))
+            )
         } catch {
             throw PairingError.keyAgreementFailed
         }
+        guard openedKeyData.count == 32 else {
+            throw PairingError.malformedWrappedKey
+        }
+        return SymmetricKey(data: openedKeyData)
     }
 }
 

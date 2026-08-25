@@ -8,7 +8,6 @@ struct ChessantoMobileApp: App {
         WindowGroup {
             CompanionRootView()
                 .environmentObject(model)
-                .preferredColorScheme(.light)
                 .task {
                     await model.start()
                 }

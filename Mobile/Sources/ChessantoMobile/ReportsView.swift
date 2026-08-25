@@ -47,6 +47,9 @@ struct ReportsView: View {
                                     Label("Delete download", systemImage: "trash")
                                 }
                             }
+                            .accessibilityAction(named: "Delete download") {
+                                Task { await model.deleteReport(report) }
+                            }
                         }
                     } header: {
                         if !model.isOnline {
@@ -76,12 +79,20 @@ private struct ReportRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(report.metadata.white) vs \(report.metadata.black)")
-                    .font(.headline)
-                Spacer()
-                Text(report.metadata.result)
-                    .font(.subheadline.monospacedDigit().weight(.semibold))
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("\(report.metadata.white) vs \(report.metadata.black)")
+                        .font(.headline)
+                    Spacer()
+                    Text(report.metadata.result)
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(report.metadata.white) vs \(report.metadata.black)")
+                        .font(.headline)
+                    Text(report.metadata.result)
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                }
             }
             HStack {
                 Text(report.generatedAt, style: .date)
@@ -95,9 +106,10 @@ private struct ReportRow: View {
             .foregroundStyle(MobileColors.graphiteSoft)
         }
         .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(report.metadata.white) versus \(report.metadata.black), \(report.metadata.result), saved for offline reading"
+            "\(report.metadata.white) versus \(report.metadata.black), result \(report.metadata.result), \(report.analysisQuality.rawValue) quality, saved for offline reading"
         )
+        .accessibilityHint("Opens offline game report")
     }
 }
