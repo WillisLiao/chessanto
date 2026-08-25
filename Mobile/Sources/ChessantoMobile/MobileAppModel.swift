@@ -109,7 +109,8 @@ final class MobileAppModel: ObservableObject {
             guard let cloudEngine else {
                 throw MobileCompanionError.cloudUnavailable
             }
-            let invitation = try PairingInvitationQRCodec.decode(code)
+            let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+            let invitation = try PairingInvitationQRCodec.decode(trimmed)
             try PairingInvitationVerification.verify(
                 invitation,
                 now: Date()

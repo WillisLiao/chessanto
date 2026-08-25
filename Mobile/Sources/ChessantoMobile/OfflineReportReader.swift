@@ -168,20 +168,10 @@ struct OfflineReportReader: View {
                                 select(ply: moment.ply)
                             } label: {
                                 HStack(alignment: .firstTextBaseline) {
-                                    Text(
-                                        formatted(moment.canonicalPlayedSAN)
-                                    )
-                                    .font(.headline)
+                                    Text("\(moveNumberLabel(ply: moment.ply)) \(formatted(moment.canonicalPlayedSAN))")
+                                        .font(.headline)
                                     Spacer()
-                                    Text(
-                                        moment.classification
-                                            .replacingOccurrences(
-                                                of: "missedWin",
-                                                with: "missed win"
-                                            )
-                                            .capitalized
-                                    )
-                                    .font(.caption)
+                                    MobileClassificationChip(classification: moment.classification)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 44)
                                 .padding(.horizontal, 10)
@@ -266,14 +256,24 @@ struct OfflineReportReader: View {
             Button {
                 select(ply: move.ply)
             } label: {
-                Text(formatted(move.san))
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .background(
-                        selectedPly == move.ply
-                            ? MobileColors.brassWash
-                            : Color.clear
-                    )
+                HStack(spacing: 4) {
+                    Text(formatted(move.san))
+                    Spacer()
+                    if let classification = move.classification,
+                        let mark = MobileClassificationStyle.compactMark(for: classification)
+                    {
+                        Text(mark)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(MobileClassificationStyle.color(for: classification))
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                .padding(.horizontal, 8)
+                .background(
+                    selectedPly == move.ply
+                        ? MobileColors.brassWash
+                        : Color.clear
+                )
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Ply \(move.ply), \(move.san)")
@@ -326,9 +326,17 @@ struct OfflineReportReader: View {
     }
 
     private var moveRows: [MoveRow] {
+        let classificationsByPly = Dictionary(
+            report.classifications.map { ($0.ply, $0.classification) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let moves = report.positions.dropFirst().compactMap { position -> MoveCell? in
             guard let san = position.playedSAN else { return nil }
-            return MoveCell(ply: position.ply, san: san)
+            return MoveCell(
+                ply: position.ply,
+                san: san,
+                classification: classificationsByPly[position.ply]
+            )
         }
         var result: [MoveRow] = []
         for start in stride(from: 0, to: moves.count, by: 2) {
@@ -341,6 +349,12 @@ struct OfflineReportReader: View {
             )
         }
         return result
+    }
+
+    private func moveNumberLabel(ply: Int) -> String {
+        let moveNumber = (ply + 1) / 2
+        let isWhite = ply % 2 == 1
+        return isWhite ? "\(moveNumber)." : "\(moveNumber)..."
     }
 
     private func formatted(_ san: String) -> String {
@@ -417,6 +431,7 @@ struct OfflineReportReader: View {
 private struct MoveCell {
     let ply: Int
     let san: String
+    let classification: String?
 }
 
 private struct MoveRow {

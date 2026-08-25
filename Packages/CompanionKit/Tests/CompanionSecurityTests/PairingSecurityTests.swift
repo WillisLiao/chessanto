@@ -144,4 +144,21 @@ struct PairingSecurityTests {
             )
         }
     }
+
+    @Test("pairing invitation codec tolerates leading and trailing whitespace")
+    func pairingInvitationCodecToleratesWhitespace() async throws {
+        let authority = PairingAuthority(
+            endpointID: EndpointID("mac-1"),
+            signingKey: Curve25519.Signing.PrivateKey(),
+            agreementKey: Curve25519.KeyAgreement.PrivateKey(),
+            contentKey: SymmetricKey(size: .bits256)
+        )
+        let invitation = await authority.makeInvitation(
+            now: Date(timeIntervalSince1970: 100)
+        )
+        let encoded = try PairingInvitationQRCodec.encode(invitation)
+        let withWhitespace = "  \n  \(encoded)  \r\n"
+        let decoded = try PairingInvitationQRCodec.decode(withWhitespace)
+        #expect(decoded == invitation)
+    }
 }

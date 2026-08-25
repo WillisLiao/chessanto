@@ -17,8 +17,9 @@ public enum PairingInvitationQRCodec {
     }
 
     public static func decode(_ value: String) throws -> PairingInvitation {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
-            let components = URLComponents(string: value),
+            let components = URLComponents(string: trimmed),
             components.scheme == "chessanto",
             components.host == "pair",
             components.queryItems?.first(where: { $0.name == "v" })?.value == "1",

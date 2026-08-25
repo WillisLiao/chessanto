@@ -3,6 +3,16 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Mobile companion parity
+
+Feature parity and hardening pass for the iPhone companion completed on branch `feature/mobile-companion-parity`.
+- **Tactical facts and detectors**: Audited the pipeline from Mac analysis through `PortableReportAssembler` to companion serialization (`AuditedCoachNarration`, `PortableKeyMoment`). Enhanced `OfflineReportReader` with move numbers (`14... Nf3`), `MobileClassificationChip` badges, evaluation pills, and move classification compact marks (`★`, `!!`, `?!`, `?`, `??`) in the scoresheet.
+- **Dynamic dark mode**: Aligned `MobileDesignSystem.swift` with the Mac app warm-neutral palette using dynamic `UIColor` traits (`#FAF9F6`/`#1C1A17` paper, `#FFFFFF`/`#2D2A26` paperRaised, `#26231F`/`#E8E2D6` graphite, `#A6791F`/`#C9A04A` brass). Removed `.preferredColorScheme(.light)` from `ChessantoMobileApp.swift` for seamless automatic system appearance switching. Added `MobileClassificationStyle` semantic styling for all 10 classifications.
+- **Pairing and invitation robustness**: Hardened `PairingInvitationQRCodec.decode` and `MobileAppModel.submitPairingCode` to trim whitespace and newlines before parsing. Added unit test in `PairingSecurityTests`.
+- **Test coverage**: Added `MobileCompanionParityTests.swift` testing classification style lookups, dynamic color trait resolution across light/dark modes, and round-trip offline report disk caching with multi-fact analysis reports.
+- **Verification**: CompanionKit tests (33 tests in 11 suites), macOS build and test (211 tests in 37 suites), iOS Simulator build and test (7 tests in 4 suites) all pass green. Visual pass completed on iOS Simulator in light and dark modes.
+- Details in `devlogs/2026-08-25-mobile-companion-parity.md`.
+
 ## Current state (2026-08-25) - Merged qa/edge-case-pgns onto main
 
 Adversarial and edge-case PGN hardening is now on `main`.
