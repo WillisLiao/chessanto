@@ -9,6 +9,14 @@ import Testing
 @MainActor
 struct CarlsenQAScanTests {
     @Test func scanAllCarlsenArchives() throws {
+        // Deliberate opt-in: the full scan takes minutes over 9,677 cached
+        // games and must never run inside ordinary `xcodebuild test` runs.
+        // Set CARLSEN_QA_RUN_SCAN=1 (and optionally CARLSEN_QA_ARCHIVES_DIR)
+        // to run it on purpose.
+        guard ProcessInfo.processInfo.environment["CARLSEN_QA_RUN_SCAN"] == "1" else {
+            print("Set CARLSEN_QA_RUN_SCAN=1 to run the full Carlsen archive scan; skipping.")
+            return
+        }
         // Overridable so the scan can run from any machine; falls back to the
         // directory used when the archives were first fetched.
         let archivesDir = ProcessInfo.processInfo.environment["CARLSEN_QA_ARCHIVES_DIR"]
