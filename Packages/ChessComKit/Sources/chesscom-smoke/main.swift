@@ -19,11 +19,14 @@ func fail(_ message: String) -> Never {
 }
 
 let username = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "hikaru"
+let fetchAll = CommandLine.arguments.contains("--all")
+let outDirIndex = CommandLine.arguments.firstIndex(of: "--out-dir")
+let outDir: String? = outDirIndex != nil && outDirIndex! + 1 < CommandLine.arguments.count ? CommandLine.arguments[outDirIndex! + 1] : nil
 
 let semaphore = DispatchSemaphore(value: 0)
 
 Task {
-    let client = ChessComClient(contactInfo: "chesscom-smoke")
+    let client = ChessComClient(contactInfo: "chessanto-qa-carlsen")
 
     do {
         let profile = try await client.profile(username: username)
@@ -33,15 +36,34 @@ Task {
         guard !archives.isEmpty else { fail("no archives for \(username)") }
         log("archives: \(archives.count) months, most recent \(archives.last!)")
 
-        let recent = try await client.recentGames(username: username, monthCount: 1)
-        guard !recent.isEmpty else { fail("no games in most recent archive") }
-        log("recentGames: \(recent.count) games")
+        if fetchAll {
+            var totalGames = 0
+            for (idx, archiveURL) in archives.enumerated() {
+                let games = try await client.games(archiveURL: archiveURL)
+                totalGames += games.count
+                log("[\(idx + 1)/\(archives.count)] \(archiveURL) -> \(games.count) games (total: \(totalGames))")
 
-        let first = recent[0]
-        guard first.pgn.contains("[Event "), !first.white.username.isEmpty, !first.black.username.isEmpty else {
-            fail("first game decoded but looks malformed: \(first)")
+                if let outDir {
+                    let filename = archiveURL.replacingOccurrences(of: "https://api.chess.com/pub/player/\(username.lowercased())/games/", with: "").replacingOccurrences(of: "/", with: "-") + ".json"
+                    let filePath = (outDir as NSString).appendingPathComponent(filename)
+                    let encoder = JSONEncoder()
+                    encoder.dateEncodingStrategy = .secondsSince1970
+                    let data = try encoder.encode(games)
+                    try data.write(to: URL(fileURLWithPath: filePath))
+                }
+            }
+            log("FETCH ALL COMPLETE: \(totalGames) games across \(archives.count) archives")
+        } else {
+            let recent = try await client.recentGames(username: username, monthCount: 1)
+            guard !recent.isEmpty else { fail("no games in most recent archive") }
+            log("recentGames: \(recent.count) games")
+
+            let first = recent[0]
+            guard first.pgn.contains("[Event "), !first.white.username.isEmpty, !first.black.username.isEmpty else {
+                fail("first game decoded but looks malformed: \(first)")
+            }
+            log("first game: \(first.white.username) (\(first.white.rating)) vs \(first.black.username) (\(first.black.rating)), \(first.timeControl)")
         }
-        log("first game: \(first.white.username) (\(first.white.rating)) vs \(first.black.username) (\(first.black.rating)), \(first.timeControl)")
 
         log("PASS")
         semaphore.signal()
