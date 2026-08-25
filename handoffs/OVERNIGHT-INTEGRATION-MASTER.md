@@ -55,7 +55,29 @@ app accumulated and consumed 70+ GB of RAM. Do not repeat that.
    that if something goes wrong later in the session, everything landed
    so far is already safe on `origin/main`, not lost.
 
-6. **One known environment quirk, not a real bug:** if a build fails
+6. **Memory watchdog on any running app instance.** A single launched
+   instance ballooning to several GB of RAM (not multiple instances -
+   one process growing unbounded) is itself a stop condition, not
+   something to let ride while you do something else. If you launch the
+   app and it will run for more than a minute or two (a background
+   analysis pass, an AX walkthrough), periodically check its footprint:
+   ```
+   ps -o pid,rss,command -p $(pgrep -f "Chessanto.app/Contents/MacOS")
+   ```
+   RSS is in KB. If it exceeds roughly 2,000,000 (about 2GB) and is
+   still climbing, kill it immediately (rule 2's pkill), and treat this
+   as a real finding, not noise: write the exact scenario that triggered
+   it into `handoffs/HANDOFF.md` as a blocked/flagged item (which screen,
+   which data size, what you were doing when it started climbing) so a
+   future session can reproduce and fix the underlying leak - this is
+   likely the exact O(games x library) `reload()` cost the
+   performance-hardening investigation already flagged, so check that
+   angle first. Never leave an app instance running unattended for a
+   long stretch without checking its memory at least every few minutes;
+   this machine has 16GB of physical RAM and swap exhaustion risks a
+   full system freeze.
+
+7. **One known environment quirk, not a real bug:** if a build fails
    with `unable to write file ... .git/modules/.../pack/*.pack: No such
    file or directory`, that's a stale/corrupted local SPM checkout cache
    in DerivedData from running many worktrees in parallel, not broken
@@ -141,7 +163,7 @@ except `perf/hardening-pass`), in this order:
    and test (obeying the safety rules above - kill any stray app
    instance first, apply the circuit breaker if something fails
    repeatedly). If it fails for a reason that traces back to real broken
-   code (not the DerivedData cache issue in rule 6), fix it right there
+   code (not the DerivedData cache issue in rule 7), fix it right there
    in that worktree, commit the fix on that branch, and only then
    proceed. If you cannot resolve it within the time-box in rule 4, mark
    that branch blocked in `handoffs/HANDOFF.md` with the specifics and
