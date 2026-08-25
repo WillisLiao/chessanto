@@ -119,7 +119,9 @@ public struct ChessComGame: Codable, Sendable, Identifiable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         url = try container.decode(String.self, forKey: .url)
-        pgn = try container.decode(String.self, forKey: .pgn)
+        // Variant games (bughouse and friends) ship without a PGN. One such
+        // game must not poison decoding of the entire monthly archive.
+        pgn = try container.decodeIfPresent(String.self, forKey: .pgn) ?? ""
         timeControl = try container.decode(String.self, forKey: .timeControl)
         rated = try container.decode(Bool.self, forKey: .rated)
         white = try container.decode(ChessComPlayer.self, forKey: .white)

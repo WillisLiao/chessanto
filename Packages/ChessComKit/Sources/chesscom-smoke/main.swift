@@ -26,7 +26,7 @@ let outDir: String? = outDirIndex != nil && outDirIndex! + 1 < CommandLine.argum
 let semaphore = DispatchSemaphore(value: 0)
 
 Task {
-    let client = ChessComClient(contactInfo: "chessanto-qa-carlsen")
+    let client = ChessComClient(contactInfo: "chesscom-smoke")
 
     do {
         let profile = try await client.profile(username: username)
