@@ -6,26 +6,48 @@ import Foundation
 /// swapped, only this package changes.
 public struct ChessGame {
     public private(set) var game: Game
+    private var customFENs: [MoveTree.Index: String] = [:]
 
     public init(startingFEN fen: String? = nil) {
         if let fen, let position = Position(fen: fen) {
-            self.game = Game(startingWith: position)
+            var tags = Game.Tags()
+            if Chess960.isChess960(startingFEN: fen) {
+                tags.setUp = "1"
+                tags.fen = fen
+                tags.other["Variant"] = "Chess960"
+            }
+            self.game = Game(startingWith: position, tags: tags)
+            self.customFENs[self.game.startingIndex] = fen
         } else {
             self.game = Game()
         }
     }
 
+    public init(chess960Index index: Int) {
+        let fen = Chess960.startingFEN(index: index)
+        self.init(startingFEN: fen)
+    }
+
     public init(pgn: String) throws {
         let normalized = PGNCompatibility.normalize(pgn: pgn)
-        // Games containing disambiguated piece moves must not go through
-        // upstream at all: it can silently misparse them (moving the wrong
-        // piece) without throwing, which the fallback would never see.
-        if PGNCompatibility.requiresFallback(for: pgn) {
-            self.game = try PGNCompatibility.parse(pgn: pgn)
+        // Variant/custom-start games and games containing disambiguated piece
+        // moves must not go through upstream at all: upstream cannot express
+        // variant geometry, and it can silently misparse disambiguation
+        // (moving the wrong piece) without throwing, which the fallback would
+        // never see.
+        let needsCompatParser = pgn.contains("Variant") || pgn.contains("variant")
+            || pgn.contains("SetUp \"1\"") || pgn.contains("Setup \"1\"")
+            || PGNCompatibility.requiresFallback(for: pgn)
+        if needsCompatParser {
+            let parsed = try PGNCompatibility.parse(pgn: pgn)
+            self.game = parsed.game
+            self.customFENs = parsed.fens
         } else if let game = try? Game(pgn: normalized) {
             self.game = game
         } else {
-            self.game = try PGNCompatibility.parse(pgn: normalized)
+            let parsed = try PGNCompatibility.parse(pgn: pgn)
+            self.game = parsed.game
+            self.customFENs = parsed.fens
         }
     }
 
@@ -67,7 +89,7 @@ extension ChessGame {
     }
 
     public func fen(at index: MoveIndex) -> String? {
-        game.positions[index.raw]?.fen
+        customFENs[index.raw] ?? game.positions[index.raw]?.fen
     }
 
     public func san(at index: MoveIndex) -> String? {
@@ -144,9 +166,43 @@ extension ChessGame {
     public func legalMoves(from square: SquareCoordinate, at index: MoveIndex) -> [SquareCoordinate] {
         guard let position = game.positions[index.raw] else { return [] }
         let board = Board(position: position)
-        return board
-            .legalMoves(forPieceAt: Square(square.notation))
+        let startSquare = Square(square.notation)
+        var moves = board
+            .legalMoves(forPieceAt: startSquare)
             .map { SquareCoordinate(notation: $0.notation) }
+
+        // If king, check Chess960 castling legality
+        if let piece = position.piece(at: startSquare), piece.kind == .king, piece.color == position.sideToMove {
+            let fenStr = fen(at: index) ?? position.fen
+            let color = piece.color.asPieceColor
+            let rank = (color == .white) ? 1 : 8
+            if Chess960.canCastle(color: color, side: .kingside, in: fenStr) {
+                let dest = SquareCoordinate(notation: "g\(rank)")
+                if !moves.contains(dest) { moves.append(dest) }
+                if let (r1, r8) = Chess960.backRanks(from: fenStr.split(separator: " ")[0].description) {
+                    let rights = Chess960.CastlingRights.parse(from: fenStr.split(separator: " ")[2].description, rank1: r1, rank8: r8)
+                    let rf = (color == .white) ? rights.whiteKingsideRookFile : rights.blackKingsideRookFile
+                    if let rf {
+                        let rookSq = SquareCoordinate(notation: Chess960.fileToSquare(rf, rank: rank))
+                        if !moves.contains(rookSq) { moves.append(rookSq) }
+                    }
+                }
+            }
+            if Chess960.canCastle(color: color, side: .queenside, in: fenStr) {
+                let dest = SquareCoordinate(notation: "c\(rank)")
+                if !moves.contains(dest) { moves.append(dest) }
+                if let (r1, r8) = Chess960.backRanks(from: fenStr.split(separator: " ")[0].description) {
+                    let rights = Chess960.CastlingRights.parse(from: fenStr.split(separator: " ")[2].description, rank1: r1, rank8: r8)
+                    let rf = (color == .white) ? rights.whiteQueensideRookFile : rights.blackQueensideRookFile
+                    if let rf {
+                        let rookSq = SquareCoordinate(notation: Chess960.fileToSquare(rf, rank: rank))
+                        if !moves.contains(rookSq) { moves.append(rookSq) }
+                    }
+                }
+            }
+        }
+
+        return moves
     }
 
     /// Whether the piece at `square` can legally reach the back rank and
@@ -171,9 +227,41 @@ extension ChessGame {
         promotion: PromotionKind = .queen
     ) -> MoveIndex? {
         guard let position = game.positions[index.raw] else { return nil }
-        var board = Board(position: position)
         let startSquare = Square(start.notation)
         let endSquare = Square(end.notation)
+        let previousFEN = fen(at: index) ?? position.fen
+
+        // Chess960 castling fallback below only fires when the native board
+        // path cannot play the move (king/rooks off their standard squares).
+        // Castle only on unambiguous intent: king onto its own rook, or a
+        // multi-file king jump to the g/c file. A single-file step to the
+        // g/c file stays a plain king move (Lichess convention).
+        var board = Board(position: position)
+        let nativelyPlayable = board.canMove(pieceAt: startSquare, to: endSquare)
+
+        if !nativelyPlayable,
+            let piece = position.piece(at: startSquare), piece.kind == .king, piece.color == position.sideToMove
+        {
+            let color = piece.color.asPieceColor
+            let rank = (color == .white) ? 1 : 8
+            let fileDelta = abs(endSquare.file.number - startSquare.file.number)
+            let isKingsideAttempt = (end.notation == "g\(rank)" && fileDelta >= 2) || Self.isKingsideRook(endSquare, color: color, in: previousFEN)
+            let isQueensideAttempt = (end.notation == "c\(rank)" && fileDelta >= 2) || Self.isQueensideRook(endSquare, color: color, in: previousFEN)
+            let side: Chess960.CastlingSide? = {
+                if isKingsideAttempt { return .kingside }
+                if isQueensideAttempt { return .queenside }
+                return nil
+            }()
+
+            if let side, let castled = Chess960.performCastle(color: color, side: side, in: previousFEN) {
+                let kingEnd = Square(side == .kingside ? "g\(rank)" : "c\(rank)")
+                let move = Move(result: .move, piece: piece, start: startSquare, end: kingEnd)
+                let newIndex = game.make(move: move, from: index.raw)
+                customFENs[newIndex] = castled.resultingFEN
+                return MoveIndex(raw: newIndex)
+            }
+        }
+
         guard board.canMove(pieceAt: startSquare, to: endSquare),
             var move = board.move(pieceAt: startSquare, to: endSquare)
         else {
@@ -183,20 +271,82 @@ extension ChessGame {
             move = board.completePromotion(of: move, to: promotion.kind)
         }
         let newIndex = game.make(move: move, from: index.raw)
+        customFENs[newIndex] = Self.carryingCastlingRights(
+            previousFEN: previousFEN,
+            resultingFEN: board.position.fen,
+            movingFrom: start.notation,
+            movingTo: end.notation,
+            movedPieceKind: move.piece.kind.asPieceKind,
+            movedPieceColor: move.piece.color.asPieceColor
+        )
         return MoveIndex(raw: newIndex)
     }
 
     /// Attempts to play a legal SAN move (e.g. `"Nf3"`) at the position for `index`.
     @discardableResult
     public mutating func playMove(san: String, at index: MoveIndex) -> MoveIndex? {
-        guard let position = game.positions[index.raw],
-            let move = Move(san: san, position: position)
+        guard let position = game.positions[index.raw] else { return nil }
+
+        if san.hasPrefix("O-O") || san.hasPrefix("0-0") {
+            let isQueenside = san.hasPrefix("O-O-O") || san.hasPrefix("0-0-0")
+            let side: Chess960.CastlingSide = isQueenside ? .queenside : .kingside
+            let color = position.sideToMove.asPieceColor
+            let rank = (color == .white) ? 1 : 8
+            let previousFEN = fen(at: index) ?? position.fen
+
+            // Native path first: standard-chess castling stays entirely on
+            // ChessKit rails so its internal board state stays consistent.
+            var board = Board(position: position)
+            let kingSquare = position.pieces.first { $0.kind == .king && $0.color == position.sideToMove }?.square
+                ?? Square(isQueenside ? "c\(rank)" : "g\(rank)")
+            let kingEnd = Square(isQueenside ? "c\(rank)" : "g\(rank)")
+            if board.canMove(pieceAt: kingSquare, to: kingEnd),
+                let native = board.move(pieceAt: kingSquare, to: kingEnd),
+                case .castle = native.result
+            {
+                let newIndex = game.make(move: native, from: index.raw)
+                customFENs[newIndex] = Self.carryingCastlingRights(
+                    previousFEN: previousFEN,
+                    resultingFEN: board.position.fen,
+                    movingFrom: kingSquare.notation,
+                    movingTo: kingEnd.notation,
+                    movedPieceKind: .king,
+                    movedPieceColor: color
+                )
+                return MoveIndex(raw: newIndex)
+            }
+
+            // Chess960 fallback: ChessKit cannot represent these castles.
+            if let castled = Chess960.performCastle(color: color, side: side, in: previousFEN) {
+                let kingStart = position.pieces.first { $0.kind == .king && $0.color == position.sideToMove }?.square ?? kingEnd
+                let move = Move(result: .move, piece: Piece(.king, color: position.sideToMove, square: kingStart), start: kingStart, end: kingEnd)
+                let newIndex = game.make(move: move, from: index.raw)
+                customFENs[newIndex] = castled.resultingFEN
+                return MoveIndex(raw: newIndex)
+            }
+            return nil
+        }
+
+        guard let move = PGNCompatibility.parseSAN(san, in: position) else { return nil }
+        var board = Board(position: position)
+        guard board.canMove(pieceAt: move.start, to: move.end),
+            var playedMove = board.move(pieceAt: move.start, to: move.end)
         else {
             return nil
         }
-        let board = Board(position: position)
-        guard board.canMove(pieceAt: move.start, to: move.end) else { return nil }
+        if let promotedPiece = move.promotedPiece {
+            playedMove = board.completePromotion(of: playedMove, to: promotedPiece.kind)
+        }
+        let previousFEN = fen(at: index) ?? position.fen
         let newIndex = game.make(move: move, from: index.raw)
+        customFENs[newIndex] = Self.carryingCastlingRights(
+            previousFEN: previousFEN,
+            resultingFEN: board.position.fen,
+            movingFrom: playedMove.start.notation,
+            movingTo: playedMove.end.notation,
+            movedPieceKind: playedMove.piece.kind.asPieceKind,
+            movedPieceColor: playedMove.piece.color.asPieceColor
+        )
         return MoveIndex(raw: newIndex)
     }
 }
@@ -288,7 +438,7 @@ public struct AbsolutePin: Hashable, Sendable {
 }
 
 extension Piece.Kind {
-    fileprivate var asPieceKind: PieceKind {
+    var asPieceKind: PieceKind {
         switch self {
         case .pawn: return .pawn
         case .knight: return .knight
@@ -301,7 +451,7 @@ extension Piece.Kind {
 }
 
 extension Piece.Color {
-    fileprivate var asPieceColor: PieceColor {
+    var asPieceColor: PieceColor {
         self == .white ? .white : .black
     }
 }
@@ -407,11 +557,30 @@ extension ChessGame {
 
     private static func validCastlingRights(_ field: String) -> Bool {
         guard field != "-", !field.isEmpty else { return field == "-" }
-        let order = Array("KQkq")
-        var previous = -1
+        guard field.count <= 4 else { return false }
+        if field.allSatisfy({ "KQkq".contains($0) }) {
+            let order = Array("KQkq")
+            var previous = -1
+            for character in field {
+                guard let index = order.firstIndex(of: character), index > previous else { return false }
+                previous = index
+            }
+            return true
+        }
+
+        // Shredder-FEN: uppercase file letters followed by lowercase file letters
+        let validShredder = Set("ABCDEFGHabcdefgh")
+        guard field.allSatisfy({ validShredder.contains($0) }) else { return false }
+        var seen = Set<Character>()
+        var seenLowercase = false
         for character in field {
-            guard let index = order.firstIndex(of: character), index > previous else { return false }
-            previous = index
+            guard !seen.contains(character) else { return false }
+            seen.insert(character)
+            if character.isLowercase {
+                seenLowercase = true
+            } else if seenLowercase {
+                return false
+            }
         }
         return true
     }
@@ -548,14 +717,61 @@ extension ChessGame {
     /// wrong: leaving the pawn on the back rank yields an illegal position,
     /// and assuming a queen invents a move the caller never named.
     public static func replayLine(fromUCI moves: [String], startingFEN fen: String) -> [ReplayedMove] {
-        guard let position = Position(fen: fen) else { return [] }
-        var board = Board(position: position)
+        guard let _ = Position(fen: fen) else { return [] }
+        var currentFEN = fen
         var color: Piece.Color = fen.split(separator: " ", maxSplits: 2).count > 1
             && fen.split(separator: " ", maxSplits: 2)[1] == "b"
             ? .black : .white
 
         var replayed: [ReplayedMove] = []
         for uci in moves {
+            guard uci.count >= 4 else { break }
+            let startStr = String(uci.prefix(2))
+            let endStr = String(uci.dropFirst(2).prefix(2))
+
+            let currentPieceColor = color.asPieceColor
+            let rank = (currentPieceColor == .white) ? 1 : 8
+            let isKingsideUCI = Self.isKingsideCastleUCI(start: startStr, end: endStr, color: currentPieceColor, in: currentFEN)
+            let isQueensideUCI = Self.isQueensideCastleUCI(start: startStr, end: endStr, color: currentPieceColor, in: currentFEN)
+
+            if isKingsideUCI && Chess960.canCastle(color: currentPieceColor, side: .kingside, in: currentFEN) {
+                guard let castled = Chess960.performCastle(color: currentPieceColor, side: .kingside, in: currentFEN) else { break }
+                let endSq = "g\(rank)"
+                replayed.append(ReplayedMove(
+                    san: castled.san,
+                    uci: uci,
+                    movedPieceKind: .king,
+                    movedPieceColor: currentPieceColor,
+                    capturedPieceKind: nil,
+                    isCheck: castled.san.contains("+"),
+                    isCheckmate: castled.san.contains("#"),
+                    endSquare: endSq,
+                    resultingFEN: castled.resultingFEN
+                ))
+                currentFEN = castled.resultingFEN
+                color = color.opposite
+                continue
+            } else if isQueensideUCI && Chess960.canCastle(color: currentPieceColor, side: .queenside, in: currentFEN) {
+                guard let castled = Chess960.performCastle(color: currentPieceColor, side: .queenside, in: currentFEN) else { break }
+                let endSq = "c\(rank)"
+                replayed.append(ReplayedMove(
+                    san: castled.san,
+                    uci: uci,
+                    movedPieceKind: .king,
+                    movedPieceColor: currentPieceColor,
+                    capturedPieceKind: nil,
+                    isCheck: castled.san.contains("+"),
+                    isCheckmate: castled.san.contains("#"),
+                    endSquare: endSq,
+                    resultingFEN: castled.resultingFEN
+                ))
+                currentFEN = castled.resultingFEN
+                color = color.opposite
+                continue
+            }
+
+            guard let currentPos = Position(fen: currentFEN) else { break }
+            var board = Board(position: currentPos)
             guard let parsedMove = EngineLANParser.parse(move: uci, for: color, in: board.position) else {
                 break
             }
@@ -569,7 +785,17 @@ extension ChessGame {
             {
                 break
             }
-            replayed.append(playedMove.asReplayedMove(resultingFEN: board.position.fen))
+            let resultingRawFEN = board.position.fen
+            let updatedFEN = Self.carryingCastlingRights(
+                previousFEN: currentFEN,
+                resultingFEN: resultingRawFEN,
+                movingFrom: startStr,
+                movingTo: endStr,
+                movedPieceKind: playedMove.piece.kind.asPieceKind,
+                movedPieceColor: currentPieceColor
+            )
+            replayed.append(playedMove.asReplayedMove(resultingFEN: updatedFEN))
+            currentFEN = updatedFEN
             color = color.opposite
         }
         return replayed
@@ -621,11 +847,15 @@ extension ChessGame {
         let sideToMove: Piece.Color = fen.split(separator: " ").count > 1
             && fen.split(separator: " ")[1] == "b"
             ? .black : .white
-        return position.pieces
+        var total = position.pieces
             .filter { $0.color == sideToMove }
             .reduce(0) { total, piece in
                 total + board.legalMoves(forPieceAt: piece.square).count
             }
+        let color = sideToMove.asPieceColor
+        if Chess960.canCastle(color: color, side: .kingside, in: fen) { total += 1 }
+        if Chess960.canCastle(color: color, side: .queenside, in: fen) { total += 1 }
+        return total
     }
 
     /// Whether the side to move in `fen` has any legal move ending on
@@ -641,9 +871,16 @@ extension ChessGame {
             && fen.split(separator: " ")[1] == "b"
             ? .black : .white
         let target = Square(square)
-        return position.pieces
+        let hasBoardMove = position.pieces
             .filter { $0.color == sideToMove }
             .contains { board.legalMoves(forPieceAt: $0.square).contains(target) }
+        if hasBoardMove { return true }
+
+        let color = sideToMove.asPieceColor
+        let rank = (color == .white) ? 1 : 8
+        if square == "g\(rank)" && Chess960.canCastle(color: color, side: .kingside, in: fen) { return true }
+        if square == "c\(rank)" && Chess960.canCastle(color: color, side: .queenside, in: fen) { return true }
+        return false
     }
 
     /// Whether `fen` parses as a valid position - `ChessGame.init(startingFEN:)`
@@ -861,14 +1098,77 @@ extension ChessGame {
     }
 
     /// Whether `square` is attacked by any piece of `color` in the position
-    /// described by `fen`. Uses ChessKit's legal-move generator.
+    /// described by `fen`.
     public static func isSquareAttacked(square: String, by color: PieceColor, in fen: String) -> Bool {
         guard let position = Position(fen: fen) else { return false }
-        let board = Board(position: position)
         let target = Square(square)
-        return position.pieces
-            .filter { $0.color.asPieceColor == color }
-            .contains { board.legalMoves(forPieceAt: $0.square).contains(target) }
+        let targetFile = target.file.number
+        let targetRank = target.rank.value
+
+        for piece in position.pieces where piece.color.asPieceColor == color {
+            let pieceFile = piece.square.file.number
+            let pieceRank = piece.square.rank.value
+            let df = targetFile - pieceFile
+            let dr = targetRank - pieceRank
+
+            switch piece.kind {
+            case .pawn:
+                let forward = (color == .white) ? 1 : -1
+                if dr == forward && abs(df) == 1 {
+                    return true
+                }
+            case .knight:
+                if (abs(df) == 1 && abs(dr) == 2) || (abs(df) == 2 && abs(dr) == 1) {
+                    return true
+                }
+            case .king:
+                if max(abs(df), abs(dr)) == 1 {
+                    return true
+                }
+            case .bishop:
+                if abs(df) == abs(dr) && abs(df) > 0 {
+                    if isRayClear(from: piece.square, to: target, in: position) {
+                        return true
+                    }
+                }
+            case .rook:
+                if (df == 0 || dr == 0) && (df != 0 || dr != 0) {
+                    if isRayClear(from: piece.square, to: target, in: position) {
+                        return true
+                    }
+                }
+            case .queen:
+                if (abs(df) == abs(dr) && abs(df) > 0) || ((df == 0 || dr == 0) && (df != 0 || dr != 0)) {
+                    if isRayClear(from: piece.square, to: target, in: position) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    private static func isRayClear(from start: Square, to end: Square, in position: Position) -> Bool {
+        let startFile = start.file.number
+        let startRank = start.rank.value
+        let endFile = end.file.number
+        let endRank = end.rank.value
+
+        let stepFile = (endFile - startFile).signum()
+        let stepRank = (endRank - startRank).signum()
+
+        var currentFile = startFile + stepFile
+        var currentRank = startRank + stepRank
+
+        while currentFile != endFile || currentRank != endRank {
+            let sq = Square(Chess960.fileToSquare(currentFile - 1, rank: currentRank))
+            if position.piece(at: sq) != nil {
+                return false
+            }
+            currentFile += stepFile
+            currentRank += stepRank
+        }
+        return true
     }
 
     /// The clock time in seconds for the move at `index`, parsed from
@@ -904,5 +1204,83 @@ extension ChessGame {
             return Int(seconds)
         }
         return nil
+    }
+
+    /// ChessKit's FEN serialization drops non-standard (Shredder) castling
+    /// rights, so after every normal move the rights field from the pre-move
+    /// FEN - advanced via `Chess960.updateCastlingRights` - is spliced back
+    /// into the resulting FEN. Returns `resultingFEN` untouched when the
+    /// pre-move position has no castling rights.
+    private static func carryingCastlingRights(
+        previousFEN: String,
+        resultingFEN: String,
+        movingFrom startSquare: String,
+        movingTo endSquare: String,
+        movedPieceKind: PieceKind,
+        movedPieceColor: PieceColor
+    ) -> String {
+        let previousFields = previousFEN.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard previousFields.count == 6, previousFields[2] != "-" else { return resultingFEN }
+
+        let advanced = Chess960.updateCastlingRights(
+            in: previousFEN,
+            movingFrom: startSquare,
+            movingTo: endSquare,
+            movedPieceKind: movedPieceKind,
+            movedPieceColor: movedPieceColor
+        )
+        guard let rights = advanced.split(separator: " ", omittingEmptySubsequences: true).dropFirst(2).first else {
+            return resultingFEN
+        }
+        var fields = resultingFEN.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count == 6 else { return resultingFEN }
+        fields[2] = String(rights)
+        return fields.joined(separator: " ")
+    }
+
+    private static func isKingsideRook(_ square: Square, color: PieceColor, in fen: String) -> Bool {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count == 6, let (r1, r8) = Chess960.backRanks(from: fields[0]) else { return false }
+        let rights = Chess960.CastlingRights.parse(from: fields[2], rank1: r1, rank8: r8)
+        let rf = (color == .white) ? rights.whiteKingsideRookFile : rights.blackKingsideRookFile
+        guard let rf else { return false }
+        let rank = (color == .white) ? 1 : 8
+        return square.notation == Chess960.fileToSquare(rf, rank: rank)
+    }
+
+    private static func isQueensideRook(_ square: Square, color: PieceColor, in fen: String) -> Bool {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count == 6, let (r1, r8) = Chess960.backRanks(from: fields[0]) else { return false }
+        let rights = Chess960.CastlingRights.parse(from: fields[2], rank1: r1, rank8: r8)
+        let rf = (color == .white) ? rights.whiteQueensideRookFile : rights.blackQueensideRookFile
+        guard let rf else { return false }
+        let rank = (color == .white) ? 1 : 8
+        return square.notation == Chess960.fileToSquare(rf, rank: rank)
+    }
+
+    private static func isKingsideCastleUCI(start: String, end: String, color: PieceColor, in fen: String) -> Bool {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count == 6, let (r1, r8) = Chess960.backRanks(from: fields[0]) else { return false }
+        let rankChars = (color == .white) ? r1 : r8
+        let kingChar: Character = (color == .white) ? "K" : "k"
+        guard let kf = rankChars.firstIndex(of: kingChar) else { return false }
+        let rank = (color == .white) ? 1 : 8
+        guard start == Chess960.fileToSquare(kf, rank: rank) else { return false }
+        let startFile = start.first.map { Int($0.asciiValue! - Character("a").asciiValue!) } ?? 0
+        if end == "g\(rank)", abs(6 - startFile) >= 2 { return true }
+        return isKingsideRook(Square(end), color: color, in: fen)
+    }
+
+    private static func isQueensideCastleUCI(start: String, end: String, color: PieceColor, in fen: String) -> Bool {
+        let fields = fen.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        guard fields.count == 6, let (r1, r8) = Chess960.backRanks(from: fields[0]) else { return false }
+        let rankChars = (color == .white) ? r1 : r8
+        let kingChar: Character = (color == .white) ? "K" : "k"
+        guard let kf = rankChars.firstIndex(of: kingChar) else { return false }
+        let rank = (color == .white) ? 1 : 8
+        guard start == Chess960.fileToSquare(kf, rank: rank) else { return false }
+        let startFile = start.first.map { Int($0.asciiValue! - Character("a").asciiValue!) } ?? 0
+        if end == "c\(rank)", abs(2 - startFile) >= 2 { return true }
+        return isQueensideRook(Square(end), color: color, in: fen)
     }
 }

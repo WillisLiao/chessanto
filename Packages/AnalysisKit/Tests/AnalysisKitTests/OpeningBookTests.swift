@@ -121,3 +121,14 @@ private func fens(forPGN pgn: String) throws -> [String] {
     }
     #expect(book.lookup(fens: fens) == nil)
 }
+
+@Test func chess960GameProducesNoOpeningBookMatch() {
+    let book = OpeningBook.loadFromBundle()
+    let chess960FEN = Chess960.startingFEN(index: 0)
+    var game = ChessGame(startingFEN: chess960FEN)
+    var fens = [game.fen(at: game.startIndex)!]
+    if let next = game.playMove(san: "b3", at: game.startIndex) {
+        fens.append(game.fen(at: next)!)
+    }
+    #expect(book.lookup(fens: fens) == nil)
+}
