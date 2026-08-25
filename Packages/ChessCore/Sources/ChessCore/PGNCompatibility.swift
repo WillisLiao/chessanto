@@ -358,6 +358,39 @@ enum PGNCompatibility {
         return nsString.substring(with: match.range)
     }
 
+    /// Whether the move text contains a piece move with an explicit
+    /// disambiguator (`Rhxf1`, `Nbd7`, `R1d1`, `Qh4e1`). Upstream `Game(pgn:)`
+    /// must not be trusted for these games: it silently drops the
+    /// disambiguator on captures and moves the wrong piece, or rejects the
+    /// token outright, so route the whole game through the compatibility
+    /// parser instead of waiting for it to throw.
+    public static func requiresFallback(for pgn: String) -> Bool {
+        let moveTextLines = pgn.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("[") }
+        let pattern = #"[PNBRQK][a-h1-8]{1,2}x?[a-h][1-8]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        for line in moveTextLines {
+            let nsString = line as NSString
+            let matches = regex.matches(in: line, range: NSRange(location: 0, length: nsString.length))
+            for match in matches {
+                // The match must start at a token boundary so tag values and
+                // ordinary SAN such as "e4" or "exd5" never qualify.
+                let loc = match.range.location
+                if loc > 0 {
+                    let prev = nsString.substring(with: NSRange(location: loc - 1, length: 1))
+                    let isBoundary = prev.rangeOfCharacter(from: .whitespacesAndNewlines) != nil
+                        || prev == "." || prev == "(" || prev == ")"
+                    if !isBoundary {
+                        continue
+                    }
+                }
+                return true
+            }
+        }
+        return false
+    }
+
     public static func parseSAN(_ san: String, in position: Position) -> Move? {
         var normalizedSAN = san
             .replacingOccurrences(of: "0-0-0", with: "O-O-O")
@@ -384,68 +417,101 @@ enum PGNCompatibility {
 
         let clean = normalizedSAN.replacingOccurrences(of: "+", with: "").replacingOccurrences(of: "#", with: "")
 
-        // Resolve disambiguated piece-capture tokens that upstream SANParser drops:
-        if let firstChar = clean.first, let pieceKind = Piece.Kind(rawValue: String(firstChar)) {
-            let body = clean.dropFirst()
-            if body.contains("x"), let end = extractTargetSquare(from: clean) {
-                if let xIdx = body.firstIndex(of: "x") {
-                    let disambigStr = String(body[body.startIndex..<xIdx])
-                    if !disambigStr.isEmpty {
-                        var disambiguation: Move.Disambiguation?
-                        if disambigStr.count == 2 {
-                            let sq = Square(disambigStr)
-                            disambiguation = .bySquare(sq)
-                        } else if disambigStr.count == 1 {
-                            let char = disambigStr.first!
-                            if ("a"..."h").contains(char), let file = Square.File(rawValue: disambigStr) {
-                                disambiguation = .byFile(file)
-                            } else if ("1"..."8").contains(char), let rankNum = Int(disambigStr) {
-                                disambiguation = .byRank(Square.Rank(rankNum))
-                            }
-                        }
+        // Resolve explicitly disambiguated piece moves that upstream SANParser
+        // mishandles: it silently drops the disambiguator on captures ("Rhxf1"
+        // moves the wrong rook) and rejects rank/square disambiguation outright.
+        // Token shape: <piece> [disambiguator] ["x"] <destination square>.
+        if let firstChar = clean.first, let pieceKind = Piece.Kind(rawValue: String(firstChar)), clean.count >= 3,
+            let end = square(from: String(clean.suffix(2))) {
+            let prefix = clean.dropFirst().dropLast(2)
+            var disambigStr = String(prefix)
+            if disambigStr.hasSuffix("x") {
+                disambigStr.removeLast()
+            }
 
-                        if let disambiguation {
-                            let color = position.sideToMove
-                            let board = Board(position: position)
-                            let matchingPieces = position.pieces.filter {
-                                $0.kind == pieceKind && $0.color == color && board.canMove(pieceAt: $0.square, to: end)
-                            }
-
-                            let candidates = matchingPieces.filter { piece in
-                                switch disambiguation {
-                                case let .byFile(file):
-                                    return piece.square.file == file
-                                case let .byRank(rank):
-                                    return piece.square.rank == rank
-                                case let .bySquare(sq):
-                                    return piece.square == sq
-                                }
-                            }
-
-                            // Require exactly one legal source candidate after applying the SAN disambiguator
-                            guard candidates.count == 1, let candidate = candidates.first else {
-                                return nil
-                            }
-
-                            var playBoard = Board(position: position)
-                            return playBoard.move(pieceAt: candidate.square, to: end)
-                        }
+            if !disambigStr.isEmpty, let disambiguation = disambiguation(from: disambigStr) {
+                let color = position.sideToMove
+                let board = Board(position: position)
+                let candidates = position.pieces.filter {
+                    $0.kind == pieceKind && $0.color == color && board.canMove(pieceAt: $0.square, to: end)
+                }
+                .filter { piece in
+                    switch disambiguation {
+                    case let .byFile(file):
+                        return piece.square.file == file
+                    case let .byRank(rank):
+                        return piece.square.rank == rank
+                    case let .bySquare(sq):
+                        return piece.square == sq
                     }
+                }
+
+                // Require exactly one legal source candidate after applying the SAN disambiguator
+                guard candidates.count == 1, let candidate = candidates.first else {
+                    return nil
+                }
+
+                var playBoard = Board(position: position)
+                return playBoard.move(pieceAt: candidate.square, to: end)
+            }
+        }
+
+        // En passant: a pawn capture onto an empty square. Upstream cannot
+        // resolve this during replay because replayed positions carry no en
+        // passant state (Game.make bypasses Board's en-passant bookkeeping),
+        // so build the capture manually from board geometry.
+        if let firstChar = clean.first, firstChar.isLowercase,
+            Square.File(rawValue: String(firstChar)) != nil,
+            let xIdx = clean.firstIndex(of: "x") {
+            let afterX = clean.index(after: xIdx)
+            let destNotation = String(clean.suffix(2))
+            if let end = square(from: destNotation), clean.distance(from: afterX, to: clean.endIndex) == 2 {
+                let srcFile = Square.File(rawValue: String(firstChar))!
+                let color = position.sideToMove
+                let victimRankOffset = color == .white ? -1 : 1
+                let landingRank = color == .white ? 6 : 3
+                if end.rank.value == landingRank,
+                    let srcSquare = square(from: "\(srcFile.rawValue)\(end.rank.value + victimRankOffset)"),
+                    let victimSquare = square(from: "\(end.file.rawValue)\(end.rank.value + victimRankOffset)"),
+                    position.piece(at: end) == nil,
+                    var pawn = position.piece(at: srcSquare), pawn.kind == .pawn, pawn.color == color,
+                    let victim = position.piece(at: victimSquare), victim.kind == .pawn, victim.color != color {
+                    pawn.square = end
+                    return Move(result: .capture(victim), piece: pawn, start: srcSquare, end: end, checkState: .none)
                 }
             }
         }
 
-        // For all other tokens, delegate to upstream SANParser with normalized SAN
+        // For all other tokens, delegate to upstream SANParser with normalized
+        // SAN; retry without check/mate suffixes because upstream's patterns
+        // reject them on some shapes (castling in particular: "O-O-O+").
         return SANParser.parse(move: normalizedSAN, in: position)
+            ?? (normalizedSAN != clean ? SANParser.parse(move: clean, in: position) : nil)
     }
 
-    private static func extractTargetSquare(from cleanSAN: String) -> Square? {
-        let pattern = #"([a-h][1-8])(?!=)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
-        let nsString = cleanSAN as NSString
-        let matches = regex.matches(in: cleanSAN, range: NSRange(location: 0, length: nsString.length))
-        guard let lastMatch = matches.last else { return nil }
-        let squareStr = nsString.substring(with: lastMatch.range(at: 1))
-        return Square(squareStr)
+    /// Strict square parser. `Square(_ notation:)` clamps invalid input
+    /// instead of failing, so malformed tokens must be rejected here first.
+    private static func square(from notation: String) -> Square? {
+        guard notation.count == 2,
+            let fileChar = notation.first, ("a"..."h").contains(fileChar),
+            let rankChar = notation.last, ("1"..."8").contains(rankChar) else {
+            return nil
+        }
+        return Square(notation)
+    }
+
+    private static func disambiguation(from str: String) -> Move.Disambiguation? {
+        if str.count == 2, let sq = square(from: str) {
+            return .bySquare(sq)
+        }
+        if str.count == 1, let char = str.first {
+            if ("a"..."h").contains(char), let file = Square.File(rawValue: str) {
+                return .byFile(file)
+            }
+            if ("1"..."8").contains(char), let rankNum = Int(str) {
+                return .byRank(Square.Rank(rankNum))
+            }
+        }
+        return nil
     }
 }

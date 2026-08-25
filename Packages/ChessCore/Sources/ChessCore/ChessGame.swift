@@ -1,4 +1,5 @@
 import ChessKit
+import Foundation
 
 /// Facade over chesskit-swift so the rest of the app never imports
 /// `ChessKit` directly. If the underlying library ever needs to be
@@ -16,7 +17,12 @@ public struct ChessGame {
 
     public init(pgn: String) throws {
         let normalized = PGNCompatibility.normalize(pgn: pgn)
-        if let game = try? Game(pgn: normalized) {
+        // Games containing disambiguated piece moves must not go through
+        // upstream at all: it can silently misparse them (moving the wrong
+        // piece) without throwing, which the fallback would never see.
+        if PGNCompatibility.requiresFallback(for: pgn) {
+            self.game = try PGNCompatibility.parse(pgn: pgn)
+        } else if let game = try? Game(pgn: normalized) {
             self.game = game
         } else {
             self.game = try PGNCompatibility.parse(pgn: normalized)

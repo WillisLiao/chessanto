@@ -13,6 +13,45 @@ Feature parity and hardening pass for the iPhone companion completed on branch `
 - **Verification**: CompanionKit tests (33 tests in 11 suites), macOS build and test (211 tests in 37 suites), iOS Simulator build and test (7 tests in 4 suites) all pass green. Visual pass completed on iOS Simulator in light and dark modes.
 - Details in `devlogs/2026-08-25-mobile-companion-parity.md`.
 
+## Current state (2026-08-25) - overnight integration in progress
+
+Single-session integration of Phase 1 under `handoffs/OVERNIGHT-INTEGRATION-MASTER.md`.
+Merged so far: `qa/edge-case-pgns`, `qa/carlsen-games` (main at `75b4cc0`, pushed).
+Carlsen merge notes: full-archive scan test gated behind `CARLSEN_QA_RUN_SCAN=1`
+(commit `0ed2c60`); `ChessGame.init(pgn:)` and `PGNCompatibility.parseSAN`
+conflicts resolved as unions of both branches' fixes.
+Main verified after each merge; latest counts: ChessCore 84 tests, app suite
+212 tests across 38 suites, `** TEST SUCCEEDED **`.
+
+## Current state - QA Carlsen games (2026-08-25)
+
+Full-archive QA scan of chess.com user `MagnusCarlsen` (9,677 games, 849,519
+standard-chess plies) ran end-to-end through the real import path on branch
+`qa/carlsen-games`.
+Three shared-layer defects were found and fixed in `ChessCore`: replayed double
+pushes left no en passant state so genuine ep captures killed whole-game
+imports (603 games); upstream silently dropped SAN disambiguation on piece
+captures and moved the wrong piece, corrupting final positions without
+throwing (53 games); non-capture rank/square disambiguation and
+castling-with-check suffixes threw (43 games).
+`ChessGame.init(pgn:)` now routes any game containing explicitly disambiguated
+piece moves straight to `PGNCompatibility`, whose `parseSAN` resolves all
+disambiguation forms with a strict single-candidate rule, constructs en passant
+captures manually, and retries castling tokens without check suffixes.
+After the fixes the full scan reports 0 parse failures, 0 FEN mismatches
+against chess.com's CurrentPosition tags, and 0 report-building failures across
+9,364 standard games.
+Chess960 and three-check games (313) remain on the graceful load-error path:
+PLAN.md declares Chess960 out of product scope and upstream's Castling type
+cannot express variant geometry.
+Known quirk documented in the devlog: `fen(at:)` never emits an en passant
+field after double pushes (both stored and replayed FENs agree, so nothing
+downstream breaks today).
+Verification: ChessCore 64 tests, ChessComKit 4 tests, AnalysisKit 195 tests
+across 6 suites, app suite 201 tests across 37 suites with
+`** BUILD SUCCEEDED **` and `** TEST SUCCEEDED **`; scan summary quoted in
+`devlogs/2026-08-25-qa-carlsen.md`.
+
 ## Current state (2026-08-25) - Merged qa/edge-case-pgns onto main
 
 Adversarial and edge-case PGN hardening is now on `main`.
