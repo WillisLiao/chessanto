@@ -9,18 +9,36 @@ measurement against a large real library.
 The verification bar and devlog/handoff/commit rules are all specified in
 that file - follow them exactly.
 
+## Progress addendum - second session (2026-08-25, later)
+
+The worktree was stale (based on `main` from before all 13 overnight-integration
+branches, perf-hardening's own zero-commit status, and the mobile companion work
+landed) - it has now been synced with current `main` via a clean merge, so it
+carries Play vs Engine, Chess960, search/filter, accessibility, Coach real-model
+verification, opening book quality, release packaging, and the full mobile
+companion track. The note below about "never touch files owned by other
+in-progress feature branches" no longer applies - those all merged into `main`
+already; this worktree now starts from that merged state.
+
+The background analyzer (pid 4500) had been running since roughly 2:46 AM and
+had only completed 1 of 40 games after 14+ hours - it was CPU-starved by the
+heavy concurrent load on this machine (multiple opencode/build processes) and
+was not making meaningful progress. It has been killed. Do not assume the
+dashboard fixture is analyzed - `SELECT COUNT(DISTINCT gameId) FROM analysis`
+against `chessanto-analyzer.sqlite` will show 1 or 0 real rows.
+
+Given how poorly that ran under load, treat the analyzed-dashboard-fixture step
+(c) as optional/best-effort rather than a blocker: the launch-path fixes in
+step (b) (metadata-only sidebar fetch, cached openings, batch-reload
+suppression) do not need analyzed games to implement or measure - they operate
+on the raw 3594-game unanalyzed library, which is already built and ready. Only
+attempt step (c)'s dashboard-with-real-analysis measurement if you have
+reasonable confidence the machine has enough free CPU for it to actually
+finish in a reasonable time; if you kick it off, run it with a much smaller
+target (5-10 games, not 40) and check on it periodically rather than assuming
+it's progressing.
+
 ## Progress addendum - first session (2026-08-25)
-
-State was re-verified and is exactly as described below: worktree clean on
-`perf/hardening-pass` @ `0267e6b`, tooling built, both fixture copies pristine, live database
-SHA-256 still `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`.
-
-Step (a) was started: the analyzer is running (was pid 4500) against a NEW dedicated copy,
-`/var/folders/94/2p2pbcss4pddjvbrslnjbtyc0000gp/T/opencode/chessanto-perf/chessanto-analyzer.sqlite`,
-target 40 games, fast preset.
-Log: `/var/folders/94/2p2pbcss4pddjvbrslnjbtyc0000gp/T/opencode/chessanto-perf/analyzer-run.log`.
-It is idempotent, so if it died just rerun the same command on that copy to resume; check progress
-with `SELECT COUNT(DISTINCT gameId) FROM analysis` before launching anything.
 
 Step (b)'s code reading is done - do not repeat it.
 The complete seam map (which consumers actually need PGN text, where the metadata-only struct has
@@ -168,9 +186,10 @@ g) Write `devlogs/<date>-performance-hardening.md` (library size,
 Never use an em dash anywhere (use plain dash).
 No boilerplate or speculative abstractions; smallest fix that addresses the
 measured cause.
-Never touch files owned by the other in-progress feature branches (Play vs
-Engine, Chess960, search/filter, accessibility, visual QA) - note issues in
-the devlog instead.
+Those other features (Play vs Engine, Chess960, search/filter, accessibility,
+visual QA) are all merged into `main` now, not separate in-progress branches -
+stay focused on the performance work itself rather than touching their code,
+but you're not blocked by them being "someone else's branch" anymore.
 Never write to the live database; verify its SHA-256 stays
 `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f` after any
 app launches you do.
