@@ -3,6 +3,23 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Merged qa/edge-case-pgns onto main
+
+Adversarial and edge-case PGN hardening is now on `main`.
+Standalone re-verify in the worktree and post-merge verify on main both green: `** BUILD SUCCEEDED **`, `Test run with 211 tests in 37 suites`, `** TEST SUCCEEDED **`.
+Details in `devlogs/2026-08-24-qa-edge-cases.md`.
+
+## Current state (2026-08-24) - QA edge cases
+
+Adversarial and edge-case PGN hardening landed on branch `qa/edge-case-pgns`.
+New `PGNCompatibility.normalize(pgn:)` is applied in both `ChessGame.init(pgn:)` and `PGNCompatibility.parse`, so every entry point standardizes CRLF/CR line endings, strips UTF-8 BOM and `%` escape lines, drops `;` movetext comments, and rewrites numeric castling (`0-0`, `0-0-0`) to `O-O` / `O-O-O`.
+`parseSAN` now accepts alternative promotion forms (`e8Q`, `e8(Q)`, `e8/Q`), double-plus checks, and evaluation suffixes (`+-`, `+/=`, `⩲`, etc.), while `convertTokens` strips standalone and attached `e.p.` annotations and FEN positions parse without a `[SetUp]` tag.
+`PGNTagScanner` tolerates extra whitespace/BOM in headers and falls back to parsing headerless bare move text with default White/Black/Result tags, so paste and drag-drop imports of bare movetext succeed through `GameLibrary.importPGN`.
+Clock annotation parsing extended to tenths of seconds and plain seconds, new `ChessGame.clockSeconds(at:)` feeds `ReportBuilding.buildInput`, so the rule-based time-pressure takeaway now fires on real games with low-clock errors.
+Coverage added: 20 tests in `Packages/ChessCore/Tests/ChessCoreTests/AdversarialPGNTests.swift` and 11 tests in `App/Tests/ChessantoTests/AdversarialPGNImportTests.swift`.
+Verified: ChessCore 77, ChessComKit 4, AnalysisKit 195, Persistence 44 package tests pass, plus app build `** BUILD SUCCEEDED **` and `Test run with 211 tests in 37 suites passed` ending `** TEST SUCCEEDED **`.
+Details in `devlogs/2026-08-24-qa-edge-cases.md`.
+
 ## Current state (2026-08-25) - Performance hardening pass started
 
 The performance/scalability hardening session from `handoffs/NEXT-SESSION-PERFORMANCE-HARDENING.md` has begun on the dedicated worktree `/Users/willis/Documents/chessanto-perf-hardening` (branch `perf/hardening-pass`, clean at `0267e6b`).

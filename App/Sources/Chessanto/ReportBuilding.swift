@@ -54,6 +54,7 @@ enum ReportBuilding {
 
         let fens = moveIndices.map { game.fen(at: $0) ?? "" }
         let playedUCIs = moveIndices.map { game.uciMove(at: $0) }
+        let clocks = moveIndices.map { game.clockSeconds(at: $0) }
 
         var byPly: [Int: [AnalysisRecord]] = [:]
         for row in analysisRows {
@@ -74,7 +75,7 @@ enum ReportBuilding {
                         depth: analysisRecord.depth
                     )
                 }
-            return PlyRecord(fen: fens[ply], lines: lines, playedUCI: playedUCIs[ply])
+            return PlyRecord(fen: fens[ply], lines: lines, playedUCI: playedUCIs[ply], clockSeconds: clocks[ply])
         }
 
         return ReportInput(

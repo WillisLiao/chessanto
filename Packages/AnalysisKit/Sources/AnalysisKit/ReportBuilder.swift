@@ -234,7 +234,6 @@ public enum ReportBuilder {
         blackCounts: [MoveClassification: Int]
     ) -> String? {
         func lowTimeErrors(for isWhite: Bool) -> Int {
-            let errorClassifications: [MoveClassification] = [.inaccuracy, .mistake, .blunder, .missedWin]
             var count = 0
             for p in 1..<input.plies.count where input.moverIsWhite(atPly: p) == isWhite {
                 guard let clock = input.plies[p].clockSeconds, clock < 30 else { continue }
