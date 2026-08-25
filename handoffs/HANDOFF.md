@@ -3,6 +3,12 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Visual QA pass
+
+Executed `handoffs/NEXT-SESSION-VISUAL-QA.md` on branch `qa/visual-pass`.
+- Implemented an in-process software window rasterization harness in `App/Sources/Chessanto/QACapture.swift` integrated with `ChessantoApp.swift` (activated via `CHESSANTO_QA_DIR`), and updated `scripts/capture-window.swift`.
+- `EvalBarView.swift`: Added `.lineLimit(1)`, `.minimumScaleFactor(0.5)`, and `.padding(.horizontal, 1)` to prevent eval score text clipping when compressed.
+
 ## Current state (2026-08-25) - Accessibility matrix
 
 The full accessibility audit-and-fix pass is implemented on branch `feature/accessibility-matrix`.
