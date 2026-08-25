@@ -3,6 +3,15 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Library search and filter
+
+Implemented on `feature/library-search-filter`.
+Full narrative and verification in `devlogs/2026-08-24-library-search-filter.md`.
+The sidebar now has native `.searchable` search over opponent names and opening name/ECO, plus a Filter popover with opponent, result (user perspective), opening family, time control category, accuracy band, and date range - all composed with AND semantics through one pure value type (`LibraryFilter`) in `App/Sources/Chessanto/Library/LibraryFilter.swift`.
+GameLibrary's background enrichment derives openings for ALL games (names + ECO codes) and user-side accuracy per analyzed game via `ReportBuilding.buildReport`.
+Filter reduce costs 4.5ms per pass over 2500 games.
+Verified with 20 unit tests in `LibraryFilterTests.swift`.
+
 ## Current state (2026-08-25) - Play vs Engine UI
 
 The full SwiftUI screen and board interaction flow for playing against the engine is implemented on branch `feature/play-vs-engine-ui`.

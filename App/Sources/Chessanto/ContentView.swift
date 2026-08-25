@@ -36,6 +36,10 @@ struct ContentView: View {
     /// natural owner of "select this game, then enter practice mode".
     @State private var pendingPracticeGameID: Int64?
     @State private var pendingPracticeLoadCards: (() async throws -> [TrainingCardRecord])?
+    /// Search text and every library filter dimension in one value; the
+    /// sidebar list reduces the register against it.
+    @State private var filter = LibraryFilter()
+    @State private var isShowingFilterPanel = false
     @StateObject private var batchAnalysis = BatchAnalysisCoordinator()
 
     var body: some View {
@@ -120,6 +124,11 @@ struct ContentView: View {
             sidebarBottomBar
         }
         .navigationTitle("Games")
+        .searchable(
+            text: $filter.searchText,
+            placement: .sidebar,
+            prompt: "Search opponent or opening"
+        )
         .navigationSplitViewColumnWidth(min: 280, ideal: 300, max: 340)
     }
 
@@ -194,6 +203,7 @@ struct ContentView: View {
                     .font(.dsSectionHeader)
                     .foregroundStyle(DesignColors.textSecondary)
                 Spacer()
+                filterButton
                 Button(isOrganizing ? "Done" : "Organize") {
                     isOrganizing.toggle()
                     if !isOrganizing {
@@ -206,6 +216,40 @@ struct ContentView: View {
         .padding(.horizontal, DesignSpacing.md)
         .padding(.vertical, DesignSpacing.sm)
         .background(DesignColors.surface1)
+    }
+
+    private var filterButton: some View {
+        Button {
+            isShowingFilterPanel = true
+        } label: {
+            Label(
+                filter.activeCount > 0 ? "Filter (\(filter.activeCount))" : "Filter",
+                systemImage: "line.3.horizontal.decrease"
+            )
+            // The active-count variant doubles as the visible state, so the
+            // label itself carries the accent rather than a new style.
+            .foregroundStyle(filter.activeCount > 0 ? DesignColors.accentText : DesignColors.textPrimary)
+        }
+        .buttonStyle(.borderless)
+        .help("Search and filter the register")
+        .popover(isPresented: $isShowingFilterPanel, arrowEdge: .bottom) {
+            LibraryFilterPanel(
+                filter: $filter,
+                options: filterOptions,
+                matchingCount: filteredGames.count
+            )
+        }
+    }
+
+    /// What the filter panel offers right now, counted against this source's
+    /// unfiltered list so every option is honest about its result size.
+    private var filterOptions: LibraryFilterOptions {
+        LibraryFilterOptions.build(
+            games: sourceGames,
+            openingECOByGameID: library.openingECOByGameID,
+            accuracyByGameID: library.accuracyByGameID,
+            identity: library.briefIdentity
+        )
     }
 
     private func sourceRow(
@@ -354,8 +398,23 @@ struct ContentView: View {
         }
     }
 
-    private var filteredGames: [GameRecord] {
+    /// This source's games before any search/filter constraint - the base
+    /// the filter panel counts its options against.
+    private var sourceGames: [GameRecord] {
         librarySource == .favorites ? library.games.filter(\.isFavorite) : library.games
+    }
+
+    private var filteredGames: [GameRecord] {
+        let identity = library.briefIdentity
+        return sourceGames.filter { game in
+            filter.matches(
+                game,
+                openingName: game.id.flatMap { library.openingByGameID[$0] },
+                openingECO: game.id.flatMap { library.openingECOByGameID[$0] },
+                userAccuracy: game.id.flatMap { library.accuracyByGameID[$0] },
+                identity: identity
+            )
+        }
     }
 
     private var pinnedGames: [GameRecord] {
@@ -441,22 +500,42 @@ struct ContentView: View {
     @ViewBuilder
     private var emptyLibraryOverlay: some View {
         if filteredGames.isEmpty {
+            let registerIsEmpty = sourceGames.isEmpty
             VStack(alignment: .leading, spacing: DesignSpacing.xs) {
-                Text(librarySource == .favorites ? "No favorite games" : "No games yet")
-                    .font(.dsBody.weight(.semibold))
+                Text(emptyStateTitle).font(.dsBody.weight(.semibold))
                     .foregroundStyle(DesignColors.textPrimary)
-                Text(
-                    librarySource == .favorites
-                        ? "Mark a game as a favorite to find it here."
-                        : "Import a PGN file or drop one here to get started."
-                )
-                .font(.dsSecondary)
-                .foregroundStyle(DesignColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+                Text(emptyStateMessage)
+                    .font(.dsSecondary)
+                    .foregroundStyle(DesignColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !registerIsEmpty {
+                    Button("Clear search and filters") {
+                        filter.reset()
+                        // The search field is native toolbar UI; its text is
+                        // part of the filter value and clears with it.
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
             .padding(DesignSpacing.lg)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+    }
+
+    private var emptyStateTitle: String {
+        guard !sourceGames.isEmpty else {
+            return librarySource == .favorites ? "No favorite games" : "No games yet"
+        }
+        return filter.searchText.isEmpty ? "No matching games" : "No results"
+    }
+
+    private var emptyStateMessage: String {
+        guard !sourceGames.isEmpty else {
+            return librarySource == .favorites
+                ? "Mark a game as a favorite to find it here."
+                : "Import a PGN file or drop one here to get started."
+        }
+        return "Nothing in the register matches the current search and filters."
     }
 
     private var emptySelectionView: some View {
