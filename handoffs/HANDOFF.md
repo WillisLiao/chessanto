@@ -3,6 +3,17 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Release packaging audit
+
+Release packaging pipeline verified end-to-end on `main`.
+Full details in `devlogs/2026-08-25-release-packaging-audit.md`.
+- `scripts/release-build.sh` produces a self-contained Release `.app` bundle (145 MB).
+- Bundle includes Stockfish 17 NNUE networks (71 MB + 3.4 MB), ECO opening datasets (1.0 MB), audio assets, and app icon.
+- Sandbox entitlements verified: network client (API + local Ollama `127.0.0.1:11434`), user-selected file read, and local networking.
+- Simulated clean-install launch walkthrough verified with AX probe: initializes cleanly, displays full navigation sidebar, empty state, and 4-step Onboarding modal sheet.
+- Live database SHA-256 verified untouched: `3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`.
+- Release build: `** BUILD SUCCEEDED **`, tests: `** TEST SUCCEEDED **` (261 tests in 43 suites passed).
+
 ## Current state (2026-08-25) - Opening book quality
 
 The opening book coverage audit harness and architecture analysis are in place on `feature/opening-book-quality`.
