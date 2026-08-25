@@ -1,22 +1,68 @@
 # Overnight master session: integrate everything, finish the roadmap, polish the app
 
 You are running unattended overnight with effectively unlimited budget.
-Do not stop early, do not summarize-and-quit, and do not ask for
-permission mid-task - keep working through the entire plan below until
-there is genuinely nothing productive left to do. If you hit something
-you cannot resolve (needs credentials you don't have, needs physical
-hardware, needs a human product decision that isn't already covered by
-this file), write it clearly into `handoffs/HANDOFF.md` as an open item
-and move on to the next thing rather than stalling.
+Read the "Hard safety rules" section below FIRST and follow it for the
+entire session, not just at the start - the two failures it exists to
+prevent (a silent infinite retry loop, and runaway process accumulation)
+are exactly what happened the last time this kind of run went out
+unsupervised: zero commits landed all night while several copies of the
+app accumulated and consumed 70+ GB of RAM. Do not repeat that.
 
-Work directly in `/Users/willis/Documents/chessanto` on branch `main`.
-This is different from every prior session tonight - you are the
-integrator, not one more isolated worktree. Fourteen other agent sessions
-ran in parallel worktrees earlier and were paused; their branches are
-sitting on disk right now with real, mostly-verified work. Your first job
-is to land all of it on `main`, one branch at a time, verifying for real
-at every step. Your second job is to keep finding and finishing real work
-until the product is actually done.
+## Hard safety rules (apply at every step, no exceptions)
+
+1. **Stay on branch `main`, in `/Users/willis/Documents/chessanto`, the
+   whole session.** Do not create your own working branch for yourself.
+   Merges happen directly onto `main`; feature/QA work happens in the
+   worktrees named below, on their existing branches - never invent a
+   new branch name of your own.
+
+2. **Process hygiene, every single time you launch the app or run a
+   test target that launches it:**
+   ```
+   pkill -9 -f "Chessanto.app/Contents/MacOS" 2>/dev/null
+   ```
+   Run that BEFORE every launch and AFTER you're done inspecting it. Confirm
+   with `ps aux | grep -i "Chessanto.app" | grep -v grep` that nothing is
+   running before you start a new one. At most one instance of the app
+   may be running at any moment, ever, for any reason (manual AX
+   inspection, `xcodebuild test`, a background analyzer run - one at a
+   time, full stop). If you are ever unsure whether a prior launch is
+   still alive, check and kill it before doing anything else.
+
+3. **Circuit breaker on retries.** If the same command fails with the
+   same or a clearly-related error twice in a row, STOP retrying it a
+   third time blindly. Instead: write down the exact error text, form an
+   explicit hypothesis about the root cause, and either (a) try one
+   different, reasoned fix for that specific hypothesis, or (b) if you
+   don't have a concrete hypothesis, mark that branch/task as blocked in
+   `handoffs/HANDOFF.md` with the exact error and move on to the next
+   item in the plan. Never loop on the same failing command more than
+   twice without a state change in your approach. This applies to
+   builds, tests, app launches, and merge conflict resolution alike.
+
+4. **Time-box stuck problems.** If you have spent what feels like a
+   long stretch (roughly 30+ minutes of real attempts, not counting
+   long-running background analysis) on a single build/test failure
+   without resolving it, that is itself a signal to invoke rule 3(b):
+   mark it blocked, move on. Coming back to a blocked item later in the
+   session, with fresh eyes after other progress, is fine and
+   encouraged - grinding on it uninterrupted for hours is not.
+
+5. **Checkpoint after every branch, not at the end of the night.**
+   Commit and `git push origin main` immediately after each successful
+   merge and its verification, before starting the next branch. Never
+   let more than one branch's worth of work sit unpushed. This means
+   that if something goes wrong later in the session, everything landed
+   so far is already safe on `origin/main`, not lost.
+
+6. **One known environment quirk, not a real bug:** if a build fails
+   with `unable to write file ... .git/modules/.../pack/*.pack: No such
+   file or directory`, that's a stale/corrupted local SPM checkout cache
+   in DerivedData from running many worktrees in parallel, not broken
+   code. Fix: `rm -rf ~/Library/Developer/Xcode/DerivedData/Chessanto-*`
+   for the affected one (find the exact hash in the error path) and
+   rebuild. This does not count against the circuit breaker in rule 3 -
+   it's a known fix, apply it once and continue normally.
 
 ## Ground truth before you start
 
@@ -36,23 +82,17 @@ Never touch the live database at
 `~/Library/Containers/com.chessanto.app/Data/Library/Application Support/Chessanto/chessanto.sqlite`.
 If any session's work involves launching the real app, verify that file's
 SHA-256 is unchanged afterward - prior sessions recorded it as
-`3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f` (15
-games); confirm it still matches before and after anything that touches
-the app.
+`3ab332c1722e43c21138b521d00703f50fbdc4b9201906b86853d9a25f661c5f`; confirm
+it still matches before and after anything that touches the app.
 
 Never use an em dash anywhere in code, comments, commits, or docs. Use a
 plain dash instead.
 
 ## The verification bar (non-negotiable, every single time)
 
-Nothing is ever "done" without you having actually run this yourself and
+Nothing is ever "done" without you having actually run it yourself and
 being able to quote the real output. A prior session's devlog claiming
-success is a claim to verify, not a fact to trust - you have already seen
-tonight that claims can be wrong (a stale DerivedData/SPM cache once made
-a genuinely-fine branch look broken; treat that as recoverable, not as
-evidence of a real bug, and just clear
-`~/Library/Developer/Xcode/DerivedData/Chessanto-*` and retry if you see
-`unable to write file ... .git/modules/.../pack/*.pack`).
+success is a claim to verify, not a fact to trust.
 
 After every merge and every fix, at minimum:
 
@@ -67,12 +107,14 @@ Build must end `** BUILD SUCCEEDED **`. Test must end
 "Test run with N tests in M suites" line at any point - it should only
 ever go up as you integrate more branches. Also run
 `swift test --package-path Packages/<X>` for any package you touch
-directly, before the full app-level run.
+directly, before the full app-level run. Note that `xcodebuild test`
+launches the app itself as part of running - rule 2 above still applies:
+if a prior launch (yours or a stray one) is still around, kill it first.
 
-## Phase 1: land all fourteen branches on main
+## Phase 1: land all branches with real work on main
 
 These branches exist right now, each in its own worktree, each already
-committed (nothing uncommitted was left behind):
+committed (nothing uncommitted was left in any of them):
 
 | Branch | Worktree | Status going in |
 |---|---|---|
@@ -86,7 +128,7 @@ committed (nothing uncommitted was left behind):
 | `feature/play-vs-engine-ui` | `../chessanto-play-vs-engine-ui` | Has commits; depends on play-vs-engine-core; re-verify from scratch. |
 | `feature/library-search-filter` | `../chessanto-library-search-filter` | Has a commit; build succeeded at last check, full test suite not yet confirmed; re-verify. |
 | `feature/accessibility-matrix` | `../chessanto-accessibility-matrix` | Has a commit; build succeeded at last check, full test suite not yet confirmed; re-verify. |
-| `qa/visual-pass` | `../chessanto-visual-qa` | Has a commit now (an earlier attempt on this branch stalled with nothing committed; a later attempt landed real work) - re-verify from scratch, do not assume the earlier stall means anything about this commit. |
+| `qa/visual-pass` | `../chessanto-visual-qa` | Has a commit; re-verify from scratch. |
 | `qa/coach-real-model-verification` | `../chessanto-coach-real-model` | Has a commit; re-verify from scratch. |
 | `feature/opening-book-quality` | `../chessanto-opening-book-quality` | Has a commit; re-verify from scratch. |
 | `perf/hardening-pass` | `../chessanto-perf-hardening` | Zero commits - only investigation notes exist, in `handoffs/NEXT-SESSION-PERFORMANCE-HARDENING-RESUME.md`. Nothing to merge yet; this branch is Phase 2 work, not a Phase 1 merge. |
@@ -96,9 +138,16 @@ except `perf/hardening-pass`), in this order:
 
 1. **Re-verify it standalone first**, inside its own worktree, before
    touching main: `cd` into the worktree, `xcodegen generate`, full build
-   and test. If it fails for a reason that traces back to real broken
-   code (not the DerivedData cache issue above), fix it right there in
-   that worktree, commit the fix on that branch, and only then proceed.
+   and test (obeying the safety rules above - kill any stray app
+   instance first, apply the circuit breaker if something fails
+   repeatedly). If it fails for a reason that traces back to real broken
+   code (not the DerivedData cache issue in rule 6), fix it right there
+   in that worktree, commit the fix on that branch, and only then
+   proceed. If you cannot resolve it within the time-box in rule 4, mark
+   that branch blocked in `handoffs/HANDOFF.md` with the specifics and
+   move to the next branch in the table - come back to blocked branches
+   at the end of Phase 1 rather than losing the rest of the night to one
+   branch.
 2. Read that branch's devlog(s) under `devlogs/` (they'll have today's
    date) and its `## Current state - ...` section it added to the top of
    `handoffs/HANDOFF.md` - these exist per-branch until merged, so you
@@ -126,37 +175,39 @@ except `perf/hardening-pass`), in this order:
 5. After resolving, run the full verification bar from main. If a defect
    only appears once two branches are combined (an integration bug
    neither branch could see alone), root-cause and fix it directly on
-   main before moving to the next branch - do not proceed with a known
-   integration bug outstanding.
-6. Commit the merge (or the merge plus your integration fix).
+   main before moving to the next branch - subject to the same circuit
+   breaker and time-box rules as anything else.
+6. Commit the merge (or the merge plus your integration fix), then
+   **push to `origin main` immediately** per rule 5 before starting the
+   next branch.
 7. Move to the next branch in the table.
 
-After all thirteen are merged and the full suite is green on `main`,
-delete the now-merged local branches and worktrees:
+After all resolvable branches are merged and the full suite is green on
+`main`, delete the now-merged local branches and worktrees:
 `git worktree remove <path>` then `git branch -d <branch>` for each. Keep
-`perf/hardening-pass` and its worktree - that one still has real work
-ahead of it in Phase 2.
-
-Push `main` after Phase 1 completes:
-`git push origin main`.
+`perf/hardening-pass` and its worktree, and keep any branch you marked
+blocked (with a note on why) rather than deleting it.
 
 ## Phase 2: finish what's left open
 
 1. **Performance hardening.** Read
    `handoffs/NEXT-SESSION-PERFORMANCE-HARDENING-RESUME.md` in full - it
    has real baseline measurements, a fixture database already built (3594
-   real games), scratch tooling locations, and a suggested sequence.
+   real games), scratch tooling locations, and a suggested sequence. A
+   background analyzer process may already be running or may have
+   finished/died - check `ps aux | grep analyzer` and the row count
+   before relaunching anything, per that file's own instructions.
    Work in `../chessanto-perf-hardening` on branch `perf/hardening-pass`.
    Follow its own verification bar and "When done" section, then merge it
    into `main` the same way as Phase 1 (re-verify standalone, merge,
-   resolve conflicts, re-verify on main, push).
+   resolve conflicts, re-verify on main, push immediately after).
 
 2. **Release packaging audit.** This one was queued but never assigned to
    an instance. Read `handoffs/NEXT-SESSION-RELEASE-PACKAGING-AUDIT.md`
    and do it yourself now, directly on `main` (create the worktree it
    specifies, `../chessanto-release-packaging` on branch
    `chore/release-packaging-audit`, do the work there, then merge back
-   the same way).
+   the same way, pushing immediately after).
 
 ## Phase 3: full roadmap sweep - keep going until actually done
 
@@ -172,42 +223,39 @@ Concretely, at minimum:
   (Play vs Engine, Chess960, search/filter, accessibility work,
   performance work, release audit, all the QA fixes) - the same kind of
   documentation-truth pass a prior session already did once; do it again
-  now that so much has changed.
+  now that so much has changed. Commit and push this on its own.
 - Go through every screen in the app (onboarding, library with its new
   search/filter, game replay and report, exploration mode, Play vs
   Engine, Chess960 game creation, Coach chat, Dashboard/Player Brief,
   Settings including dark mode) and use the AX automation scripts under
   `scripts/` to actually drive the running app and look for anything
   broken, inconsistent, or unpolished - especially at the seams between
-  tonight's merged features (does the accessibility work still hold up
-  on the new search/filter UI and the new Play vs Engine screens? does
-  dark mode look right on the Chess960 board setup view? does the
-  library list stay fast with search/filter active during a live Play vs
-  Engine game?). Fix what you find.
-- Confirm every regression test added across all thirteen merged
-  branches is still meaningful post-integration (not testing a code path
-  that got changed or removed during conflict resolution).
+  tonight's merged features. Obey the process-hygiene rule for every
+  single launch. Fix what you find, commit and push in reasonably small
+  batches rather than one giant end-of-night commit.
+- Confirm every regression test added across all merged branches is
+  still meaningful post-integration (not testing a code path that got
+  changed or removed during conflict resolution).
 - If, after all of the above, you genuinely run out of concrete work,
   it is fair game to pick up one or two of PLAN.md's remaining
   historically-out-of-scope items (repertoire training, a dedicated
   accessibility UI-test matrix beyond what was already done, richer
   library sorting beyond filtering) EXCEPT iCloud sync and Lichess
   import, which stay off the table. Use judgment on what's actually
-  valuable versus scope for its own sake - the ladder is: does this need
-  to exist, is something close already built tonight that covers it,
-  before reaching for something new.
+  valuable versus scope for its own sake.
 
 Keep looping Phase 3 (sweep, find real issues, fix, re-verify, commit,
-push) for as long as you're running. There is no fixed stopping point
-other than genuinely running out of real work to do.
+push) for as long as you're running, always pushing after each
+meaningful, verified chunk rather than batching. There is no fixed
+stopping point other than genuinely running out of real work to do.
 
 ## Bookkeeping, every single commit
 
-Same discipline as every branch tonight followed: after any meaningful
-chunk of work, write or update the relevant `devlogs/<date>-<slug>.md`
-with what changed and the real verification output, keep
-`handoffs/HANDOFF.md`'s top section current (newest state first, don't
-delete history), and commit with a clear message (no em dashes, no
-fabricated co-author). Push to `origin main` periodically as you land
-verified, working states - don't hoard a night's worth of work
-unpushed.
+After any meaningful chunk of work, write or update the relevant
+`devlogs/<date>-<slug>.md` with what changed and the real verification
+output, keep `handoffs/HANDOFF.md`'s top section current (newest state
+first, don't delete history), commit with a clear message (no em dashes,
+no fabricated co-author), and push. Small, frequent, verified commits
+that are always pushed beat one large batch at the end - the whole point
+is that progress is visible and safe throughout the night, not just
+claimed in the morning.
