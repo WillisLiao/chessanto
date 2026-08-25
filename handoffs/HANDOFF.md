@@ -3,6 +3,14 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Coach real-model verification
+
+The full Verified Coach stack is verified live against a real running Ollama instance with a real 8B model (`llama3.1:8b`) and in-process Stockfish.
+- `CoachModelCatalog.meetsModelFloor` accurately gates sub-8B models while passing 8B+ models.
+- Moment narration with `llama3.1:8b` calls `evaluate`, generates grounded prose citing verified moves and eval tags, and passes `CoachVerifier` with 0 violations and 0 fallbacks.
+- Multi-turn position chat via `CoachChat` with `llama3.1:8b` verifies legal move proposals, short-circuits illegal proposals via precheck, and satisfies evaluate requirement with 0 violations and 0 leaks.
+- Packages/CoachKit passes 114 tests across 8 suites.
+
 ## Current state (2026-08-25) - Visual QA pass
 
 Executed `handoffs/NEXT-SESSION-VISUAL-QA.md` on branch `qa/visual-pass`.
