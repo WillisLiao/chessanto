@@ -108,6 +108,25 @@ struct PersistenceTests {
         )
     }
 
+    @Test func vsEngineGameRecordRoundTrips() throws {
+        let store = try GameStore()
+        let game = GameRecord(
+            source: .vsEngine,
+            pgn: "1. e4 e5 2. Nf3 Nc6",
+            white: "Player",
+            black: "Stockfish (Level 5)",
+            whiteRating: 1500,
+            blackRating: 1400,
+            result: "1-0"
+        )
+        let saved = try store.save(game)
+        let fetched = try store.game(id: saved.id!)
+        #expect(fetched?.source == .vsEngine)
+        #expect(fetched?.white == "Player")
+        #expect(fetched?.black == "Stockfish (Level 5)")
+        #expect(fetched?.result == "1-0")
+    }
+
     @Test func analysisRoundTrips() async throws {
         let store = try GameStore()
         let gameId = try makeGame(store)
