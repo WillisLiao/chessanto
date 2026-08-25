@@ -3,6 +3,16 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - overnight integration in progress
+
+Single-session integration of Phase 1 under `handoffs/OVERNIGHT-INTEGRATION-MASTER.md`.
+Merged so far: `qa/edge-case-pgns`, `qa/carlsen-games` (main at `75b4cc0`, pushed).
+Carlsen merge notes: full-archive scan test gated behind `CARLSEN_QA_RUN_SCAN=1`
+(commit `0ed2c60`); `ChessGame.init(pgn:)` and `PGNCompatibility.parseSAN`
+conflicts resolved as unions of both branches' fixes.
+Main verified after each merge; latest counts: ChessCore 84 tests, app suite
+212 tests across 38 suites, `** TEST SUCCEEDED **`.
+
 ## Current state - QA Carlsen games (2026-08-25)
 
 Full-archive QA scan of chess.com user `MagnusCarlsen` (9,677 games, 849,519
