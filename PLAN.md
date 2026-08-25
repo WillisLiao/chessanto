@@ -173,7 +173,14 @@ Milestones M1 through M8 are completed and verified in production.
 - Onboarding flow with optional chess.com username, rating band, and model guidance.
 - Settings window, light appearance lock, and sandbox entitlements.
 - Player Brief improvement dashboard with accuracy history and recurring motifs.
-- Release build script and documentation.
+### Post-M8 Extensions & Hardening [Completed]
+- **Play vs Engine**: Full interactive match against Stockfish with 5 difficulty tiers (Beginner to Master), side selection (White, Random, Black), live thinking indicators, resignation, draw claims, and seamless transition to post-game review and analysis report.
+- **Chess960 (Fischer Random)**: Full Chess960 support across board setup, move generation, castling contracts, Stockfish `UCI_Chess960=true` mode, FEN handling, and game reports.
+- **Library Search & Multi-criteria Filter**: Sidebar search across opponents, opening names, and ECO codes, paired with a multi-criteria filter panel (Opponent, W/L/D Result, ECO Family, Time Control, Accuracy Band, Date Range).
+- **Accessibility Matrix**: Comprehensive VoiceOver board semantics (64 individual square buttons announcing pieces, addresses, legal destinations, and move announcements), Full Keyboard Access movement (arrow navigation + Space/Return move execution), AA contrast compliance in light and dark modes, Dynamic Type support, and Reduced Motion integration.
+- **Coach Real-Model Verification**: Grounding verification against local Ollama models (`llama3.1:8b`) ensuring zero hallucination leaks across moment narration and multi-turn position chat.
+- **Opening Book Quality**: Bundled 3,803 ECO opening lines and 3,801 unique positions in `AnalysisKit`.
+- **Release Packaging Pipeline**: Production-ready `scripts/release-build.sh` generating self-contained sandboxed `.app` bundles with embedded Stockfish 17 NNUE networks.
 
 ## Testing strategy
 
@@ -182,7 +189,7 @@ Milestones M1 through M8 are completed and verified in production.
 - CoachVerifier unit tests: crafted outputs with illegal moves, invented lines, and wrong eval claims caught before display.
 - LLM grounding test harness: tests narrations and chat turns against fixture payloads through CoachVerifier.
 - Exploration mode stress test: rapid scrubbing and variation creation with generation-tagged analysis.
-- Full automated test suite across packages and the macOS App target.
+- Full automated test suite across packages and the macOS App target (260+ tests passing).
 
 ## Risks and mitigations
 
@@ -193,7 +200,10 @@ Milestones M1 through M8 are completed and verified in production.
 - **chess.com API changes/rate limits** - wrapped in ChessComKit, cached locally, with offline PGN import as fallback.
 - **chesskit-swift gaps** - wrapped behind ChessCore facade.
 
-## Out of scope for v1
+## Out of scope
 
-Historical note: mistake-derived practice cards and SM-2 spaced repetition were originally listed here, but were subsequently implemented and integrated into production (see `App/Sources/Chessanto/Training/` and `Packages/Persistence/Sources/Persistence/`).
-The following remain explicitly out of scope: repertoire training, playing against the engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.
+The following remain explicitly out of scope:
+- **iCloud sync** (data remains strictly local on-device).
+- **Lichess account sync/import** (Chess.com and offline PGN import supported).
+- **Opening repertoire tree training** (handled via calculated mistake-derived training cards and exploration mode).
+

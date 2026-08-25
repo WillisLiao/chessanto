@@ -3,12 +3,14 @@
 Chessanto is a native macOS app for reviewing your own chess games.
 Import games from chess.com or a PGN file, analyze them with a real chess engine running entirely on your Mac, and read a coached report that explains your key moments - no cloud services, no accounts, no telemetry.
 
-- **Import**: chess.com public API fetch, or drag-and-drop / file-picker PGN import.
-- **Analyze**: Stockfish 17 runs in-process (no subprocess, no network) to produce per-move evaluations, move classifications, and accuracy.
+- **Import & Library**: chess.com public API fetch, drag-and-drop / file-picker PGN import, search by opponent or opening, and multi-criteria library filtering.
+- **Analyze**: Stockfish 17 runs in-process (no subprocess, no network) to produce per-move evaluations, move classifications, and accuracy. Supports standard chess and Chess960 (Fischer Random).
+- **Play vs Engine**: Play full matches directly against Stockfish with 5 difficulty levels (Beginner to Master), side selection, resignation, draw claims, and immediate post-game analysis report generation.
 - **Explore**: a chess.com-style analysis board with live eval bar, free variation play, and continuous engine analysis of the displayed position.
 - **Coach**: a rule-based report is always available; an optional local LLM (via [Ollama](https://ollama.com)) can narrate on top of it, with every sentence programmatically verified against actual analysis before display.
 - **Practice**: mistake-derived multi-ply calculation cards with automated engine replies and graduated threat hints.
 - **Progress & Spaced Repetition**: an ease-factor SM-2 review scheduler, accuracy trend, and most-frequent-mistake-theme dashboard across your analyzed games.
+- **Accessibility & Design**: full VoiceOver board semantics (64 square buttons with coordinate and piece announcements), keyboard piece movement, AA contrast, Dynamic Type scaling, and dark mode support.
 
 ## Building from source
 
@@ -98,4 +100,4 @@ build script's.
 
 ## Future directions
 
-Explicitly out of scope for v1 (see `PLAN.md`): repertoire training, play-vs-engine, Lichess import, iCloud sync, Chess960, richer search/filtering, and a dedicated accessibility UI-test matrix.
+Explicitly out of scope (see `PLAN.md`): iCloud sync, Lichess account import, and opening repertoire tree training.
