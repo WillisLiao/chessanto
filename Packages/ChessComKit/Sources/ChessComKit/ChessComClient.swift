@@ -102,6 +102,7 @@ public struct ChessComAccount: Sendable, Equatable {
 public struct ChessComGame: Codable, Sendable, Identifiable {
     public let url: String
     public let pgn: String
+    public let rules: String?
     public let timeControl: String
     public let endTime: Date
     public let rated: Bool
@@ -111,7 +112,7 @@ public struct ChessComGame: Codable, Sendable, Identifiable {
     public var id: String { url }
 
     private enum CodingKeys: String, CodingKey {
-        case url, pgn, rated, white, black
+        case url, pgn, rules, rated, white, black
         case timeControl = "time_control"
         case endTime = "end_time"
     }
@@ -122,6 +123,7 @@ public struct ChessComGame: Codable, Sendable, Identifiable {
         // Variant games (bughouse and friends) ship without a PGN. One such
         // game must not poison decoding of the entire monthly archive.
         pgn = try container.decodeIfPresent(String.self, forKey: .pgn) ?? ""
+        rules = try container.decodeIfPresent(String.self, forKey: .rules)
         timeControl = try container.decode(String.self, forKey: .timeControl)
         rated = try container.decode(Bool.self, forKey: .rated)
         white = try container.decode(ChessComPlayer.self, forKey: .white)
@@ -134,6 +136,7 @@ public struct ChessComGame: Codable, Sendable, Identifiable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(url, forKey: .url)
         try container.encode(pgn, forKey: .pgn)
+        try container.encodeIfPresent(rules, forKey: .rules)
         try container.encode(timeControl, forKey: .timeControl)
         try container.encode(rated, forKey: .rated)
         try container.encode(white, forKey: .white)

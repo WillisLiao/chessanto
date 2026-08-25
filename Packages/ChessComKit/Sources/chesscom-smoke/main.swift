@@ -19,8 +19,8 @@ func fail(_ message: String) -> Never {
 }
 
 let username = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "hikaru"
-let fetchAll = CommandLine.arguments.contains("--all")
-let outDirIndex = CommandLine.arguments.firstIndex(of: "--out-dir")
+let fetchAll = CommandLine.arguments.contains("--all") || CommandLine.arguments.contains("--fetch-all")
+let outDirIndex = CommandLine.arguments.firstIndex(of: "--out-dir") ?? CommandLine.arguments.firstIndex(of: "--fetch-all")
 let outDir: String? = outDirIndex != nil && outDirIndex! + 1 < CommandLine.arguments.count ? CommandLine.arguments[outDirIndex! + 1] : nil
 
 let semaphore = DispatchSemaphore(value: 0)
@@ -44,6 +44,8 @@ Task {
                 log("[\(idx + 1)/\(archives.count)] \(archiveURL) -> \(games.count) games (total: \(totalGames))")
 
                 if let outDir {
+                    let fileManager = FileManager.default
+                    try fileManager.createDirectory(atPath: outDir, withIntermediateDirectories: true)
                     let filename = archiveURL.replacingOccurrences(of: "https://api.chess.com/pub/player/\(username.lowercased())/games/", with: "").replacingOccurrences(of: "/", with: "-") + ".json"
                     let filePath = (outDir as NSString).appendingPathComponent(filename)
                     let encoder = JSONEncoder()

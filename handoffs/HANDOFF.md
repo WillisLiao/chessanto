@@ -3,6 +3,14 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - QA Caruana games
+
+On `qa/caruana-games`, the Caruana QA scan is prepared but NOT complete; see `handoffs/NEXT-SESSION-QA-CARUANA-RESUME2.md` for the exact remaining steps.
+All 102 monthly archives for FabianoCaruana are fetched and cached (6933 games: 6718 standard, 204 chess960, 11 bughouse with no PGN).
+The prior instance's `ChessComGame.pgn` optionality fix was verified against that real data as a genuine shared-layer bug fix (strict decode threw on any archive containing a pgn-less game), with its compile-forced adaptation in `ChessComFetchView`.
+The batch harness `Packages/AnalysisKit/Sources/qa-caruana-runner/` compiles and covers PGN parse, per-ply FEN validity, CurrentPosition cross-check, full-game replay, three-register report building, and all theme detectors over the whole corpus, using synthetic single-line eval rows by design (no engine pass).
+The scan run itself was interrupted before any output; no results, no fixes, and none of the verification bar commands have completed this session.
+
 ## Current state (2026-08-25) - QA Hikaru games (scan run, Carlsen PGN fixes ported)
 
 On `qa/hikaru-games`: the full-archive scan has now run end to end over all
@@ -143,7 +151,7 @@ No code changes have landed yet.
 This first session verified all prior setup, launched the background Stockfish analyzer against a dedicated fixture copy (`/var/folders/94/2p2pbcss4pddjvbrslnjbtyc0000gp/T/opencode/chessanto-perf/chessanto-analyzer.sqlite`, 40 games, fast preset, log at `analyzer-run.log` next to it), and completed the code-reading pass that maps every fix seam for the launch-path work (metadata-only sidebar fetch, cached openings enrichment, batch reload suppression, dashboard N+1).
 The full record including the seam map is in `devlogs/2026-08-25-performance-hardening.md`.
 Resume via `handoffs/NEXT-SESSION-PERFORMANCE-HARDENING-RESUME.md`, which now carries a progress addendum.
-The live database was not touched and its SHA-256 still matches the recorded value.
+
 
 ## Current state (2026-08-24) - absolute-pin fact slice
 
