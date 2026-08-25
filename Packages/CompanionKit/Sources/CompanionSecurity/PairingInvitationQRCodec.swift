@@ -20,8 +20,8 @@ public enum PairingInvitationQRCodec {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard
             let components = URLComponents(string: trimmed),
-            components.scheme == "chessanto",
-            components.host == "pair",
+            components.scheme?.lowercased() == "chessanto",
+            components.host?.lowercased() == "pair",
             components.queryItems?.first(where: { $0.name == "v" })?.value == "1",
             let payload = components.queryItems?
                 .first(where: { $0.name == "invitation" })?.value
@@ -36,6 +36,10 @@ public enum PairingInvitationQRCodec {
         guard let data = Data(base64Encoded: base64) else {
             throw PairingInvitationQRCodecError.invalidPayload
         }
-        return try CanonicalCoding.decode(PairingInvitation.self, from: data)
+        do {
+            return try CanonicalCoding.decode(PairingInvitation.self, from: data)
+        } catch {
+            throw PairingInvitationQRCodecError.invalidPayload
+        }
     }
 }

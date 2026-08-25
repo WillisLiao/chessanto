@@ -3,6 +3,22 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Companion security hardening
+
+Companion pairing and sync security hardening pass completed on branch `feature/mobile-companion-parity`.
+- **Trust boundary audit**: Audited end-to-end cryptographic architecture (Ed25519 signatures, X25519 key agreement, HKDF-SHA256 key derivation, AES-GCM 256-bit envelope encryption, Short Authentication String verification phrases, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` Keychain isolation, and CloudKit metadata integrity binding).
+- **Hardening and fixes**:
+  - `PairingInvitationQRCodec`: Case-insensitive scheme/host URL parsing (`chessanto://pair` / `CHESSANTO://PAIR`) and typed `invalidPayload` error mapping on corrupted QR contents.
+  - `PairingInvitationVerification`: Validates both Ed25519 signing and X25519 agreement public keys, verifies 32-byte secret length bounds, 64-byte signature length bounds, and rejects inverted validity intervals (`createdAt > expiresAt`).
+  - `PairingAuthority.approve`: Validates candidate's Ed25519 signing key and non-empty device ID before approval, and uses constant-time `HMAC<SHA256>.isValidAuthenticationCode`.
+  - `ContentKeyWrapping.unwrap`: Enforces 32-byte length verification on decrypted symmetric content keys.
+  - `AuthenticatedEnvelope`: Validates non-empty header identifiers, 64-byte Ed25519 signatures, and minimum 28-byte payload bounds (12-byte nonce + 16-byte tag).
+  - `KeychainSecretStore`: Preserves `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` explicitly during `SecItemUpdate`.
+  - `AnalysisRequestLedger.admit`: Enforces non-empty request IDs and non-inverted expiration intervals (`request.expiresAt > request.createdAt`).
+- **Adversarial test coverage**: Added comprehensive test cases covering QR URL variations, corrupted/truncated public keys, inverted timestamps, forged candidate HMAC proofs, tampered envelope headers, bit-flipped ciphertexts, forged/truncated signatures, symmetric key mismatches, outer CloudKit metadata vs inner envelope mismatches, unapproved sender rejection, record type mismatches, Keychain account isolation, and phone pairing store lifecycle.
+- **Verification**: CompanionKit tests (50 tests in 11 suites), macOS build and test (222 tests in 39 suites), iOS Simulator build and test on iPhone 17 (11 tests in 5 suites) all pass green (`** TEST SUCCEEDED **`).
+- Details in `devlogs/2026-08-25-companion-security-hardening.md`.
+
 ## Current state (2026-08-25) - Mobile companion accessibility pass
 
 iPhone companion accessibility audit and hardening pass completed on branch `feature/mobile-companion-parity`.

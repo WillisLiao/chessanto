@@ -55,6 +55,9 @@ public enum CompanionEnvelopeCrypto {
         contentKey: SymmetricKey,
         signingKey: Curve25519.Signing.PrivateKey
     ) throws -> AuthenticatedEnvelope {
+        guard !header.messageID.isEmpty, !header.recordID.isEmpty else {
+            throw CompanionEnvelopeError.malformedCiphertext
+        }
         let authenticatedData = try CanonicalCoding.encode(header)
         let sealedBox = try AES.GCM.seal(
             payload,
@@ -85,6 +88,15 @@ public enum CompanionEnvelopeCrypto {
     ) throws -> Data {
         guard envelope.header.recipient == expectedRecipient else {
             throw CompanionEnvelopeError.wrongRecipient
+        }
+        guard !envelope.header.messageID.isEmpty, !envelope.header.recordID.isEmpty else {
+            throw CompanionEnvelopeError.malformedCiphertext
+        }
+        guard envelope.signature.count == 64 else {
+            throw CompanionEnvelopeError.invalidSignature
+        }
+        guard envelope.sealedPayload.count >= 28 else {
+            throw CompanionEnvelopeError.malformedCiphertext
         }
         let authenticatedData = try CanonicalCoding.encode(envelope.header)
         guard senderSigningKey.isValidSignature(

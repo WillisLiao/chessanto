@@ -60,6 +60,74 @@ struct CompanionCloudRecordMapperTests {
         #expect(try CompanionCloudRecordMapper.envelope(from: record) == envelope)
     }
 
+    @Test("missing envelope data throws missingEnvelope error")
+    func missingEnvelopeThrowsError() {
+        let emptyRecord = CompanionCloudRecord(
+            recordName: "record-1",
+            type: .analysisRequest,
+            queryableFields: [:],
+            encryptedFields: [:],
+            encryptedAsset: nil
+        )
+        #expect(throws: CompanionCloudRecordError.missingEnvelope) {
+            try CompanionCloudRecordMapper.envelope(from: emptyRecord)
+        }
+    }
+
+    @Test("pairing candidate and approval records map cleanly and reject missing payloads")
+    func pairingCandidateAndApprovalRecordsMapCleanly() throws {
+        let candidate = PairingCandidate(
+            invitationID: "inv-1",
+            deviceID: CompanionDeviceID("phone-1"),
+            displayName: "iPhone",
+            publicKeys: DevicePublicKeys(signing: Data([1, 2]), agreement: Data([3, 4])),
+            createdAt: Date(timeIntervalSince1970: 100),
+            invitationProof: Data(repeating: 0x55, count: 32)
+        )
+        let candidateRecord = try PairingCloudRecordMapper.candidate(
+            candidate,
+            endpointID: EndpointID("mac-1")
+        )
+        #expect(candidateRecord.recordName == "pairing-inv-1-phone-1")
+        #expect(try PairingCloudRecordMapper.candidate(from: candidateRecord) == candidate)
+
+        let emptyCandidateRecord = CompanionCloudRecord(
+            recordName: "pairing-inv-1-phone-1",
+            type: .pairingCandidate,
+            queryableFields: [:],
+            encryptedFields: [:],
+            encryptedAsset: nil
+        )
+        #expect(throws: PairingCloudRecordMapperError.missingPayload) {
+            try PairingCloudRecordMapper.candidate(from: emptyCandidateRecord)
+        }
+
+        let approval = DeviceApproval(
+            invitationID: "inv-1",
+            deviceID: CompanionDeviceID("phone-1"),
+            verificationPhrase: "amber bishop cedar delta",
+            wrappedContentKey: Data(repeating: 0x77, count: 48),
+            macAgreementPublicKey: Data(repeating: 0x88, count: 32)
+        )
+        let approvalRecord = try PairingCloudRecordMapper.approval(
+            approval,
+            endpointID: EndpointID("mac-1")
+        )
+        #expect(approvalRecord.recordName == "approval-inv-1-phone-1")
+        #expect(try PairingCloudRecordMapper.approval(from: approvalRecord) == approval)
+
+        let emptyApprovalRecord = CompanionCloudRecord(
+            recordName: "approval-inv-1-phone-1",
+            type: .deviceApproval,
+            queryableFields: [:],
+            encryptedFields: [:],
+            encryptedAsset: nil
+        )
+        #expect(throws: PairingCloudRecordMapperError.missingPayload) {
+            try PairingCloudRecordMapper.approval(from: emptyApprovalRecord)
+        }
+    }
+
     private func makeEnvelope(payload: Data) -> AuthenticatedEnvelope {
         AuthenticatedEnvelope(
             header: AuthenticatedEnvelopeHeader(

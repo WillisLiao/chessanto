@@ -78,7 +78,7 @@ public actor AnalysisRequestLedger {
             entries[request.id] = existing
             return .resumed(resumed)
         }
-        guard request.expiresAt > now else {
+        guard !request.id.rawValue.isEmpty, request.expiresAt > now, request.expiresAt > request.createdAt else {
             return .rejected(.expired)
         }
 
