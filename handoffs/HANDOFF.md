@@ -24,6 +24,43 @@ Feature parity and hardening pass for the iPhone companion completed on branch `
 - **Verification**: CompanionKit tests (33 tests in 11 suites), macOS build and test (211 tests in 37 suites), iOS Simulator build and test (7 tests in 4 suites) all pass green. Visual pass completed on iOS Simulator in light and dark modes.
 - Details in `devlogs/2026-08-25-mobile-companion-parity.md`.
 
+## Current state (2026-08-24) - Play vs Engine core
+
+The core engine play domain model is implemented on branch `feature/play-vs-engine-core`.
+`LiveGameSession` (`App/Sources/Chessanto/Play/LiveGameSession.swift`) is a `@MainActor` state machine managing live games against Stockfish or scripted opponents.
+Players can select White, Black, or Random sides (`PlayerSideSelection`), and choose from 5 engine strength presets (`EngineStrength.beginner`, `.casual`, `.intermediate`, `.advanced`, `.master` with Stockfish UCI `Skill Level` 0-20, depth caps, and movetime ceilings).
+All user moves and engine moves are strictly validated through `ChessCore.ChessGame.playMove(uci:at:)` and `Board(position:)` - no moves bypass legal validation.
+The session detects all 6 terminal game states in accordance with FIDE rules: checkmate, stalemate, draw by threefold repetition, draw by fifty-move rule, draw by insufficient material, and resignation.
+Completed games are automatically persisted to `GameStore` as `GameRecord` with `GameSource.vsEngine` and full standard PGN tags, flowing directly into `GameReplayViewModel`, report generation, and practice training card pipelines.
+All package tests (`ChessCore`, `EngineKit`, `Persistence`) and app test suites pass with 210 tests across 37 suites (`** TEST SUCCEEDED **`).
+See `devlogs/2026-08-24-play-vs-engine-core.md` for the full public API and design documentation.
+
+## Current state - Chess960 core (2026-08-25)
+
+Chess960 rules and import are implemented on `feature/chess960-core` (not merged).
+`Packages/ChessCore/Sources/ChessCore/Chess960.swift` provides the pure
+seedable 0-959 generator with bijective `index(of:)`, validation of both
+invariants for all 960 positions, starting-FEN generation with canonical
+ascending Shredder castling letters (`AHah` style), Shredder-aware FEN
+validation, and a full castling legality/execution engine that always
+lands king on g/c and rook on f/d regardless of start squares.
+`ChessGame(chess960Index:)` / `ChessGame(startingFEN:)` produce playable
+games tagged `[Variant "Chess960"]` plus SetUp/FEN only for genuine 960
+starts; PGN import/export round-trips those headers against real Lichess
+fixtures. Castling works through the normal playMove APIs using the
+Lichess conventions (king onto own rook, or multi-file jump; single-file
+step stays a plain king move), and legalMoves offers both castle
+destinations. Two ChessKit gaps are worked around inside ChessCore: its
+FEN serializer drops non-standard castling rights (rights are now carried
+across moves in replayLine and both playMove paths), and its tree records
+castles it cannot represent as plain king moves (standard games now use
+ChessKit's native castle path; 960 keeps correct FENs via per-position
+overrides). The ECO opening book is silent for any game not starting from
+the standard position. Verified: 76 ChessCore tests, 196 AnalysisKit
+tests across 6 suites, macOS build succeeded, app test run with 200 tests
+in 36 suites passed. Full API notes for the app-integration session are
+at the top of `devlogs/2026-08-25-chess960-core.md`.
+
 ## Current state (2026-08-25) - overnight integration in progress
 
 Single-session integration of Phase 1 under `handoffs/OVERNIGHT-INTEGRATION-MASTER.md`.

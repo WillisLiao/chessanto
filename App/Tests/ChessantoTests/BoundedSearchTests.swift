@@ -104,4 +104,26 @@ struct BoundedSearchTests {
         #expect(infos.count == 1)
         #expect(infos[0].scoreCentipawns == 10)
     }
+
+    @Test func bestMoveResolvesFromExplicitMoveString() async throws {
+        let session = BoundedSearchSession(generation: 1)
+        session.record(info(generation: 1))
+        session.complete(generation: 1, bestMove: "e7e5")
+
+        let best = try await session.bestMove()
+        #expect(best == "e7e5")
+    }
+
+    @Test func bestMoveFallsBackToPrincipalVariation() async throws {
+        let session = BoundedSearchSession(generation: 1)
+        let infoWithPV = AnalysisEngine.EngineInfo(
+            generation: 1, depth: 10, scoreCentipawns: 20, mateIn: nil,
+            principalVariation: ["d7d5", "g1f3"], multiPVRank: 1
+        )
+        session.record(infoWithPV)
+        session.complete(generation: 1)
+
+        let best = try await session.bestMove()
+        #expect(best == "d7d5")
+    }
 }
