@@ -55,10 +55,16 @@ struct GamesView: View {
                                         .foregroundStyle(
                                             MobileColors.graphiteSoft
                                         )
+                                        .accessibilityHidden(true)
                                 }
                                 .frame(minHeight: 44)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(
+                                "\(game.white) versus \(game.black), result \(game.result)\(game.isAnalyzed ? ", analyzed" : ", not analyzed")"
+                            )
+                            .accessibilityHint("Opens analysis request options for this game")
                         }
                     }
                 }
@@ -157,19 +163,31 @@ struct AnalysisJobRow: View {
                     .font(.caption.monospacedDigit())
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(progressAccessibilityLabel)
+
             if let progress = job.progress, progress.totalPlies > 0 {
                 ProgressView(
                     value: Double(progress.completedPlies),
                     total: Double(progress.totalPlies)
                 )
                 .tint(MobileColors.brass)
+                .accessibilityHidden(true)
             }
             if !job.state.isTerminal {
-                Button("Cancel request", action: cancel)
+                Button("Cancel request", role: .cancel, action: cancel)
                     .frame(minHeight: 44)
+                    .accessibilityLabel("Cancel analysis request")
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var progressAccessibilityLabel: String {
+        if let progress = job.progress, progress.totalPlies > 0 {
+            return "\(statusText), \(progress.completedPlies) of \(progress.totalPlies) plies completed"
+        }
+        return statusText
     }
 
     private var statusText: String {

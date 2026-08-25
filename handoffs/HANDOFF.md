@@ -3,6 +3,17 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Mobile companion accessibility pass
+
+iPhone companion accessibility audit and hardening pass completed on branch `feature/mobile-companion-parity`.
+- **VoiceOver**: Added descriptive spoken announcements for all 10 move classifications (`MobileClassificationStyle.accessibilityDescription(for:)`), hiding raw compact glyphs (`★`, `!!`, `?!`, `?`, `??`). Enhanced scoresheet move buttons with full move numbers, spoken classifications, and selection traits (`14... Knight f3, Inaccuracy, selected`). Added spoken evaluation descriptions ("White is ahead by 1.40 pawns", "Position is even", "White has mate in 3") and rich accessibility labels for navigation, line preview, coach speech controls, pairing flow, and QR scanning.
+- **Dynamic Type**: Integrated `ViewThatFits(in: .horizontal)` across `OfflineReportReader` header, key moment cards, and `ReportRow` for graceful adaptive wrapping at large accessibility text sizes. Adapted coach section with compact vertical layout at accessibility text sizes (`dynamicTypeSize.isAccessibilitySize`) and guaranteed 44pt touch targets.
+- **WCAG AA contrast**: Calibrated light and dark palette tokens (`#7D540D` brass, `#AA1E12` danger/blunder, `#3E6B22` best, `#0A6E67` brilliant, `#8A5500` inaccuracy, `#A83E00` mistake, `#633599` missed win) to achieve >= 4.5:1 contrast against both base paper backgrounds and tinted chip overlays in light and dark modes.
+- **Reduced motion & Voice/Switch Control**: Integrated `@Environment(\.accessibilityReduceMotion)` in `OfflineReportReader`. Added explicit `.accessibilityAction(named: "Delete download")` in `ReportsView` for non-gesture report deletion.
+- **Test coverage**: Added unit tests for classification spoken descriptions and programmatic WCAG AA contrast ratio compliance verification across all tokens in light and dark modes.
+- **Verification**: CompanionKit tests (33 tests in 11 suites), macOS build and test (212 tests in 38 suites), iOS Simulator build and test on iPhone 17 (9 tests in 4 suites) all pass green.
+- Details in `devlogs/2026-08-25-mobile-accessibility.md`.
+
 ## Current state (2026-08-25) - Mobile companion parity
 
 Feature parity and hardening pass for the iPhone companion completed on branch `feature/mobile-companion-parity`.

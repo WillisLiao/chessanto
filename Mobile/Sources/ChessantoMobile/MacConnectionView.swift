@@ -41,12 +41,16 @@ struct MacConnectionView: View {
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("Scan pairing code")
+                    .accessibilityHint("Opens camera to scan QR code on your Mac")
                 case .submitting:
                     HStack {
                         ProgressView()
                         Text("Sending secure pairing request")
                     }
                     .frame(minHeight: 44)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Sending secure pairing request")
                 case .awaitingApproval(let phrase):
                     StatusPill(text: "Waiting for Mac approval")
                     Text("Confirm that both devices show:")
@@ -55,6 +59,7 @@ struct MacConnectionView: View {
                         .font(.title3.weight(.semibold))
                         .textSelection(.enabled)
                         .accessibilityLabel("Verification phrase: \(phrase)")
+                        .accessibilityHint("Confirm this phrase matches what is shown on your Mac")
                     Text(
                         "Leave Chessanto open on the Mac and approve this iPhone there."
                     )
@@ -76,11 +81,14 @@ struct MacConnectionView: View {
                         Image(systemName: "laptopcomputer")
                             .font(.title)
                             .foregroundStyle(MobileColors.brass)
+                            .accessibilityHidden(true)
                     }
                     Button("Remove pairing", role: .destructive) {
                         Task { await model.revokeLocalPairing() }
                     }
                     .frame(minHeight: 44)
+                    .accessibilityLabel("Remove Mac pairing")
+                    .accessibilityHint("Disconnects this iPhone from your Mac")
                     Text(
                         "Removing pairing blocks future transfers. It does not erase reports already saved on this iPhone."
                     )
@@ -89,10 +97,12 @@ struct MacConnectionView: View {
                 case .failed(let message):
                     Label(message, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(MobileColors.danger)
+                        .accessibilityLabel("Pairing error: \(message)")
                     Button("Try scanning again") {
                         showsScanner = true
                     }
                     .frame(minHeight: 44)
+                    .accessibilityLabel("Try scanning pairing code again")
                 }
             }
         }
@@ -122,6 +132,8 @@ struct MacConnectionView: View {
                         .frame(minHeight: 44)
                 }
                 .disabled(!model.isOnline)
+                .accessibilityLabel("Check companion sync now")
+                .accessibilityHint("Synchronizes data with iCloud")
             }
         }
     }
@@ -238,7 +250,8 @@ private struct PairingScannerSheet: View {
                         .stroke(MobileColors.brass, lineWidth: 3)
                         .padding(28)
                 }
-                .accessibilityLabel("Pairing QR code scanner")
+                .accessibilityLabel("Pairing QR code camera scanner")
+                .accessibilityHint("Point iPhone camera at QR code on your Mac")
 
                 Text("Point this iPhone at the pairing code on your Mac.")
                     .multilineTextAlignment(.center)
@@ -251,12 +264,15 @@ private struct PairingScannerSheet: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .stroke(MobileColors.hairline)
                         }
+                        .accessibilityLabel("Manual pairing code input")
+                        .accessibilityHint("Enter or paste the pairing code text from your Mac")
                     Button("Submit code") {
                         dismiss()
                         Task { await model.submitPairingCode(manualCode) }
                     }
                     .disabled(manualCode.isEmpty)
                     .frame(maxWidth: .infinity, minHeight: 44)
+                    .accessibilityLabel("Submit manual pairing code")
                 }
             }
             .padding(20)

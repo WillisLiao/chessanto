@@ -25,7 +25,7 @@ enum MobileColors {
         dark: UIColor(hex: "#A09A8E")
     )
     static let brass = Color.dynamic(
-        light: UIColor(hex: "#A6791F"),
+        light: UIColor(hex: "#7D540D"),
         dark: UIColor(hex: "#C9A04A")
     )
     static let brassWash = Color.dynamic(
@@ -41,8 +41,8 @@ enum MobileColors {
         dark: UIColor(hex: "#4EAA74")
     )
     static let danger = Color.dynamic(
-        light: UIColor(hex: "#B42318"),
-        dark: UIColor(hex: "#E55A4F")
+        light: UIColor(hex: "#AA1E12"),
+        dark: UIColor(hex: "#F06A5F")
     )
 }
 
@@ -72,37 +72,37 @@ enum MobileClassificationStyle {
         switch classification.lowercased() {
         case "best", "excellent":
             return Color.dynamic(
-                light: UIColor(hex: "#6F9E4C"),
+                light: UIColor(hex: "#3E6B22"),
                 dark: UIColor(hex: "#82B859")
             )
         case "brilliant":
             return Color.dynamic(
-                light: UIColor(hex: "#26C1B6"),
+                light: UIColor(hex: "#0A6E67"),
                 dark: UIColor(hex: "#3AD5CA")
             )
         case "good":
             return Color.dynamic(
-                light: UIColor(hex: "#8C8C8C"),
+                light: UIColor(hex: "#595959"),
                 dark: UIColor(hex: "#A0A0A0")
             )
         case "inaccuracy":
             return Color.dynamic(
-                light: UIColor(hex: "#E0A93B"),
+                light: UIColor(hex: "#8A5500"),
                 dark: UIColor(hex: "#F0BD55")
             )
         case "mistake":
             return Color.dynamic(
-                light: UIColor(hex: "#E0803B"),
+                light: UIColor(hex: "#A83E00"),
                 dark: UIColor(hex: "#F09555")
             )
         case "blunder":
             return Color.dynamic(
-                light: UIColor(hex: "#D14B4B"),
-                dark: UIColor(hex: "#E56363")
+                light: UIColor(hex: "#AA1E12"),
+                dark: UIColor(hex: "#F07070")
             )
         case "missedwin", "missed win":
             return Color.dynamic(
-                light: UIColor(hex: "#9B6FD1"),
+                light: UIColor(hex: "#633599"),
                 dark: UIColor(hex: "#B087E6")
             )
         case "book", "forced":
@@ -149,6 +149,33 @@ enum MobileClassificationStyle {
         default: return nil
         }
     }
+
+    static func accessibilityDescription(for classification: String) -> String {
+        switch classification.lowercased() {
+        case "missedwin", "missed win":
+            return "Missed win"
+        case "best":
+            return "Best move"
+        case "brilliant":
+            return "Brilliant move"
+        case "excellent":
+            return "Excellent move"
+        case "good":
+            return "Good move"
+        case "inaccuracy":
+            return "Inaccuracy"
+        case "mistake":
+            return "Mistake"
+        case "blunder":
+            return "Blunder"
+        case "book":
+            return "Book move"
+        case "forced":
+            return "Forced move"
+        default:
+            return "\(classification.capitalized) move"
+        }
+    }
 }
 
 struct MobileClassificationChip: View {
@@ -162,15 +189,19 @@ struct MobileClassificationChip: View {
             if let mark {
                 Text(mark)
                     .font(.caption.weight(.bold))
+                    .accessibilityHidden(true)
             }
             Text(label)
                 .font(.caption.weight(.semibold))
+                .lineLimit(1)
         }
         .foregroundStyle(color)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(color.opacity(0.12))
         .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(MobileClassificationStyle.accessibilityDescription(for: classification))
     }
 }
 
@@ -209,6 +240,7 @@ struct StatusPill: View {
                     .fill(color)
                     .frame(height: 1)
             }
+            .accessibilityElement(children: .combine)
     }
 }
 

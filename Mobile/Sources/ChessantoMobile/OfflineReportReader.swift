@@ -11,6 +11,9 @@ struct OfflineReportReader: View {
     @State private var linePlaybackTask: Task<Void, Never>?
     @StateObject private var speech = CoachSpeechController()
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 18) {
@@ -39,14 +42,24 @@ struct OfflineReportReader: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("\(report.metadata.white) vs \(report.metadata.black)")
                     .font(.title2.weight(.semibold))
-                HStack {
-                    Text(report.metadata.result)
-                        .font(.headline.monospacedDigit())
-                    Spacer()
-                    StatusPill(
-                        text: "Saved for offline reading",
-                        color: MobileColors.success
-                    )
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Text(report.metadata.result)
+                            .font(.headline.monospacedDigit())
+                        Spacer()
+                        StatusPill(
+                            text: "Saved for offline reading",
+                            color: MobileColors.success
+                        )
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(report.metadata.result)
+                            .font(.headline.monospacedDigit())
+                        StatusPill(
+                            text: "Saved for offline reading",
+                            color: MobileColors.success
+                        )
+                    }
                 }
                 HStack {
                     Text(report.analysisQuality.rawValue.capitalized)
@@ -60,6 +73,10 @@ struct OfflineReportReader: View {
                 .foregroundStyle(MobileColors.graphiteSoft)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(report.metadata.white) versus \(report.metadata.black), result \(report.metadata.result), \(report.analysisQuality.rawValue) quality\(report.opening.map { ", \($0.eco) \($0.name)" } ?? ""), saved for offline reading"
+        )
     }
 
     private var boardSection: some View {
@@ -67,7 +84,8 @@ struct OfflineReportReader: View {
             CompanionBoardView(fen: displayedFEN)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                .accessibilityLabel("Chess position after ply \(selectedPly)")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Chess position: \(moveLabel). \(evaluationAccessibilityLabel)")
             if let linePreview {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -89,26 +107,34 @@ struct OfflineReportReader: View {
                         stopLinePreview()
                     }
                     .frame(minHeight: 44)
+                    .accessibilityLabel("Exit better line preview")
                 }
                 .padding(.horizontal, 4)
+                .accessibilityElement(children: .contain)
             }
             HStack {
                 Button {
                     select(ply: max(0, selectedPly - 1))
                 } label: {
-                    Label("Previous", systemImage: "chevron.left")
+                    Label("Previous move", systemImage: "chevron.left")
                         .labelStyle(.iconOnly)
                         .frame(width: 44, height: 44)
                 }
                 .disabled(selectedPly == 0)
+                .accessibilityLabel("Previous move")
+                .accessibilityHint("Moves back one ply")
                 Spacer()
                 VStack(spacing: 2) {
                     Text(moveLabel)
                         .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(evaluationLabel)
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(MobileColors.graphiteSoft)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(moveLabel), \(evaluationAccessibilityLabel)")
                 Spacer()
                 Button {
                     select(ply: min(
@@ -116,11 +142,13 @@ struct OfflineReportReader: View {
                         selectedPly + 1
                     ))
                 } label: {
-                    Label("Next", systemImage: "chevron.right")
+                    Label("Next move", systemImage: "chevron.right")
                         .labelStyle(.iconOnly)
                         .frame(width: 44, height: 44)
                 }
                 .disabled(selectedPly >= report.positions.count - 1)
+                .accessibilityLabel("Next move")
+                .accessibilityHint("Advances one ply")
             }
         }
     }
@@ -128,22 +156,43 @@ struct OfflineReportReader: View {
     private func coachSection(_ moment: PortableKeyMoment) -> some View {
         ScorebookCard {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(coachImageName(moment.narration?.mood))
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 88, height: 104)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Coach")
-                            .font(.headline)
-                        Text(
-                            moment.narration?.text ?? moment.summary
-                        )
-                        .font(.body)
-                        Text(narrationSource(moment))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(MobileColors.graphiteSoft)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Image(coachImageName(moment.narration?.mood))
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 64, height: 76)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Coach")
+                                .font(.headline)
+                            Text(
+                                moment.narration?.text ?? moment.summary
+                            )
+                            .font(.body)
+                            Text(narrationSource(moment))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(MobileColors.graphiteSoft)
+                        }
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(coachImageName(moment.narration?.mood))
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 88, height: 104)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Coach")
+                                .font(.headline)
+                            Text(
+                                moment.narration?.text ?? moment.summary
+                            )
+                            .font(.body)
+                            Text(narrationSource(moment))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(MobileColors.graphiteSoft)
+                        }
                     }
                 }
                 CoachSpeechControls(
@@ -161,17 +210,25 @@ struct OfflineReportReader: View {
                 Text("Key moments")
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
                 VStack(spacing: 0) {
                     ForEach(report.keyMoments, id: \.ply) { moment in
                         VStack(alignment: .leading, spacing: 8) {
                             Button {
                                 select(ply: moment.ply)
                             } label: {
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text("\(moveNumberLabel(ply: moment.ply)) \(formatted(moment.canonicalPlayedSAN))")
-                                        .font(.headline)
-                                    Spacer()
-                                    MobileClassificationChip(classification: moment.classification)
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(alignment: .firstTextBaseline) {
+                                        Text("\(moveNumberLabel(ply: moment.ply)) \(formatted(moment.canonicalPlayedSAN))")
+                                            .font(.headline)
+                                        Spacer()
+                                        MobileClassificationChip(classification: moment.classification)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("\(moveNumberLabel(ply: moment.ply)) \(formatted(moment.canonicalPlayedSAN))")
+                                            .font(.headline)
+                                        MobileClassificationChip(classification: moment.classification)
+                                    }
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 44)
                                 .padding(.horizontal, 10)
@@ -182,6 +239,9 @@ struct OfflineReportReader: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("\(moveNumberLabel(ply: moment.ply)) \(formatted(moment.canonicalPlayedSAN)), \(MobileClassificationStyle.accessibilityDescription(for: moment.classification))")
+                            .accessibilityHint("Selects this position on the board")
+                            .accessibilityAddTraits(selectedPly == moment.ply ? [.isSelected] : [])
                             if selectedPly == moment.ply,
                                 !moment.betterLineSAN.isEmpty
                             {
@@ -193,6 +253,7 @@ struct OfflineReportReader: View {
                                 )
                                 .font(.caption.monospaced())
                                 .foregroundStyle(MobileColors.graphiteSoft)
+                                .accessibilityLabel("Better line: " + moment.betterLineSAN.joined(separator: " "))
                                 Button {
                                     playBetterLine(for: moment)
                                 } label: {
@@ -203,6 +264,7 @@ struct OfflineReportReader: View {
                                     .frame(minHeight: 44)
                                 }
                                 .buttonStyle(.bordered)
+                                .accessibilityHint("Plays through the recommended moves on the board")
                             }
                         }
                         .padding(.vertical, 6)
@@ -220,12 +282,14 @@ struct OfflineReportReader: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Score sheet")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                     ForEach(moveRows, id: \.number) { row in
                         GridRow {
                             Text("\(row.number).")
                                 .foregroundStyle(MobileColors.graphiteSoft)
-                                .frame(width: 30, alignment: .trailing)
+                                .frame(minWidth: 28, alignment: .trailing)
+                                .accessibilityHidden(true)
                             moveButton(row.white)
                             moveButton(row.black)
                         }
@@ -241,10 +305,12 @@ struct OfflineReportReader: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Takeaways")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(Array(report.takeaways.enumerated()), id: \.offset) {
                     _, takeaway in
                     Label(takeaway, systemImage: "checkmark.circle")
                         .foregroundStyle(MobileColors.graphiteSoft)
+                        .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -258,6 +324,7 @@ struct OfflineReportReader: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(formatted(move.san))
+                        .lineLimit(1)
                     Spacer()
                     if let classification = move.classification,
                         let mark = MobileClassificationStyle.compactMark(for: classification)
@@ -265,9 +332,10 @@ struct OfflineReportReader: View {
                         Text(mark)
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(MobileClassificationStyle.color(for: classification))
+                            .accessibilityHidden(true)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.horizontal, 8)
                 .background(
                     selectedPly == move.ply
@@ -276,9 +344,23 @@ struct OfflineReportReader: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Ply \(move.ply), \(move.san)")
+            .accessibilityLabel(moveAccessibilityLabel(move))
+            .accessibilityHint("Selects this move on the board")
+            .accessibilityAddTraits(selectedPly == move.ply ? [.isSelected] : [])
         } else {
-            Color.clear.frame(height: 36)
+            Color.clear.frame(height: 44)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func moveAccessibilityLabel(_ move: MoveCell) -> String {
+        let moveNum = moveNumberLabel(ply: move.ply)
+        let moveText = formatted(move.san)
+        if let classification = move.classification {
+            let classDesc = MobileClassificationStyle.accessibilityDescription(for: classification)
+            return "\(moveNum) \(moveText), \(classDesc)"
+        } else {
+            return "\(moveNum) \(moveText)"
         }
     }
 
@@ -312,6 +394,30 @@ struct OfflineReportReader: View {
             return "Even"
         }
         return String(format: "%+.2f", Double(centipawns) / 100)
+    }
+
+    private var evaluationAccessibilityLabel: String {
+        guard
+            let evaluation = report.evaluations.first(where: {
+                $0.ply == selectedPly
+            })
+        else {
+            return "No evaluation available"
+        }
+        if let mate = evaluation.mateIn {
+            return mate > 0 ? "White has mate in \(mate)" : "Black has mate in \(-mate)"
+        }
+        guard let centipawns = evaluation.scoreCentipawns else {
+            return "Position is even"
+        }
+        let pawns = Double(centipawns) / 100.0
+        if abs(pawns) < 0.05 {
+            return "Position is even"
+        } else if pawns > 0 {
+            return String(format: "White is ahead by %.2f pawns", pawns)
+        } else {
+            return String(format: "Black is ahead by %.2f pawns", -pawns)
+        }
     }
 
     private var moveLabel: String {
@@ -696,6 +802,7 @@ private struct CoachSpeechControls: View {
                     Label("Hear Coach", systemImage: "speaker.wave.2.fill")
                         .frame(minHeight: 44)
                 }
+                .accessibilityLabel("Read coach narration aloud")
             case .speaking:
                 Button {
                     speech.pause()
@@ -703,12 +810,14 @@ private struct CoachSpeechControls: View {
                     Label("Pause", systemImage: "pause.fill")
                         .frame(minHeight: 44)
                 }
+                .accessibilityLabel("Pause speech narration")
                 Button {
                     speech.stop()
                 } label: {
                     Label("Stop", systemImage: "stop.fill")
                         .frame(minHeight: 44)
                 }
+                .accessibilityLabel("Stop speech narration")
             case .paused:
                 Button {
                     speech.resume()
@@ -716,12 +825,14 @@ private struct CoachSpeechControls: View {
                     Label("Resume", systemImage: "play.fill")
                         .frame(minHeight: 44)
                 }
+                .accessibilityLabel("Resume speech narration")
                 Button {
                     speech.stop()
                 } label: {
                     Label("Stop", systemImage: "stop.fill")
                         .frame(minHeight: 44)
                 }
+                .accessibilityLabel("Stop speech narration")
             }
         }
         .buttonStyle(.bordered)

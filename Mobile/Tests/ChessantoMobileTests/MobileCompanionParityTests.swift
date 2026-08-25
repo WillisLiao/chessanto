@@ -30,6 +30,93 @@ struct MobileCompanionParityTests {
         #expect(MobileClassificationStyle.compactMark(for: "good") == nil)
     }
 
+    @Test("classification style provides spoken descriptions for VoiceOver")
+    func classificationAccessibilityDescriptions() {
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "best") == "Best move")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "brilliant") == "Brilliant move")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "excellent") == "Excellent move")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "good") == "Good move")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "inaccuracy") == "Inaccuracy")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "mistake") == "Mistake")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "blunder") == "Blunder")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "missedWin") == "Missed win")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "missed win") == "Missed win")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "book") == "Book move")
+        #expect(MobileClassificationStyle.accessibilityDescription(for: "forced") == "Forced move")
+    }
+
+    @Test("mobile color palette meets WCAG AA contrast ratio of 4.5:1 in light and dark modes")
+    func wcagAAContrastCompliance() {
+        let lightTrait = UITraitCollection(userInterfaceStyle: .light)
+        let darkTrait = UITraitCollection(userInterfaceStyle: .dark)
+
+        let lightBg = UIColor(hex: "#FAF9F6")
+        let darkBg = UIColor(hex: "#1C1A17")
+
+        let lightColors: [(String, UIColor)] = [
+            ("graphite", UIColor(hex: "#26231F")),
+            ("graphiteSoft", UIColor(hex: "#625E57")),
+            ("brass", UIColor(hex: "#7D540D")),
+            ("success", UIColor(hex: "#2D6E49")),
+            ("danger", UIColor(hex: "#AA1E12")),
+            ("best", UIColor(hex: "#3E6B22")),
+            ("brilliant", UIColor(hex: "#0A6E67")),
+            ("good", UIColor(hex: "#595959")),
+            ("inaccuracy", UIColor(hex: "#8A5500")),
+            ("mistake", UIColor(hex: "#A83E00")),
+            ("blunder", UIColor(hex: "#AA1E12")),
+            ("missedwin", UIColor(hex: "#633599")),
+        ]
+
+        for (name, color) in lightColors {
+            let ratio = contrastRatio(between: color, and: lightBg)
+            #expect(
+                ratio >= 4.5,
+                "Light mode color '\(name)' has contrast ratio \(ratio):1, which is below WCAG AA threshold 4.5:1"
+            )
+        }
+
+        let darkColors: [(String, UIColor)] = [
+            ("graphite", UIColor(hex: "#E8E2D6")),
+            ("graphiteSoft", UIColor(hex: "#A09A8E")),
+            ("brass", UIColor(hex: "#C9A04A")),
+            ("success", UIColor(hex: "#4EAA74")),
+            ("danger", UIColor(hex: "#F06A5F")),
+            ("best", UIColor(hex: "#82B859")),
+            ("brilliant", UIColor(hex: "#3AD5CA")),
+            ("good", UIColor(hex: "#A0A0A0")),
+            ("inaccuracy", UIColor(hex: "#F0BD55")),
+            ("mistake", UIColor(hex: "#F09555")),
+            ("blunder", UIColor(hex: "#F07070")),
+            ("missedwin", UIColor(hex: "#B087E6")),
+        ]
+
+        for (name, color) in darkColors {
+            let ratio = contrastRatio(between: color, and: darkBg)
+            #expect(
+                ratio >= 4.5,
+                "Dark mode color '\(name)' has contrast ratio \(ratio):1, which is below WCAG AA threshold 4.5:1"
+            )
+        }
+    }
+
+    private func relativeLuminance(of color: UIColor) -> CGFloat {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        func adjust(_ c: CGFloat) -> CGFloat {
+            c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * adjust(r) + 0.7152 * adjust(g) + 0.0722 * adjust(b)
+    }
+
+    private func contrastRatio(between c1: UIColor, and c2: UIColor) -> CGFloat {
+        let l1 = relativeLuminance(of: c1)
+        let l2 = relativeLuminance(of: c2)
+        let lighter = max(l1, l2)
+        let darker = min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
     @Test("mobile colors adapt across light and dark user interface styles")
     func mobileColorsAdapt() {
         let lightTrait = UITraitCollection(userInterfaceStyle: .light)
