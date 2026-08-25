@@ -110,6 +110,25 @@ it still matches before and after anything that touches the app.
 Never use an em dash anywhere in code, comments, commits, or docs. Use a
 plain dash instead.
 
+## Keep your own context small
+
+You may be running as one of several short, focused invocations (see
+`scripts/overnight-integration.sh`) rather than one continuous session -
+if so, you were told which single branch or phase to handle this run;
+ignore everything else in this file that doesn't pertain to that one
+scope, and stop once it's done rather than continuing to the next item
+yourself.
+
+Whether or not you're running standalone, never let a single command's
+raw output flood your own context. `xcodebuild build`/`test` output is
+routinely thousands of lines; you only ever need the last 10-20 lines (or
+a `grep -E "error:|BUILD SUCCEEDED|TEST SUCCEEDED|Test run with"` pass)
+to know what happened. Always pipe long-running commands through `tail`
+or `grep` rather than reading them raw - a bloated context is exactly
+what causes instruction-drift on a long run (this has already happened
+once: an earlier run of this exact task forgot the "stay on `main`" rule
+partway through and created its own branch instead).
+
 ## The verification bar (non-negotiable, every single time)
 
 Nothing is ever "done" without you having actually run it yourself and
