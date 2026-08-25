@@ -3,6 +3,17 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Play vs Engine UI
+
+The full SwiftUI screen and board interaction flow for playing against the engine is implemented on branch `feature/play-vs-engine-ui`.
+`PlayVsEngineViewModel` (`App/Sources/Chessanto/Play/PlayVsEngineViewModel.swift`) drives the live game lifecycle across setup, active play, and game-over states.
+`PlayVsEngineSetupView` (`App/Sources/Chessanto/Play/PlayVsEngineSetupView.swift`) provides new-game configuration: player side selection (White, Random, Black) and engine strength presets (Beginner, Casual, Intermediate, Advanced, Master).
+`PlayVsEngineView` (`App/Sources/Chessanto/Play/PlayVsEngineView.swift`) presents the live match reusing the standard `BoardView` component with tap-to-move, drag-and-drop, promotion selection, board flip, identity strips, thinking indicators, and scoresheet.
+Live player controls support resignation (with confirmation dialog) and draw claims.
+On game completion, the UI presents an outcome summary and a direct "Review Game & Report" action that transitions seamlessly into the standard `GameReplayView` report view for the persisted `GameRecord`.
+`ContentView` and `ChessantoApp` integrate Play vs Engine entry points in the sidebar, Add Game menu, empty state, and menu bar (Cmd+N).
+See `devlogs/2026-08-25-play-vs-engine-ui.md` for details.
+
 ## Current state (2026-08-25) - Chess960 app integration
 
 Implementation of Chess960 app integration lives on `feature/chess960-app-integration`, built on `feature/chess960-core`.

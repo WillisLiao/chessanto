@@ -55,6 +55,11 @@ struct ChessantoApp: App {
             // window after quitting with the last window closed (M8 fact
             // 11). Import PGN gets its own item alongside it instead.
             CommandGroup(after: .newItem) {
+                Button("Play vs Engine…") {
+                    NotificationCenter.default.post(name: .playVsEngineRequested, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+
                 Button("Import PGN…") {
                     NotificationCenter.default.post(name: .importPGNRequested, object: nil)
                 }
@@ -101,6 +106,7 @@ struct ChessantoApp: App {
 }
 
 extension Notification.Name {
+    static let playVsEngineRequested = Notification.Name("playVsEngineRequested")
     static let importPGNRequested = Notification.Name("importPGNRequested")
     /// Board and review commands, posted from the menu bar.
     ///
