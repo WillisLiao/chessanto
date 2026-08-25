@@ -5,6 +5,26 @@ The second instance's scan run was interrupted by the user before any
 output was produced. Read `handoffs/NEXT-SESSION-QA-CARUANA.md` in full
 first; it still governs scope, non-goals, and the verification bar.
 
+**Update (2026-08-25, later):** `qa/caruana-games` has since been merged
+into `main` (it landed the real `ChessComKit` decode fix described below,
+already verified and safe). Its worktree
+(`/Users/willis/Documents/chessanto-qa-caruana`) and the throwaway
+`qa-caruana-runner` executable target were both cleaned up as part of
+that merge - the runner was one of the intentionally-stripped one-off
+scan tools (same pattern as the Carlsen and Hikaru runners), so it no
+longer exists in `Packages/AnalysisKit/Package.swift` on `main`. The
+cached archive data referenced below is still intact and does not need
+refetching. Start fresh: create a new worktree off current `main`
+(`git worktree add -b qa/caruana-games-finish ../chessanto-qa-caruana-2 main`),
+re-add a throwaway `qa-caruana-runner` executable target to
+`Packages/AnalysisKit/Package.swift` pointed at the cached archives below
+(copy the shape of the deleted one - a small `main.swift` that walks the
+archive directory, parses each game through the real app path, and
+prints failures), run the scan, fix whatever real bugs it finds in the
+shared layer, then remove the throwaway target again before committing -
+only the real fixes and regression tests should land, not the runner
+itself, exactly as the other QA sessions did.
+
 ## State on qa/caruana-games
 
 Commits `c8d311f` and `dfbda7b` contain all preparation:
