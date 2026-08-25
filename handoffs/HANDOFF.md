@@ -3,6 +3,14 @@
 Living snapshot of project state.
 Read this first at session start; update it at session end.
 
+## Current state (2026-08-25) - Opening book quality
+
+The opening book coverage audit harness and architecture analysis are in place on `feature/opening-book-quality`.
+- Corpus of 4,698 real Chess.com games from five titled players assembled for coverage and deviation benchmarking.
+- Bundled dataset of `eco.json` (3,803 entries) and `eco-index.json` (3,801 unique EPD positions).
+- Identified root cause of early-deviation reports on deep theoretical mainlines (terminal line position index storage vs intermediate plies).
+- `opening-audit` target added in AnalysisKit.
+
 ## Current state (2026-08-25) - Coach real-model verification
 
 The full Verified Coach stack is verified live against a real running Ollama instance with a real 8B model (`llama3.1:8b`) and in-process Stockfish.

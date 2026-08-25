@@ -24,6 +24,7 @@ let package = Package(
         // launch measured several seconds; the precomputed index makes
         // OpeningBook.loadFromBundle() a plain dictionary decode instead.
         .executableTarget(name: "eco-indexer", dependencies: ["AnalysisKit"]),
+        .executableTarget(name: "opening-audit", dependencies: ["AnalysisKit"]),
         .testTarget(
             name: "AnalysisKitTests",
             dependencies: ["AnalysisKit"],
